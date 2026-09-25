@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.text.format.DateUtils
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -183,18 +184,34 @@ private fun VibeArcApp() {
     val activePlayer = player
 
     var currentTab by remember { mutableStateOf(Tab.Home) }
+    var lastContentTab by remember { mutableStateOf(Tab.Home) }
     var library by remember { mutableStateOf(context.loadLibrary()) }
     var playlists by remember { mutableStateOf(context.loadPlaylists()) }
     var recentUris by remember { mutableStateOf(context.loadRecentUris()) }
-    val restoredTrack = activePlayer?.currentMediaItem?.track
-    var currentTrack by remember {
-        mutableStateOf(library.firstOrNull { it.uri == restoredTrack?.uri } ?: restoredTrack)
-    }
+    var currentTrack by remember { mutableStateOf<Track?>(null) }
     var isPlaying by remember { mutableStateOf(activePlayer?.isPlaying == true) }
     var queueTracks by remember { mutableStateOf(activePlayer?.queueTracks().orEmpty()) }
     var shuffleEnabled by remember { mutableStateOf(activePlayer?.shuffleModeEnabled == true) }
     var playerRepeatMode by remember { mutableIntStateOf(activePlayer?.repeatMode ?: Player.REPEAT_MODE_OFF) }
     var sleepRemainingMillis by remember { mutableLongStateOf(0L) }
+
+    val openPlayer = {
+        if (currentTab != Tab.Player) lastContentTab = currentTab
+        currentTab = Tab.Player
+    }
+    val closePlayer = { currentTab = playerReturnTab(lastContentTab) }
+    BackHandler(enabled = currentTab == Tab.Player, onBack = closePlayer)
+
+    LaunchedEffect(activePlayer, library) {
+        val connectedPlayer = activePlayer ?: return@LaunchedEffect
+        connectedPlayer.currentMediaItem?.track?.let { restored ->
+            currentTrack = library.firstOrNull { it.uri == restored.uri } ?: restored
+        }
+        isPlaying = connectedPlayer.isPlaying
+        queueTracks = connectedPlayer.queueTracks()
+        shuffleEnabled = connectedPlayer.shuffleModeEnabled
+        playerRepeatMode = connectedPlayer.repeatMode
+    }
 
     DisposableEffect(activePlayer, library) {
         if (activePlayer == null) return@DisposableEffect onDispose { }
@@ -242,7 +259,7 @@ private fun VibeArcApp() {
         activePlayer?.let { connectedPlayer ->
             connectedPlayer.loadQueue(library, currentTrack!!)
             queueTracks = connectedPlayer.queueTracks()
-            currentTab = Tab.Player
+            openPlayer()
         }
     }
 
@@ -251,7 +268,7 @@ private fun VibeArcApp() {
             currentTrack = track
             activePlayer.loadQueue(source, track)
             queueTracks = activePlayer.queueTracks()
-            currentTab = Tab.Player
+            openPlayer()
         }
     }
     val toggleFavorite: (Track) -> Unit = { track ->
@@ -288,11 +305,11 @@ private fun VibeArcApp() {
             if (currentTab != Tab.Player) Column(
                 modifier = Modifier.fillMaxWidth().systemBarsPadding().padding(bottom = 12.dp),
             ) {
-                if (currentTrack != null && activePlayer != null) {
+                if (currentTab in MainTabs && currentTrack != null && activePlayer != null) {
                     MiniPlayer(
                         track = currentTrack!!,
                         isPlaying = isPlaying,
-                        onOpen = { currentTab = Tab.Player },
+                        onOpen = openPlayer,
                         onToggle = activePlayer::toggle,
                     )
                 }
@@ -360,6 +377,7 @@ private fun VibeArcApp() {
                 shuffleEnabled = shuffleEnabled,
                 repeatMode = playerRepeatMode,
                 sleepRemainingMillis = sleepRemainingMillis,
+                onBack = closePlayer,
                 onFavorite = { toggleFavorite(currentTrack!!) },
                 onToggleShuffle = { activePlayer.shuffleModeEnabled = !activePlayer.shuffleModeEnabled },
                 onCycleRepeat = { activePlayer.repeatMode = activePlayer.repeatMode.nextRepeatMode() },
@@ -380,7 +398,7 @@ private fun VibeArcApp() {
     }
 }
 
-private enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+internal enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     Home("Home", Icons.Default.Home),
     Search("Search", Icons.Default.Search),
     Library("Library", Icons.AutoMirrored.Filled.List),
@@ -388,6 +406,8 @@ private enum class Tab(val label: String, val icon: androidx.compose.ui.graphics
     Player("Playing", Icons.Default.PlayArrow),
     Settings("Settings", Icons.Default.Settings),
 }
+
+internal fun playerReturnTab(candidate: Tab): Tab = if (candidate == Tab.Player) Tab.Home else candidate
 
 private val MainTabs = listOf(Tab.Home, Tab.Search, Tab.Library, Tab.Downloads)
 
@@ -798,6 +818,7 @@ private fun PlayerScreen(
     shuffleEnabled: Boolean,
     repeatMode: Int,
     sleepRemainingMillis: Long,
+    onBack: () -> Unit,
     onFavorite: (() -> Unit)?,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
@@ -823,6 +844,14 @@ private fun PlayerScreen(
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Text("Now Playing", style = MaterialTheme.typography.titleLarge)
+            }
+        }
         item {
             TrackArtwork(
                 track = track,

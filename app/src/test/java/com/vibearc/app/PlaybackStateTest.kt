@@ -5,6 +5,12 @@ import org.junit.Test
 
 class PlaybackStateTest {
     @Test
+    fun `closing now playing returns to the previous screen with a safe home fallback`() {
+        assertEquals(Tab.Library, playerReturnTab(Tab.Library))
+        assertEquals(Tab.Home, playerReturnTab(Tab.Player))
+    }
+
+    @Test
     fun `selected online track is added to the queue instead of falling back to demo`() {
         val local = Track("First Light", "Local artist", "Signals", "content://music/first-light")
         val online = Track("Ocean Eyes", "Billie Eilish", "YouTube Music", "https://audio.example/ocean")
