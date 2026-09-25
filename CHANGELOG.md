@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0-demo] - 2026-09-25
+
+### Changed
+
+- Rebuilt the interface around the supplied Liquid design system, including its
+  dark tokens, typography, floating navigation, and immersive Now Playing view.
+- Replaced the default launcher icon with the supplied glowing V artwork.
+- Removed the bundled demo track and the in-app startup screen.
+
+### Security
+
+- Disabled cleartext network traffic and app-data backup.
+- Rejected unsupported playback URI schemes.
+- Added optional private release-keystore configuration while keeping secrets
+  out of source control.
+
 ## [0.7.0-demo] - 2026-09-25
 
 ### Added

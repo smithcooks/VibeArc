@@ -3,13 +3,21 @@ package com.vibearc.app
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
 
-internal const val DemoMediaId = "vibearc://demo"
-
 private const val RecentLimit = 20
 
+private val AllowedMediaSchemes = setOf("https", "content", "file", "android.resource")
+
+internal fun isAllowedMediaUri(value: String): Boolean = runCatching {
+    val uri = java.net.URI(value)
+    uri.scheme?.lowercase() in AllowedMediaSchemes &&
+        (uri.scheme != "https" || !uri.host.isNullOrBlank())
+}.getOrDefault(false)
+
 internal fun playbackQueue(tracks: List<Track>, startTrack: Track): List<Track> {
+    require(isAllowedMediaUri(startTrack.uri)) { "Unsupported media URI" }
     val queue = tracks.ifEmpty { listOf(startTrack) }
-    return if (queue.any { it.uri == startTrack.uri }) queue else listOf(startTrack) + queue
+    val playable = queue.filter { isAllowedMediaUri(it.uri) }
+    return if (playable.any { it.uri == startTrack.uri }) playable else listOf(startTrack) + playable
 }
 
 internal fun List<String>.recordRecentUri(uri: String): List<String> {

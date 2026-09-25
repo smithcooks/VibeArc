@@ -10,16 +10,16 @@ Open this folder in Android Studio and run the `app` configuration, or use:
 .\gradlew.bat assembleDebug
 ```
 
-The local player works without network access or accounts. v0.7 also includes
+The local player works without network access or accounts. v0.8 also includes
 experimental, account-free search and playback for supported public YouTube
 Music results; that feature requires a network connection and is not guaranteed
 for protected, restricted, or unavailable tracks.
 
 ## Current scope
 
-- Warm, artwork-led Material 3 interface and matching launcher icon
-- Home, Search, Library, Now Playing, and Settings destinations
-- Bundled demo track plus playback of a user-selected audio file
+- Liquid dark interface with artwork-driven Now Playing color and floating glass navigation
+- Home, Search, Library, Downloads, Now Playing, and Settings destinations
+- Playback of user-selected audio files with no bundled demo audio
 - Background playback, media notification, lock-screen controls, seek, and mini-player
 - Persistent multi-track library, search, and favorites
 - Native title, artist, album, duration, and embedded artwork metadata
@@ -34,9 +34,9 @@ for protected, restricted, or unavailable tracks.
 - High-resolution online artwork and a persistent highest-quality audio option
 - Loading, empty, unavailable, and offline-friendly search states
 
-Current milestone: v0.7.0-demo is an experimental GitHub build and is not
+Current milestone: v0.8.0-demo is an experimental local build and is not
 considered a Google Play-safe production integration. See
-[`tasks/plan.md`](tasks/plan.md) for the limits and the v0.8 theme-only milestone.
+[`tasks/plan.md`](tasks/plan.md) for the remaining limits.
 
 ## License
 

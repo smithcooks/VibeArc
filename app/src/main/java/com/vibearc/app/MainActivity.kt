@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -82,6 +83,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,15 +99,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.util.UUID
 
-private val Ink = Color(0xFF0E0D0C)
-private val Panel = Color(0xFF1C1917)
-private val PanelRaised = Color(0xFF292420)
-internal val Sand = Color(0xFFF2D2B2)
-private val Peach = Color(0xFFFFB77D)
-private val Paper = Color(0xFFFFF8F1)
-internal val MutedText = Color(0xFFCFC4B9)
-
-private val demoTrack = Track("First Light", "VibeArc Demo", "Signals")
+private val Ink = Color(0xFF0B0B0D)
+private val Panel = Color(0xFF141416)
+private val PanelRaised = Color(0xFF1B1B1E)
+internal val Sand = Color(0xFFD7A24A)
+private val Peach = Color(0xFFE5B963)
+private val Paper = Color(0xFFF5F3EE)
+internal val MutedText = Color(0xFF9C9A93)
+private val FaintText = Color(0xFF6C6A65)
+private val DisplayFont = FontFamily(Font(R.font.space_grotesk))
+private val BodyFont = FontFamily(Font(R.font.manrope))
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -118,9 +122,9 @@ private fun VibeArcTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Sand,
-            onPrimary = Color(0xFF2D1C0E),
-            primaryContainer = Color(0xFF4B3525),
-            onPrimaryContainer = Color(0xFFFFE8D1),
+            onPrimary = Color(0xFF171006),
+            primaryContainer = Color(0xFF3B2A0D),
+            onPrimaryContainer = Paper,
             secondary = Peach,
             onSecondary = Color(0xFF301B0B),
             background = Ink,
@@ -129,7 +133,7 @@ private fun VibeArcTheme(content: @Composable () -> Unit) {
             onSurface = Paper,
             surfaceVariant = PanelRaised,
             onSurfaceVariant = MutedText,
-            outline = Color(0xFF62584F),
+            outline = Color(0x29FFFFFF),
         ),
         shapes = Shapes(
             extraSmall = RoundedCornerShape(10.dp),
@@ -139,9 +143,15 @@ private fun VibeArcTheme(content: @Composable () -> Unit) {
             extraLarge = RoundedCornerShape(40.dp),
         ),
         typography = Typography(
-            displaySmall = TextStyle(fontSize = 42.sp, lineHeight = 46.sp, fontWeight = FontWeight.Black),
-            headlineMedium = TextStyle(fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
-            titleLarge = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
+            displaySmall = TextStyle(fontFamily = DisplayFont, fontSize = 42.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold),
+            headlineMedium = TextStyle(fontFamily = DisplayFont, fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold),
+            titleLarge = TextStyle(fontFamily = DisplayFont, fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+            titleMedium = TextStyle(fontFamily = DisplayFont, fontWeight = FontWeight.SemiBold),
+            bodyLarge = TextStyle(fontFamily = BodyFont, fontSize = 16.sp, lineHeight = 24.sp),
+            bodyMedium = TextStyle(fontFamily = BodyFont, fontSize = 14.sp, lineHeight = 20.sp),
+            bodySmall = TextStyle(fontFamily = BodyFont, fontSize = 12.sp, lineHeight = 16.sp),
+            labelLarge = TextStyle(fontFamily = BodyFont, fontWeight = FontWeight.SemiBold),
+            labelMedium = TextStyle(fontFamily = BodyFont, fontWeight = FontWeight.SemiBold),
         ),
         content = content,
     )
@@ -171,33 +181,23 @@ private fun VibeArcApp() {
     }
 
     val activePlayer = player
-    if (activePlayer == null) {
-        Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.Center) {
-            Text("Starting VibeArc…", color = Color.White)
-        }
-        return
-    }
-
-    val demoUri = remember { Uri.parse("android.resource://${context.packageName}/${R.raw.vibearc_demo}") }
-    if (activePlayer.mediaItemCount == 0) {
-        activePlayer.loadQueue(listOf(demoTrack), demoTrack, demoUri, playNow = false)
-    }
 
     var currentTab by remember { mutableStateOf(Tab.Home) }
     var library by remember { mutableStateOf(context.loadLibrary()) }
     var playlists by remember { mutableStateOf(context.loadPlaylists()) }
     var recentUris by remember { mutableStateOf(context.loadRecentUris()) }
-    val restoredTrack = activePlayer.currentMediaItem?.track
+    val restoredTrack = activePlayer?.currentMediaItem?.track
     var currentTrack by remember {
-        mutableStateOf(library.firstOrNull { it.uri == restoredTrack?.uri } ?: restoredTrack ?: demoTrack)
+        mutableStateOf(library.firstOrNull { it.uri == restoredTrack?.uri } ?: restoredTrack)
     }
-    var isPlaying by remember { mutableStateOf(activePlayer.isPlaying) }
-    var queueTracks by remember { mutableStateOf(activePlayer.queueTracks()) }
-    var shuffleEnabled by remember { mutableStateOf(activePlayer.shuffleModeEnabled) }
-    var playerRepeatMode by remember { mutableIntStateOf(activePlayer.repeatMode) }
+    var isPlaying by remember { mutableStateOf(activePlayer?.isPlaying == true) }
+    var queueTracks by remember { mutableStateOf(activePlayer?.queueTracks().orEmpty()) }
+    var shuffleEnabled by remember { mutableStateOf(activePlayer?.shuffleModeEnabled == true) }
+    var playerRepeatMode by remember { mutableIntStateOf(activePlayer?.repeatMode ?: Player.REPEAT_MODE_OFF) }
     var sleepRemainingMillis by remember { mutableLongStateOf(0L) }
 
     DisposableEffect(activePlayer, library) {
+        if (activePlayer == null) return@DisposableEffect onDispose { }
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(value: Boolean) {
                 isPlaying = value
@@ -239,66 +239,87 @@ private fun VibeArcApp() {
         val imported = context.trackFrom(uri)
         library = library.upsert(imported).also(context::saveLibrary)
         currentTrack = library.first { it.uri == imported.uri }
-        activePlayer.loadQueue(library, currentTrack, demoUri)
-        queueTracks = activePlayer.queueTracks()
-        currentTab = Tab.Player
+        activePlayer?.let { connectedPlayer ->
+            connectedPlayer.loadQueue(library, currentTrack!!)
+            queueTracks = connectedPlayer.queueTracks()
+            currentTab = Tab.Player
+        }
     }
 
     val playTrack: (Track, List<Track>) -> Unit = { track, source ->
-        currentTrack = track
-        activePlayer.loadQueue(source, track, demoUri)
-        queueTracks = activePlayer.queueTracks()
-        currentTab = Tab.Player
+        if (activePlayer != null && isAllowedMediaUri(track.uri)) {
+            currentTrack = track
+            activePlayer.loadQueue(source, track)
+            queueTracks = activePlayer.queueTracks()
+            currentTab = Tab.Player
+        }
     }
     val toggleFavorite: (Track) -> Unit = { track ->
         library = library.toggleFavorite(track.uri).also(context::saveLibrary)
-        library.firstOrNull { it.uri == track.uri }?.let { currentTrack = it }
+        library.firstOrNull { it.uri == track.uri }?.let { updated ->
+            if (currentTrack?.uri == updated.uri) currentTrack = updated
+        }
     }
     val updatePlaylists: (List<Playlist>) -> Unit = { next ->
         playlists = next.also(context::savePlaylists)
     }
-    val recentTracks = recentUris.mapNotNull { mediaId ->
-        if (mediaId == DemoMediaId) demoTrack else library.firstOrNull { it.uri == mediaId }
-    }
+    val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
 
     Scaffold(
         topBar = {
+            if (currentTab != Tab.Player) {
             TopAppBar(
                 title = {
                     Column {
                         Text("VibeArc", style = MaterialTheme.typography.titleLarge)
-                        Text(currentTab.label, fontSize = 12.sp, color = MutedText)
+                        Text(currentTab.label.uppercase(), fontSize = 11.sp, color = Sand, letterSpacing = 1.4.sp)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { currentTab = Tab.Settings }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Ink),
             )
+            }
         },
         bottomBar = {
-            Column {
-                if (currentTab != Tab.Player) {
+            if (currentTab != Tab.Player) Column(
+                modifier = Modifier.fillMaxWidth().systemBarsPadding().padding(bottom = 12.dp),
+            ) {
+                if (currentTrack != null && activePlayer != null) {
                     MiniPlayer(
-                        track = currentTrack,
+                        track = currentTrack!!,
                         isPlaying = isPlaying,
                         onOpen = { currentTab = Tab.Player },
                         onToggle = activePlayer::toggle,
                     )
                 }
-                NavigationBar(containerColor = Panel) {
-                    Tab.entries.forEach { tab ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    color = Color(0xE62A2A2D),
+                    shape = RoundedCornerShape(28.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x29FFFFFF)),
+                    shadowElevation = 16.dp,
+                ) {
+                NavigationBar(containerColor = Color.Transparent) {
+                    MainTabs.forEach { tab ->
                         NavigationBarItem(
                             selected = currentTab == tab,
                             onClick = { currentTab = tab },
                             icon = { Icon(tab.icon, contentDescription = null) },
                             label = { Text(tab.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color(0xFF2D1C0E),
-                                selectedTextColor = Paper,
-                                indicatorColor = Sand,
-                                unselectedIconColor = MutedText,
-                                unselectedTextColor = MutedText,
+                                selectedIconColor = Sand,
+                                selectedTextColor = Sand,
+                                indicatorColor = Color.Transparent,
+                                unselectedIconColor = FaintText,
+                                unselectedTextColor = FaintText,
                             ),
                         )
                     }
+                }
                 }
             }
         },
@@ -308,12 +329,11 @@ private fun VibeArcApp() {
             Tab.Home -> HomeScreen(
                 padding = padding,
                 recentTracks = recentTracks,
-                onPlay = { track -> playTrack(track, recentTracks.ifEmpty { listOf(demoTrack) }) },
-                onPlayDemo = { playTrack(demoTrack, listOf(demoTrack) + library) },
+                onPlay = { track -> playTrack(track, recentTracks.ifEmpty { listOf(track) }) },
+                onExplore = { currentTab = Tab.Search },
             )
             Tab.Search -> {
-                val searchableTracks = listOf(demoTrack) + library
-                SearchScreen(padding, searchableTracks) { track -> playTrack(track, searchableTracks) }
+                SearchScreen(padding, library) { track -> playTrack(track, library.ifEmpty { listOf(track) }) }
             }
             Tab.Library -> LibraryScreen(
                 padding = padding,
@@ -330,16 +350,17 @@ private fun VibeArcApp() {
                 onAddToPlaylist = { id, uri -> updatePlaylists(playlists.addTrackToPlaylist(id, uri)) },
                 onRemoveFromPlaylist = { id, uri -> updatePlaylists(playlists.removeTrackFromPlaylist(id, uri)) },
             )
-            Tab.Player -> PlayerScreen(
+            Tab.Downloads -> DownloadsScreen(padding, library, onPlay = playTrack)
+            Tab.Player -> if (activePlayer != null && currentTrack != null) PlayerScreen(
                 padding = padding,
                 player = activePlayer,
-                track = currentTrack,
+                track = currentTrack!!,
                 isPlaying = isPlaying,
                 queue = queueTracks,
                 shuffleEnabled = shuffleEnabled,
                 repeatMode = playerRepeatMode,
                 sleepRemainingMillis = sleepRemainingMillis,
-                onFavorite = if (currentTrack.uri.isBlank()) null else { { toggleFavorite(currentTrack) } },
+                onFavorite = { toggleFavorite(currentTrack!!) },
                 onToggleShuffle = { activePlayer.shuffleModeEnabled = !activePlayer.shuffleModeEnabled },
                 onCycleRepeat = { activePlayer.repeatMode = activePlayer.repeatMode.nextRepeatMode() },
                 onCycleSleepTimer = {
@@ -353,7 +374,7 @@ private fun VibeArcApp() {
                         nextMinutes.takeIf { it > 0 }?.let { System.currentTimeMillis() + it * 60_000L },
                     )
                 },
-            )
+            ) else EmptyPlayer(padding) { currentTab = Tab.Search }
             Tab.Settings -> SettingsScreen(padding)
         }
     }
@@ -363,16 +384,19 @@ private enum class Tab(val label: String, val icon: androidx.compose.ui.graphics
     Home("Home", Icons.Default.Home),
     Search("Search", Icons.Default.Search),
     Library("Library", Icons.AutoMirrored.Filled.List),
+    Downloads("Downloads", Icons.AutoMirrored.Filled.List),
     Player("Playing", Icons.Default.PlayArrow),
     Settings("Settings", Icons.Default.Settings),
 }
+
+private val MainTabs = listOf(Tab.Home, Tab.Search, Tab.Library, Tab.Downloads)
 
 @Composable
 private fun HomeScreen(
     padding: PaddingValues,
     recentTracks: List<Track>,
     onPlay: (Track) -> Unit,
-    onPlayDemo: () -> Unit,
+    onExplore: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
@@ -380,23 +404,19 @@ private fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
-            Text("Your sound,\nyour space.", style = MaterialTheme.typography.displaySmall)
+            Text("Good music.\nNo noise.", style = MaterialTheme.typography.displaySmall)
             Spacer(Modifier.height(8.dp))
-            Text("Play something recent or open your local library.", color = MutedText)
+            Text("Your library and YouTube Music, shaped around what is playing.", color = MutedText)
         }
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(0.86f)
+                    .aspectRatio(1.55f)
                     .clip(MaterialTheme.shapes.large)
-                    .clickable(onClick = onPlayDemo),
+                    .background(Brush.linearGradient(listOf(Color(0xFF33230B), PanelRaised)))
+                    .clickable(onClick = onExplore),
             ) {
-                TrackArtwork(
-                    track = demoTrack,
-                    contentDescription = "Artwork for First Light",
-                    modifier = Modifier.fillMaxSize(),
-                )
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -410,18 +430,18 @@ private fun HomeScreen(
                     modifier = Modifier.align(Alignment.BottomStart).padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("FEATURED", color = Sand, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("First Light", style = MaterialTheme.typography.headlineMedium)
-                    Text("VibeArc Demo", color = MutedText)
-                    FilledIconButton(onClick = onPlayDemo, modifier = Modifier.size(56.dp)) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play First Light")
+                    Text("DISCOVER", color = Sand, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("Find your next track", style = MaterialTheme.typography.headlineMedium)
+                    Text("Search YouTube Music", color = MutedText)
+                    FilledIconButton(onClick = onExplore, modifier = Modifier.size(56.dp)) {
+                        Icon(Icons.Default.Search, contentDescription = "Search music")
                     }
                 }
             }
         }
         if (recentTracks.isNotEmpty()) {
             item { SectionTitle("Recently played") }
-            items(recentTracks, key = { it.uri.ifBlank { DemoMediaId } }) { track ->
+            items(recentTracks, key = Track::uri) { track ->
                 TrackRow(track, onPlay = { onPlay(track) })
             }
         }
@@ -692,6 +712,41 @@ private fun LibraryScreen(
     }
 }
 
+@Composable
+private fun DownloadsScreen(
+    padding: PaddingValues,
+    tracks: List<Track>,
+    onPlay: (Track, List<Track>) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(padding),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        item {
+            Text("Downloads", style = MaterialTheme.typography.headlineMedium)
+            Text("Music saved on this device", color = MutedText)
+        }
+        if (tracks.isEmpty()) {
+            item { EmptyLibraryCard("Nothing downloaded", "Add local audio from Library to listen offline.") }
+        } else {
+            items(tracks, key = Track::uri) { track ->
+                TrackRow(track, onPlay = { onPlay(track, tracks) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyPlayer(padding: PaddingValues, onExplore: () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(padding).background(Ink), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Nothing playing", style = MaterialTheme.typography.headlineMedium)
+            TextButton(onClick = onExplore) { Text("Find music") }
+        }
+    }
+}
+
 private enum class LibraryMode { Tracks, Artists, Albums, Folders, Favorites, Playlists }
 
 @Composable
@@ -750,6 +805,7 @@ private fun PlayerScreen(
 ) {
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(1L) }
+    var ambientAccent by remember(track.uri) { mutableStateOf(Sand) }
 
     LaunchedEffect(player, isPlaying) {
         while (currentCoroutineContext().isActive) {
@@ -760,7 +816,10 @@ private fun PlayerScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(padding),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(ambientAccent.copy(alpha = 0.48f), Ink, Ink)))
+            .padding(padding),
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
@@ -772,6 +831,7 @@ private fun PlayerScreen(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(MaterialTheme.shapes.large),
+                onAccent = { ambientAccent = it },
             )
         }
         item {
@@ -883,8 +943,10 @@ private fun PlayerScreen(
 private fun MiniPlayer(track: Track, isPlaying: Boolean, onOpen: () -> Unit, onToggle: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-        color = PanelRaised,
-        shape = MaterialTheme.shapes.medium,
+        color = Color(0xE62A2A2D),
+        shape = RoundedCornerShape(28.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x29FFFFFF)),
+        shadowElevation = 12.dp,
     ) {
         Row(
             Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(10.dp),
@@ -966,10 +1028,10 @@ internal fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 }
 
-private fun Player.loadQueue(tracks: List<Track>, startTrack: Track, demoUri: Uri, playNow: Boolean = true) {
+private fun Player.loadQueue(tracks: List<Track>, startTrack: Track, playNow: Boolean = true) {
     val queue = playbackQueue(tracks, startTrack)
     val startIndex = queue.indexOfFirst { it.uri == startTrack.uri }
-    setMediaItems(queue.map { it.toMediaItem(demoUri) }, startIndex, 0L)
+    setMediaItems(queue.map(Track::toMediaItem), startIndex, 0L)
     prepare()
     if (playNow) play()
 }
@@ -979,7 +1041,8 @@ private fun Player.toggle() = if (isPlaying) pause() else play()
 private fun Player.queueTracks(): List<Track> =
     (0 until mediaItemCount).map { index -> getMediaItemAt(index).track }
 
-private fun Track.toMediaItem(demoUri: Uri): MediaItem {
+private fun Track.toMediaItem(): MediaItem {
+    require(isAllowedMediaUri(uri)) { "Unsupported media URI" }
     val metadata = MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)
@@ -990,8 +1053,8 @@ private fun Track.toMediaItem(demoUri: Uri): MediaItem {
         }
         .build()
     return MediaItem.Builder()
-        .setMediaId(uri.ifBlank { DemoMediaId })
-        .setUri(if (uri.isBlank()) demoUri else Uri.parse(uri))
+        .setMediaId(uri)
+        .setUri(Uri.parse(uri))
         .setMediaMetadata(metadata)
         .build()
 }
@@ -1001,7 +1064,7 @@ private val MediaItem.track: Track
         title = mediaMetadata.title?.toString() ?: "Unknown track",
         artist = mediaMetadata.artist?.toString() ?: "On this device",
         album = mediaMetadata.albumTitle?.toString() ?: "Imported",
-        uri = mediaId.takeUnless { it == DemoMediaId }.orEmpty(),
+        uri = mediaId,
         durationMs = mediaMetadata.extras?.getLong("durationMs") ?: 0L,
         artworkUri = mediaMetadata.artworkUri?.toString().orEmpty(),
     )

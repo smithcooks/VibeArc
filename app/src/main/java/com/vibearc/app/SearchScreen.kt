@@ -132,7 +132,7 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, onPlay: (
         if (localResults.isEmpty() && onlineResults.isEmpty() && query.isNotBlank() && !searching) {
             item { Text("No local tracks match “$query”.", color = MutedText) }
         }
-        items(localResults, key = { "local:${it.uri.ifBlank { "demo" }}" }) { track ->
+        items(localResults, key = { "local:${it.uri}" }) { track ->
             TrackRow(track, onPlay = { onPlay(track) })
         }
     }

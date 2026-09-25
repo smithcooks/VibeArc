@@ -31,14 +31,21 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 @Composable
-internal fun TrackArtwork(track: Track, contentDescription: String?, modifier: Modifier = Modifier) {
+internal fun TrackArtwork(
+    track: Track,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    onAccent: (Color) -> Unit = {},
+) {
     var artwork by remember(track.artworkUri) {
         mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
     }
     LaunchedEffect(track.artworkUri) {
-        artwork = track.artworkUri.takeIf(String::isNotBlank)?.let { artworkUri ->
-            withContext(Dispatchers.IO) { loadArtwork(artworkUri)?.asImageBitmap() }
+        val bitmap = track.artworkUri.takeIf(String::isNotBlank)?.let { artworkUri ->
+            withContext(Dispatchers.IO) { loadArtwork(artworkUri) }
         }
+        artwork = bitmap?.asImageBitmap()
+        onAccent(bitmap?.averageAccent() ?: Sand)
     }
     val loadedArtwork = artwork
     if (loadedArtwork == null) {
@@ -49,7 +56,7 @@ internal fun TrackArtwork(track: Track, contentDescription: String?, modifier: M
             contentAlignment = Alignment.Center,
         ) {
             Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
+                painter = painterResource(R.drawable.vibearc_icon),
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize().padding(8.dp),
                 contentScale = ContentScale.Fit,
@@ -67,20 +74,34 @@ internal fun TrackArtwork(track: Track, contentDescription: String?, modifier: M
 
 private fun loadArtwork(value: String) = runCatching {
     val uri = Uri.parse(value)
-    if (uri.scheme == "http" || uri.scheme == "https") {
+    if (uri.scheme == "https") {
         val connection = URL(value).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 10_000
             connection.readTimeout = 10_000
-            connection.setRequestProperty("User-Agent", "VibeArc/0.7")
+            connection.setRequestProperty("User-Agent", "VibeArc/0.8")
             connection.inputStream.use(BitmapFactory::decodeStream)
         } finally {
             connection.disconnect()
         }
-    } else {
+    } else if (uri.scheme == "file") {
         BitmapFactory.decodeFile(uri.path)
-    }
+    } else null
 }.getOrNull()
+
+private fun android.graphics.Bitmap.averageAccent(): Color {
+    val sample = android.graphics.Bitmap.createScaledBitmap(this, 12, 12, true)
+    val pixels = IntArray(144).also { sample.getPixels(it, 0, 12, 0, 0, 12, 12) }
+    val colorful = pixels.filter { pixel ->
+        val max = maxOf(android.graphics.Color.red(pixel), android.graphics.Color.green(pixel), android.graphics.Color.blue(pixel))
+        val min = minOf(android.graphics.Color.red(pixel), android.graphics.Color.green(pixel), android.graphics.Color.blue(pixel))
+        max - min > 24 && max > 70
+    }.ifEmpty { pixels.toList() }
+    val red = colorful.sumOf(android.graphics.Color::red) / colorful.size
+    val green = colorful.sumOf(android.graphics.Color::green) / colorful.size
+    val blue = colorful.sumOf(android.graphics.Color::blue) / colorful.size
+    return Color(red, green, blue)
+}
 
 internal fun Context.trackFrom(uri: Uri): Track {
     val fileName = contentResolver.query(

@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 
 internal enum class LauncherIconChoice(val label: String, val alias: String) {
-    Midnight("Midnight", "DefaultIconAlias"),
+    Liquid("Liquid V", "DefaultIconAlias"),
     Peach("Peach", "PeachIconAlias"),
     Mono("Mono", "MonoIconAlias"),
 }
@@ -16,7 +16,7 @@ private const val SelectedIcon = "selected"
 internal fun Context.selectedLauncherIcon(): LauncherIconChoice {
     val saved = getSharedPreferences(LauncherPreferences, Context.MODE_PRIVATE)
         .getString(SelectedIcon, null)
-    return LauncherIconChoice.entries.firstOrNull { it.name == saved } ?: LauncherIconChoice.Midnight
+    return LauncherIconChoice.entries.firstOrNull { it.name == saved } ?: LauncherIconChoice.Liquid
 }
 
 internal fun Context.setLauncherIcon(choice: LauncherIconChoice): Boolean = runCatching {

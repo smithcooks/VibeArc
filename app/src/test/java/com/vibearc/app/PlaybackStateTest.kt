@@ -6,10 +6,19 @@ import org.junit.Test
 class PlaybackStateTest {
     @Test
     fun `selected online track is added to the queue instead of falling back to demo`() {
-        val demo = Track("First Light", "VibeArc Demo", "Signals")
+        val local = Track("First Light", "Local artist", "Signals", "content://music/first-light")
         val online = Track("Ocean Eyes", "Billie Eilish", "YouTube Music", "https://audio.example/ocean")
 
-        assertEquals(online, playbackQueue(listOf(demo), online).first())
+        assertEquals(online, playbackQueue(listOf(local), online).first())
+    }
+
+    @Test
+    fun `playback only accepts secure remote or local media uris`() {
+        assertEquals(true, isAllowedMediaUri("https://audio.example/song"))
+        assertEquals(true, isAllowedMediaUri("content://media/song"))
+        assertEquals(false, isAllowedMediaUri("http://audio.example/song"))
+        assertEquals(false, isAllowedMediaUri("javascript:alert(1)"))
+        assertEquals(false, isAllowedMediaUri(""))
     }
 
     @Test
