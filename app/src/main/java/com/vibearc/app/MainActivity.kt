@@ -1007,6 +1007,7 @@ private fun MiniPlayer(track: Track, isPlaying: Boolean, onOpen: () -> Unit, onT
 internal fun TrackRow(
     track: Track,
     onPlay: () -> Unit,
+    enabled: Boolean = true,
     onFavorite: (() -> Unit)? = null,
     isFavorite: Boolean = false,
     trailingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
@@ -1014,7 +1015,7 @@ internal fun TrackRow(
     onTrailingAction: (() -> Unit)? = null,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onPlay).padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onPlay).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TrackArtwork(track, null, Modifier.size(58.dp).clip(RoundedCornerShape(16.dp)))
@@ -1030,7 +1031,11 @@ internal fun TrackRow(
             )
         }
         if (onFavorite == null) {
-            Icon(Icons.Default.PlayArrow, contentDescription = "Play ${track.title}", tint = Sand)
+            Icon(
+                Icons.Default.PlayArrow,
+                contentDescription = "Play ${track.title}",
+                tint = if (enabled) Sand else FaintText,
+            )
         } else {
             IconButton(onClick = onFavorite) {
                 Icon(

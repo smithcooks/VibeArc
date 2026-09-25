@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -21,10 +22,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -32,10 +35,20 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+
+internal fun visibleOnlineTracks(results: List<Track>, visibleKeys: Set<*>): List<Track> =
+    results.filter { track -> "online:${track.uri}" in visibleKeys }
+
+internal fun playableOnlineTrack(track: Track, resolvedTracks: Map<String, Track>): Track? =
+    resolvedTracks[track.uri]
 
 @Composable
 internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, onPlay: (Track) -> Unit) {
@@ -43,25 +56,32 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, onPlay: (
     var onlineResults by remember { mutableStateOf(emptyList<Track>()) }
     var onlineError by remember { mutableStateOf<String?>(null) }
     var searching by remember { mutableStateOf(false) }
-    var resolvingUri by remember { mutableStateOf<String?>(null) }
     var hasSearched by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val resolvedOnlineTracks = remember { mutableStateMapOf<String, Track>() }
+    val resolvingOnlineUris = remember { mutableStateListOf<String>() }
+    val unavailableOnlineUris = remember { mutableStateListOf<String>() }
+    val resolutionPermits = remember { Semaphore(2) }
     val context = LocalContext.current
+    val preferHighestQuality = context.prefersHighestAudioQuality()
     val focusManager = LocalFocusManager.current
     val localResults = tracks.filter { track ->
         query.isBlank() || listOf(track.title, track.artist, track.album).any { it.contains(query, true) }
     }
     LaunchedEffect(query) {
         val requestedQuery = query.trim()
+        onlineResults = emptyList()
+        onlineError = null
+        hasSearched = false
+        resolvedOnlineTracks.clear()
+        resolvingOnlineUris.clear()
+        unavailableOnlineUris.clear()
         if (requestedQuery.isBlank()) {
-            onlineResults = emptyList()
-            onlineError = null
-            hasSearched = false
+            searching = false
         } else {
             delay(600)
             searching = true
             hasSearched = true
-            onlineError = null
             try {
                 onlineResults = withContext(Dispatchers.IO) { OnlineMusic.search(requestedQuery) }
             } catch (_: Exception) {
@@ -72,7 +92,40 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, onPlay: (
             }
         }
     }
+    LaunchedEffect(onlineResults, preferHighestQuality) {
+        snapshotFlow {
+            visibleOnlineTracks(
+                onlineResults,
+                listState.layoutInfo.visibleItemsInfo.map { item -> item.key }.toSet(),
+            )
+        }.distinctUntilChanged().collect { visibleTracks ->
+            visibleTracks.forEach { track ->
+                if (
+                    track.uri !in resolvedOnlineTracks &&
+                    track.uri !in resolvingOnlineUris &&
+                    track.uri !in unavailableOnlineUris
+                ) {
+                    resolvingOnlineUris += track.uri
+                    launch {
+                        try {
+                            resolvedOnlineTracks[track.uri] = withContext(Dispatchers.IO) {
+                                resolutionPermits.withPermit {
+                                    OnlineMusic.resolve(track, preferHighestQuality)
+                                }
+                            }
+                        } catch (error: Exception) {
+                            if (error is CancellationException) throw error
+                            unavailableOnlineUris += track.uri
+                        } finally {
+                            resolvingOnlineUris -= track.uri
+                        }
+                    }
+                }
+            }
+        }
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().padding(padding),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -110,23 +163,18 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, onPlay: (
         }
         if (onlineResults.isNotEmpty()) item { SectionTitle("Online") }
         items(onlineResults, key = { "online:${it.uri}" }) { track ->
-            TrackRow(track, onPlay = {
-                if (resolvingUri == null) {
-                    resolvingUri = track.uri
-                    scope.launch {
-                        try {
-                            onPlay(withContext(Dispatchers.IO) {
-                                OnlineMusic.resolve(track, context.prefersHighestAudioQuality())
-                            })
-                        } catch (_: Exception) {
-                            onlineError = "${track.title} is not playable from this connection."
-                        } finally {
-                            resolvingUri = null
-                        }
-                    }
-                }
-            })
-            if (resolvingUri == track.uri) Text("Preparing audio…", color = Sand, fontSize = 12.sp)
+            val playableTrack = playableOnlineTrack(track, resolvedOnlineTracks)
+            val unavailable = track.uri in unavailableOnlineUris
+            TrackRow(
+                track,
+                enabled = playableTrack != null,
+                onPlay = { playableTrack?.let(onPlay) },
+            )
+            if (unavailable) Text(
+                "Unavailable on this connection",
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 12.sp,
+            )
         }
         if (localResults.isNotEmpty()) item { SectionTitle("On this device") }
         if (localResults.isEmpty() && onlineResults.isEmpty() && query.isNotBlank() && !searching) {

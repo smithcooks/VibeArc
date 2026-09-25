@@ -34,6 +34,22 @@ class OnlineMusicTest {
     }
 
     @Test
+    fun `only visible online results become playable from pre-resolved streams`() {
+        val results = (1..20).map { number ->
+            Track("Track $number", "Artist", "YouTube Music", "https://music.youtube.com/watch?v=$number")
+        }
+        val visible = visibleOnlineTracks(
+            results,
+            setOf("online:${results[1].uri}", "online:${results[2].uri}"),
+        )
+        val resolved = results[1].copy(uri = "https://audio.example/track-2")
+
+        assertEquals(listOf(results[1], results[2]), visible)
+        assertNull(playableOnlineTrack(results[1], emptyMap()))
+        assertEquals(resolved, playableOnlineTrack(results[1], mapOf(results[1].uri to resolved)))
+    }
+
+    @Test
     fun `innerTube song response maps to a playable catalog track`() {
         val response = """
             {
