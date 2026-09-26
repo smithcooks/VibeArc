@@ -32,6 +32,9 @@ internal fun AppearanceConfig.resolvedAccentArgb(): Long = when (accentPreset) {
     else -> accentPreset.argb ?: DEFAULT_ACCENT_ARGB
 }
 
+internal fun AppearanceConfig.activeAccentArgb(artworkAccentArgb: Long?): Long =
+    artworkAccentArgb.takeIf { dynamicNowPlayingEnabled } ?: resolvedAccentArgb()
+
 internal fun parseAccentHex(value: String): Long? {
     val hex = value.trim().removePrefix("#")
     if (hex.length !in setOf(6, 8) || hex.any { !it.isDigit() && it.lowercaseChar() !in 'a'..'f' }) return null

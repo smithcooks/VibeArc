@@ -32,4 +32,18 @@ class AppearanceSettingsTest {
         assertEquals(0xFFE76F51L, AppearanceConfig(accentPreset = AccentPreset.Coral).resolvedAccentArgb())
         assertEquals(DEFAULT_ACCENT_ARGB, AppearanceConfig().resolvedAccentArgb())
     }
+
+    @Test
+    fun `playing artwork overrides the manual accent only when enabled`() {
+        val artwork = 0xFF247BA0L
+        val enabled = AppearanceConfig(
+            dynamicNowPlayingEnabled = true,
+            accentPreset = AccentPreset.Coral,
+        )
+        val disabled = enabled.copy(dynamicNowPlayingEnabled = false)
+
+        assertEquals(artwork, enabled.activeAccentArgb(artwork))
+        assertEquals(0xFFE76F51L, disabled.activeAccentArgb(artwork))
+        assertEquals(0xFFE76F51L, enabled.activeAccentArgb(null))
+    }
 }

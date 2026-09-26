@@ -82,7 +82,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -118,43 +120,48 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             var appearance by remember { mutableStateOf(this@MainActivity.loadAppearanceConfig()) }
-            VibeArcTheme(appearance) {
-                VibeArcApp(appearance) { updated ->
-                    appearance = updated
-                    this@MainActivity.saveAppearanceConfig(updated)
-                }
+            VibeArcApp(appearance) { updated ->
+                appearance = updated
+                this@MainActivity.saveAppearanceConfig(updated)
             }
         }
     }
 }
 
 @Composable
-private fun VibeArcTheme(appearance: AppearanceConfig, content: @Composable () -> Unit) {
+private fun VibeArcTheme(
+    appearance: AppearanceConfig,
+    artworkAccentArgb: Long?,
+    content: @Composable () -> Unit,
+) {
     val context = LocalContext.current
-    val accent = Color(appearance.resolvedAccentArgb())
-    val configuredScheme = if (appearance.dynamicColorEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    val accent = Color(appearance.activeAccentArgb(artworkAccentArgb))
+    val artworkColorsActive = appearance.dynamicNowPlayingEnabled && artworkAccentArgb != null
+    val configuredScheme = if (
+        appearance.dynamicColorEnabled && !artworkColorsActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    ) {
         dynamicDarkColorScheme(context)
     } else {
         darkColorScheme(
             primary = accent,
             onPrimary = if (accent.luminance() > 0.45f) Color(0xFF171006) else Paper,
-            primaryContainer = accent.copy(alpha = 0.28f),
+            primaryContainer = lerp(Ink, accent, 0.32f),
             onPrimaryContainer = Paper,
             secondary = Peach,
             onSecondary = Color(0xFF301B0B),
-            background = Ink,
+            background = lerp(Ink, accent, 0.08f),
             onBackground = Paper,
-            surface = Panel,
+            surface = lerp(Panel, accent, 0.09f),
             onSurface = Paper,
-            surfaceVariant = PanelRaised,
+            surfaceVariant = lerp(PanelRaised, accent, 0.13f),
             onSurfaceVariant = MutedText,
-            outline = Color(0x29FFFFFF),
+            outline = lerp(Color(0xFF4B4947), accent, 0.22f),
         )
     }
     val colorScheme = if (appearance.amoledMode) configuredScheme.copy(
         background = Color.Black,
-        surface = Color.Black,
-        surfaceVariant = Color(0xFF101012),
+        surface = lerp(Color.Black, accent, 0.06f),
+        surfaceVariant = lerp(Color(0xFF101012), accent, 0.10f),
     ) else configuredScheme
     MaterialTheme(
         colorScheme = colorScheme,
@@ -214,6 +221,7 @@ private fun VibeArcApp(
     var playlists by remember { mutableStateOf(context.loadPlaylists()) }
     var recentUris by remember { mutableStateOf(context.loadRecentUris()) }
     var currentTrack by remember { mutableStateOf<Track?>(null) }
+    var artworkAccentArgb by remember(currentTrack?.uri) { mutableStateOf<Long?>(null) }
     var isPlaying by remember { mutableStateOf(activePlayer?.isPlaying == true) }
     var queueTracks by remember { mutableStateOf(activePlayer?.queueTracks().orEmpty()) }
     var shuffleEnabled by remember { mutableStateOf(activePlayer?.shuffleModeEnabled == true) }
@@ -307,6 +315,7 @@ private fun VibeArcApp(
     }
     val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
 
+    VibeArcTheme(appearance, artworkAccentArgb) {
     Scaffold(
         topBar = {
             if (currentTab != Tab.Player) {
@@ -336,6 +345,7 @@ private fun VibeArcApp(
                         isPlaying = isPlaying,
                         onOpen = openPlayer,
                         onToggle = activePlayer::toggle,
+                        onAccent = { artworkAccentArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
                     )
                 }
                 Surface(
@@ -421,9 +431,11 @@ private fun VibeArcApp(
                     )
                 },
                 dynamicArtworkColor = appearance.dynamicNowPlayingEnabled,
+                onArtworkAccent = { artworkAccentArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
             ) else EmptyPlayer(padding) { currentTab = Tab.Search }
             Tab.Settings -> SettingsScreen(padding, appearance, onAppearanceChange)
         }
+    }
     }
 }
 
@@ -853,6 +865,7 @@ private fun PlayerScreen(
     onCycleRepeat: () -> Unit,
     onCycleSleepTimer: () -> Unit,
     dynamicArtworkColor: Boolean,
+    onArtworkAccent: (Color) -> Unit,
 ) {
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(1L) }
@@ -899,7 +912,10 @@ private fun PlayerScreen(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(MaterialTheme.shapes.large),
-                onAccent = { if (dynamicArtworkColor) ambientAccent = it },
+                onAccent = {
+                    if (dynamicArtworkColor) ambientAccent = it
+                    onArtworkAccent(it)
+                },
             )
         }
         item {
@@ -1008,7 +1024,13 @@ private fun PlayerScreen(
 }
 
 @Composable
-private fun MiniPlayer(track: Track, isPlaying: Boolean, onOpen: () -> Unit, onToggle: () -> Unit) {
+private fun MiniPlayer(
+    track: Track,
+    isPlaying: Boolean,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit,
+    onAccent: (Color) -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
         color = Color(0xE62A2A2D),
@@ -1020,7 +1042,7 @@ private fun MiniPlayer(track: Track, isPlaying: Boolean, onOpen: () -> Unit, onT
             Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TrackArtwork(track, null, Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)))
+            TrackArtwork(track, null, Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)), onAccent)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1)
