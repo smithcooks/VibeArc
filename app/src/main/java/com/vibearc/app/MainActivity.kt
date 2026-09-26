@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -318,61 +319,66 @@ private fun VibeArcApp(
     VibeArcTheme(appearance, artworkAccentArgb) {
     Scaffold(
         topBar = {
-            if (currentTab != Tab.Player) {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("VibeArc", style = MaterialTheme.typography.titleLarge)
-                        Text(currentTab.label.uppercase(), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, letterSpacing = 1.4.sp)
-                    }
+            if (currentTab != Tab.Player) LiquidAppHeader(
+                tab = currentTab,
+                trackCount = library.size,
+                currentTrack = currentTrack,
+                onSettings = {
+                    if (currentTab in MainTabs) lastContentTab = currentTab
+                    currentTab = Tab.Settings
                 },
-                actions = {
-                    IconButton(onClick = { currentTab = Tab.Settings }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                onBack = { currentTab = playerReturnTab(lastContentTab) },
             )
-            }
         },
         bottomBar = {
-            if (currentTab != Tab.Player) Column(
+            if (currentTab in MainTabs) Column(
                 modifier = Modifier.fillMaxWidth().systemBarsPadding().padding(bottom = 12.dp),
             ) {
-                if (currentTab in MainTabs && currentTrack != null && activePlayer != null) {
+                if (currentTrack != null && activePlayer != null) {
                     MiniPlayer(
                         track = currentTrack!!,
                         isPlaying = isPlaying,
                         onOpen = openPlayer,
                         onToggle = activePlayer::toggle,
+                        onNext = activePlayer::seekToNextMediaItem,
                         onAccent = { artworkAccentArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
                     )
                 }
                 Surface(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     color = if (appearance.liquidGlassEnabled) Color(0xE62A2A2D) else MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(28.dp),
+                    shape = RoundedCornerShape(30.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
                         if (appearance.liquidGlassEnabled) Color(0x29FFFFFF) else Color.Transparent,
                     ),
                     shadowElevation = if (appearance.liquidGlassEnabled) 16.dp else 0.dp,
                 ) {
-                NavigationBar(containerColor = Color.Transparent) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     MainTabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentTab == tab,
-                            onClick = { currentTab = tab },
-                            icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(tab.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = Color.Transparent,
-                                unselectedIconColor = FaintText,
-                                unselectedTextColor = FaintText,
-                            ),
-                        )
+                        val selected = currentTab == tab
+                        Surface(
+                            modifier = Modifier.animateContentSize().clickable { currentTab = tab },
+                            color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            shape = CircleShape,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = if (selected) 16.dp else 13.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Icon(
+                                    tab.icon,
+                                    contentDescription = if (selected) null else tab.label,
+                                    tint = if (selected) MaterialTheme.colorScheme.primary else FaintText,
+                                )
+                                if (selected) Text(tab.label, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
                 }
@@ -449,6 +455,52 @@ internal enum class Tab(val label: String, val icon: androidx.compose.ui.graphic
 }
 
 internal fun playerReturnTab(candidate: Tab): Tab = if (candidate == Tab.Player) Tab.Home else candidate
+
+@Composable
+private fun LiquidAppHeader(
+    tab: Tab,
+    trackCount: Int,
+    currentTrack: Track?,
+    onSettings: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val title = if (tab == Tab.Home) "VibeArc" else tab.label
+    val subtitle = when (tab) {
+        Tab.Home -> currentTrack?.let { "Playing ${it.title}" } ?: "Your music, shaped around you"
+        Tab.Search -> "YouTube Music and this device"
+        Tab.Library -> "$trackCount saved ${if (trackCount == 1) "track" else "tracks"}"
+        Tab.Downloads -> "Available when you are offline"
+        Tab.Settings -> "Sound, color and identity"
+        Tab.Player -> ""
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (tab == Tab.Settings) {
+                FilledIconButton(onClick = onBack, modifier = Modifier.size(52.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Spacer(Modifier.width(14.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text("VIBEARC", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
+                Text(title, style = MaterialTheme.typography.headlineMedium)
+                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
+            if (tab != Tab.Settings) {
+                FilledIconButton(onClick = onSettings, modifier = Modifier.size(52.dp)) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                }
+            }
+        }
+    }
+}
 
 private val MainTabs = listOf(Tab.Home, Tab.Search, Tab.Library, Tab.Downloads)
 
@@ -1029,20 +1081,21 @@ private fun MiniPlayer(
     isPlaying: Boolean,
     onOpen: () -> Unit,
     onToggle: () -> Unit,
+    onNext: () -> Unit,
     onAccent: (Color) -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-        color = Color(0xE62A2A2D),
-        shape = RoundedCornerShape(28.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x29FFFFFF)),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(30.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         shadowElevation = 12.dp,
     ) {
         Row(
             Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TrackArtwork(track, null, Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)), onAccent)
+            TrackArtwork(track, null, Modifier.size(58.dp).clip(RoundedCornerShape(20.dp)), onAccent)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -1059,6 +1112,9 @@ private fun MiniPlayer(
                 } else {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                 }
+            }
+            IconButton(onClick = onNext, modifier = Modifier.size(44.dp)) {
+                Text("›", fontSize = 32.sp)
             }
         }
     }
