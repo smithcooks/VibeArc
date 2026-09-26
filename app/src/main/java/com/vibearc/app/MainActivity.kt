@@ -3,6 +3,7 @@ package com.vibearc.app
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
@@ -66,6 +67,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -80,6 +82,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -103,7 +106,6 @@ import java.util.UUID
 private val Ink = Color(0xFF0B0B0D)
 private val Panel = Color(0xFF141416)
 private val PanelRaised = Color(0xFF1B1B1E)
-internal val Sand = Color(0xFFD7A24A)
 private val Peach = Color(0xFFE5B963)
 private val Paper = Color(0xFFF5F3EE)
 internal val MutedText = Color(0xFF9C9A93)
@@ -114,17 +116,29 @@ private val BodyFont = FontFamily(Font(R.font.manrope))
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { VibeArcTheme { VibeArcApp() } }
+        setContent {
+            var appearance by remember { mutableStateOf(this@MainActivity.loadAppearanceConfig()) }
+            VibeArcTheme(appearance) {
+                VibeArcApp(appearance) { updated ->
+                    appearance = updated
+                    this@MainActivity.saveAppearanceConfig(updated)
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun VibeArcTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Sand,
-            onPrimary = Color(0xFF171006),
-            primaryContainer = Color(0xFF3B2A0D),
+private fun VibeArcTheme(appearance: AppearanceConfig, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val accent = Color(appearance.resolvedAccentArgb())
+    val configuredScheme = if (appearance.dynamicColorEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        dynamicDarkColorScheme(context)
+    } else {
+        darkColorScheme(
+            primary = accent,
+            onPrimary = if (accent.luminance() > 0.45f) Color(0xFF171006) else Paper,
+            primaryContainer = accent.copy(alpha = 0.28f),
             onPrimaryContainer = Paper,
             secondary = Peach,
             onSecondary = Color(0xFF301B0B),
@@ -135,7 +149,15 @@ private fun VibeArcTheme(content: @Composable () -> Unit) {
             surfaceVariant = PanelRaised,
             onSurfaceVariant = MutedText,
             outline = Color(0x29FFFFFF),
-        ),
+        )
+    }
+    val colorScheme = if (appearance.amoledMode) configuredScheme.copy(
+        background = Color.Black,
+        surface = Color.Black,
+        surfaceVariant = Color(0xFF101012),
+    ) else configuredScheme
+    MaterialTheme(
+        colorScheme = colorScheme,
         shapes = Shapes(
             extraSmall = RoundedCornerShape(10.dp),
             small = RoundedCornerShape(16.dp),
@@ -160,7 +182,10 @@ private fun VibeArcTheme(content: @Composable () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun VibeArcApp() {
+private fun VibeArcApp(
+    appearance: AppearanceConfig,
+    onAppearanceChange: (AppearanceConfig) -> Unit,
+) {
     val context = LocalContext.current
     val controllerFuture = remember {
         MediaController.Builder(
@@ -289,7 +314,7 @@ private fun VibeArcApp() {
                 title = {
                     Column {
                         Text("VibeArc", style = MaterialTheme.typography.titleLarge)
-                        Text(currentTab.label.uppercase(), fontSize = 11.sp, color = Sand, letterSpacing = 1.4.sp)
+                        Text(currentTab.label.uppercase(), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, letterSpacing = 1.4.sp)
                     }
                 },
                 actions = {
@@ -297,7 +322,7 @@ private fun VibeArcApp() {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Ink),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
             }
         },
@@ -315,10 +340,13 @@ private fun VibeArcApp() {
                 }
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    color = Color(0xE62A2A2D),
+                    color = if (appearance.liquidGlassEnabled) Color(0xE62A2A2D) else MaterialTheme.colorScheme.surfaceVariant,
                     shape = RoundedCornerShape(28.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x29FFFFFF)),
-                    shadowElevation = 16.dp,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (appearance.liquidGlassEnabled) Color(0x29FFFFFF) else Color.Transparent,
+                    ),
+                    shadowElevation = if (appearance.liquidGlassEnabled) 16.dp else 0.dp,
                 ) {
                 NavigationBar(containerColor = Color.Transparent) {
                     MainTabs.forEach { tab ->
@@ -328,8 +356,8 @@ private fun VibeArcApp() {
                             icon = { Icon(tab.icon, contentDescription = null) },
                             label = { Text(tab.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Sand,
-                                selectedTextColor = Sand,
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
                                 indicatorColor = Color.Transparent,
                                 unselectedIconColor = FaintText,
                                 unselectedTextColor = FaintText,
@@ -340,7 +368,7 @@ private fun VibeArcApp() {
                 }
             }
         },
-        containerColor = Ink,
+        containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         when (currentTab) {
             Tab.Home -> HomeScreen(
@@ -392,8 +420,9 @@ private fun VibeArcApp() {
                         nextMinutes.takeIf { it > 0 }?.let { System.currentTimeMillis() + it * 60_000L },
                     )
                 },
+                dynamicArtworkColor = appearance.dynamicNowPlayingEnabled,
             ) else EmptyPlayer(padding) { currentTab = Tab.Search }
-            Tab.Settings -> SettingsScreen(padding)
+            Tab.Settings -> SettingsScreen(padding, appearance, onAppearanceChange)
         }
     }
 }
@@ -450,7 +479,7 @@ private fun HomeScreen(
                     modifier = Modifier.align(Alignment.BottomStart).padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("DISCOVER", color = Sand, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("DISCOVER", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text("Find your next track", style = MaterialTheme.typography.headlineMedium)
                     Text("Search YouTube Music", color = MutedText)
                     FilledIconButton(onClick = onExplore, modifier = Modifier.size(56.dp)) {
@@ -823,10 +852,12 @@ private fun PlayerScreen(
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
     onCycleSleepTimer: () -> Unit,
+    dynamicArtworkColor: Boolean,
 ) {
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(1L) }
-    var ambientAccent by remember(track.uri) { mutableStateOf(Sand) }
+    val themeAccent = MaterialTheme.colorScheme.primary
+    var ambientAccent by remember(track.uri, dynamicArtworkColor, themeAccent) { mutableStateOf(themeAccent) }
 
     LaunchedEffect(player, isPlaying) {
         while (currentCoroutineContext().isActive) {
@@ -839,7 +870,15 @@ private fun PlayerScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(ambientAccent.copy(alpha = 0.48f), Ink, Ink)))
+            .background(
+                Brush.verticalGradient(
+                    if (dynamicArtworkColor) {
+                        listOf(ambientAccent.copy(alpha = 0.48f), MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background)
+                    } else {
+                        listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background)
+                    },
+                ),
+            )
             .padding(padding),
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -860,7 +899,7 @@ private fun PlayerScreen(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(MaterialTheme.shapes.large),
-                onAccent = { ambientAccent = it },
+                onAccent = { if (dynamicArtworkColor) ambientAccent = it },
             )
         }
         item {
@@ -1034,7 +1073,7 @@ internal fun TrackRow(
             Icon(
                 Icons.Default.PlayArrow,
                 contentDescription = "Play ${track.title}",
-                tint = if (enabled) Sand else FaintText,
+                tint = if (enabled) MaterialTheme.colorScheme.primary else FaintText,
             )
         } else {
             IconButton(onClick = onFavorite) {
@@ -1047,7 +1086,7 @@ internal fun TrackRow(
         }
         if (trailingIcon != null) {
             if (onTrailingAction == null) {
-                Icon(trailingIcon, contentDescription = trailingDescription, tint = Sand)
+                Icon(trailingIcon, contentDescription = trailingDescription, tint = MaterialTheme.colorScheme.primary)
             } else {
                 IconButton(onClick = onTrailingAction) {
                     Icon(trailingIcon, contentDescription = trailingDescription)

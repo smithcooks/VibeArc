@@ -54,13 +54,21 @@ not a stable or policy-compliant route to a Google Play production release.
 - Ship only as an experimental GitHub build until licensing and policy review is
   complete.
 
-### v0.8 — Theme redesign only
+### v0.8 — Liquid experience and personalization
 
-- Replace the complete visual theme while keeping v0.7 playback and provider
-  behavior unchanged.
-- Rework color, typography, shapes, artwork treatment, and screen hierarchy as
-  one dedicated design milestone.
-- Do not add new music-provider or playback features in this version.
+- Finish the supplied Liquid design system across every screen, with a
+  responsive floating navigation stack and an optional low-cost opaque mode.
+- Add persisted AMOLED, dynamic-color, artwork-accent, glass, motion, density,
+  typography, and accent controls without weakening accessibility defaults.
+- Finish the Now Playing experience with immediate resolved playback, a wavy
+  seek bar, queue access, and synced-lyrics UI when timed lyrics are available.
+- Expand playback settings with honest streaming-quality reporting, download
+  quality preferences, equalizer entry points, and JSON backup/restore.
+- Keep account sync and downloads behind compliant provider boundaries: use
+  official OAuth for accounts, never capture credentials, and never persist or
+  download restricted YouTube media.
+- Verify release signing, permissions, startup behavior, and performance on
+  budget-class devices before publishing a v0.8 release.
 
 ### v0.9 — Community beta and release decision
 

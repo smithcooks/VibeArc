@@ -39,3 +39,15 @@
 - [ ] Publish privacy, copyright, attribution, and GPL notices.
 - [ ] Keep offline downloads, DRM/ad bypasses, geographic bypasses, and credential capture out of scope.
 - [ ] Do not call the provider stack production-ready or ship it to Google Play without written permission or a sanctioned replacement.
+
+## v0.8 Liquid build
+
+- [x] Apply the Liquid foundation, launcher icon, direct startup, and Player back navigation.
+- [x] Pre-resolve visible online results so Play starts a ready stream immediately.
+- [x] Add persisted appearance controls: AMOLED, dynamic color, accent, artwork tint, and optional glass.
+- [ ] Finish responsive Home, Search, Library, Downloads, Player, and Settings layouts.
+- [ ] Add wavy seek, queue UI, and synced-lyrics UI with an unavailable state.
+- [ ] Add streaming/download quality controls and equalizer entry point.
+- [ ] Add validated JSON backup and restore without credentials or media files.
+- [ ] Add compliant account/playlist sync only through official OAuth-supported APIs.
+- [ ] Verify budget-phone performance, release signing, permissions, notices, and the final APK.

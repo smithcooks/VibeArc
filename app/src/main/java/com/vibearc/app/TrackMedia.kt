@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,15 +38,16 @@ internal fun TrackArtwork(
     modifier: Modifier = Modifier,
     onAccent: (Color) -> Unit = {},
 ) {
+    val fallbackAccent = MaterialTheme.colorScheme.primary
     var artwork by remember(track.artworkUri) {
         mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
     }
-    LaunchedEffect(track.artworkUri) {
+    LaunchedEffect(track.artworkUri, fallbackAccent) {
         val bitmap = track.artworkUri.takeIf(String::isNotBlank)?.let { artworkUri ->
             withContext(Dispatchers.IO) { loadArtwork(artworkUri) }
         }
         artwork = bitmap?.asImageBitmap()
-        onAccent(bitmap?.averageAccent() ?: Sand)
+        onAccent(bitmap?.averageAccent() ?: fallbackAccent)
     }
     val loadedArtwork = artwork
     if (loadedArtwork == null) {
