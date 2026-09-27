@@ -390,8 +390,10 @@ private fun VibeArcApp(
             Tab.Home -> HomeScreen(
                 padding = padding,
                 recentTracks = recentTracks,
+                currentTrack = currentTrack,
                 onPlay = { track -> playTrack(track, recentTracks.ifEmpty { listOf(track) }) },
                 onExplore = { currentTab = Tab.Search },
+                onOpenPlayer = openPlayer,
             )
             Tab.Search -> {
                 SearchScreen(padding, library) { track -> playTrack(track, library.ifEmpty { listOf(track) }) }
@@ -508,8 +510,10 @@ private val MainTabs = listOf(Tab.Home, Tab.Search, Tab.Library, Tab.Downloads)
 private fun HomeScreen(
     padding: PaddingValues,
     recentTracks: List<Track>,
+    currentTrack: Track?,
     onPlay: (Track) -> Unit,
     onExplore: () -> Unit,
+    onOpenPlayer: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
@@ -517,25 +521,23 @@ private fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
-            Text("Good music.\nNo noise.", style = MaterialTheme.typography.displaySmall)
-            Spacer(Modifier.height(8.dp))
-            Text("Your library and YouTube Music, shaped around what is playing.", color = MutedText)
-        }
-        item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1.55f)
+                    .aspectRatio(1.35f)
                     .clip(MaterialTheme.shapes.large)
-                    .background(Brush.linearGradient(listOf(Color(0xFF33230B), PanelRaised)))
-                    .clickable(onClick = onExplore),
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable(onClick = if (currentTrack == null) onExplore else onOpenPlayer),
             ) {
+                if (currentTrack != null) {
+                    TrackArtwork(currentTrack, null, Modifier.fillMaxSize())
+                }
                 Box(
                     Modifier
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                listOf(Color.Transparent, Color(0x22000000), Color(0xE6000000)),
+                                listOf(Color(0x22000000), Color(0x44000000), Color(0xF2000000)),
                             ),
                         ),
                 )
@@ -543,17 +545,34 @@ private fun HomeScreen(
                     modifier = Modifier.align(Alignment.BottomStart).padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("DISCOVER", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("Find your next track", style = MaterialTheme.typography.headlineMedium)
-                    Text("Search YouTube Music", color = MutedText)
-                    FilledIconButton(onClick = onExplore, modifier = Modifier.size(56.dp)) {
-                        Icon(Icons.Default.Search, contentDescription = "Search music")
+                    Text(
+                        if (currentTrack == null) "DISCOVER" else "NOW PLAYING",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp,
+                    )
+                    Text(currentTrack?.title ?: "Find your next track", style = MaterialTheme.typography.headlineMedium)
+                    Text(currentTrack?.artist ?: "Search YouTube Music", color = Color(0xFFD0CDC7), maxLines = 1)
+                    FilledIconButton(
+                        onClick = if (currentTrack == null) onExplore else onOpenPlayer,
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            if (currentTrack == null) Icons.Default.Search else Icons.Default.PlayArrow,
+                            contentDescription = if (currentTrack == null) "Search music" else "Open player",
+                        )
                     }
                 }
             }
         }
         if (recentTracks.isNotEmpty()) {
-            item { SectionTitle("Recently played") }
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Recently played")
+                    Text("${recentTracks.size} tracks", color = MaterialTheme.colorScheme.primary)
+                }
+            }
             items(recentTracks, key = Track::uri) { track ->
                 TrackRow(track, onPlay = { onPlay(track) })
             }
@@ -599,7 +618,17 @@ private fun LibraryScreen(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        item { Text("Your library", style = MaterialTheme.typography.headlineMedium) }
+        item {
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.large) {
+                Row(Modifier.fillMaxWidth().padding(22.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Your collection", style = MaterialTheme.typography.titleLarge)
+                        Text("Tracks, artists, albums and playlists", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("${tracks.size}", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
         item {
             Button(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) {
                 Text("Add audio file")
@@ -649,7 +678,7 @@ private fun LibraryScreen(
                 }
                 items(playlists, key = Playlist::id) { playlist ->
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = PanelRaised),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth().clickable { selectedPlaylistId = playlist.id },
                     ) {
@@ -706,7 +735,7 @@ private fun LibraryScreen(
                 }
                 items(groupedTracks.entries.sortedBy { it.key.lowercase() }, key = { it.key }) { group ->
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = PanelRaised),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth().clickable { selectedGroup = group.key },
                     ) {
@@ -837,8 +866,15 @@ private fun DownloadsScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {
-            Text("Downloads", style = MaterialTheme.typography.headlineMedium)
-            Text("Music saved on this device", color = MutedText)
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.large) {
+                Row(Modifier.fillMaxWidth().padding(22.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Offline music", style = MaterialTheme.typography.titleLarge)
+                        Text("Ready without a connection", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("${tracks.size}", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
         }
         if (tracks.isEmpty()) {
             item { EmptyLibraryCard("Nothing downloaded", "Add local audio from Library to listen offline.") }
@@ -852,7 +888,7 @@ private fun DownloadsScreen(
 
 @Composable
 private fun EmptyPlayer(padding: PaddingValues, onExplore: () -> Unit) {
-    Box(Modifier.fillMaxSize().padding(padding).background(Ink), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Nothing playing", style = MaterialTheme.typography.headlineMedium)
             TextButton(onClick = onExplore) { Text("Find music") }
@@ -865,7 +901,7 @@ private enum class LibraryMode { Tracks, Artists, Albums, Folders, Favorites, Pl
 @Composable
 private fun EmptyLibraryCard(title: String, message: String) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = PanelRaised),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = MaterialTheme.shapes.medium,
     ) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
@@ -949,11 +985,15 @@ private fun PlayerScreen(
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                FilledIconButton(onClick = onBack, modifier = Modifier.size(52.dp)) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
-                Text("Now Playing", style = MaterialTheme.typography.titleLarge)
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("NOW PLAYING", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Text(track.album.ifBlank { "VibeArc" }, maxLines = 1)
+                }
+                Spacer(Modifier.size(52.dp))
             }
         }
         item {
@@ -963,7 +1003,7 @@ private fun PlayerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .clip(MaterialTheme.shapes.large),
+                    .clip(MaterialTheme.shapes.extraLarge),
                 onAccent = {
                     if (dynamicArtworkColor) ambientAccent = it
                     onArtworkAccent(it)
@@ -977,7 +1017,9 @@ private fun PlayerScreen(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(track.title, style = MaterialTheme.typography.headlineMedium)
-                    Text("${track.artist} • ${track.album}", color = MutedText)
+                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
+                        Text(track.artist, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary)
+                    }
                 }
                 if (onFavorite != null) {
                     IconButton(onClick = onFavorite) {
@@ -991,6 +1033,8 @@ private fun PlayerScreen(
             }
         }
         item {
+            Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp)) {
             Slider(
                 value = position.coerceAtMost(duration).toFloat(),
                 onValueChange = { position = it.toLong() },
@@ -1001,8 +1045,11 @@ private fun PlayerScreen(
                 Text(DateUtils.formatElapsedTime(position / 1_000), color = MutedText)
                 Text(DateUtils.formatElapsedTime(duration / 1_000), color = MutedText)
             }
+            }
+            }
         }
         item {
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.extraLarge) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -1034,6 +1081,7 @@ private fun PlayerScreen(
                 ) {
                     Text("›", fontSize = 42.sp)
                 }
+            }
             }
         }
         item {
@@ -1131,8 +1179,13 @@ internal fun TrackRow(
     trailingDescription: String = "Track action",
     onTrailingAction: (() -> Unit)? = null,
 ) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onPlay),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(22.dp),
+    ) {
     Row(
-        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onPlay).padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TrackArtwork(track, null, Modifier.size(58.dp).clip(RoundedCornerShape(16.dp)))
@@ -1171,6 +1224,7 @@ internal fun TrackRow(
                 }
             }
         }
+    }
     }
 }
 

@@ -61,7 +61,25 @@ internal fun SettingsScreen(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { Text("Make VibeArc yours", style = MaterialTheme.typography.headlineMedium) }
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = colors.primaryContainer),
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Your VibeArc", style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        listOfNotNull(
+                            "${appearance.accentPreset.label} accent",
+                            "AMOLED".takeIf { appearance.amoledMode },
+                            "Dynamic artwork".takeIf { appearance.dynamicNowPlayingEnabled },
+                            "Liquid Glass".takeIf { appearance.liquidGlassEnabled },
+                        ).joinToString("  •  "),
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+            }
+        }
         item { SettingsSection("Appearance", "Changes apply instantly and are saved on this device.") }
         item {
             SettingToggle(
@@ -221,9 +239,12 @@ internal fun SettingsScreen(
 
 @Composable
 private fun SettingsSection(title: String, description: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge)
-        Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -250,6 +271,13 @@ private fun SettingToggle(
             modifier = Modifier.fillMaxWidth().padding(18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Box(
+                modifier = Modifier.size(48.dp).background(colors.primaryContainer, MaterialTheme.shapes.small),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(title.take(1), color = colors.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            }
+            androidx.compose.foundation.layout.Spacer(Modifier.size(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.Bold, color = if (enabled) colors.onSurface else colors.onSurfaceVariant)
                 Text(description, color = colors.onSurfaceVariant)
