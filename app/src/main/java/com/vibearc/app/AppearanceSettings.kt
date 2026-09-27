@@ -5,6 +5,11 @@ import android.content.Context
 internal const val DEFAULT_ACCENT_ARGB = 0xFFD7A24AL
 
 internal enum class AccentPreset(val label: String, val argb: Long?) {
+    Crimson("Crimson", 0xFFD94B50L),
+    Violet("Violet", 0xFF8963E8L),
+    Ocean("Ocean", 0xFF409CBCL),
+    Sage("Sage", 0xFF83A984L),
+    Mono("Mono", 0xFFD5D5D5L),
     LiquidGold("Liquid gold", DEFAULT_ACCENT_ARGB),
     Amber("Amber", 0xFFFFB300L),
     Coral("Coral", 0xFFE76F51L),
@@ -23,7 +28,8 @@ internal data class AppearanceConfig(
     val dynamicColorEnabled: Boolean = false,
     val dynamicNowPlayingEnabled: Boolean = true,
     val liquidGlassEnabled: Boolean = true,
-    val accentPreset: AccentPreset = AccentPreset.LiquidGold,
+    val accentPreset: AccentPreset = AccentPreset.Mono,
+    val applicationFontEnabled: Boolean = true,
     val customAccentArgb: Long = DEFAULT_ACCENT_ARGB,
 )
 
@@ -48,13 +54,14 @@ internal fun Context.loadAppearanceConfig(): AppearanceConfig {
     val preferences = getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
     val preset = runCatching {
         AccentPreset.valueOf(preferences.getString("accent_preset", null).orEmpty())
-    }.getOrDefault(AccentPreset.LiquidGold)
+    }.getOrDefault(AccentPreset.Mono)
     return AppearanceConfig(
         amoledMode = preferences.getBoolean("amoled", false),
         dynamicColorEnabled = preferences.getBoolean("dynamic_color", false),
         dynamicNowPlayingEnabled = preferences.getBoolean("dynamic_now_playing", true),
         liquidGlassEnabled = preferences.getBoolean("liquid_glass", true),
-        accentPreset = preset,
+        accentPreset = if (!preferences.getBoolean("reference_theme", false) && preset == AccentPreset.LiquidGold) AccentPreset.Mono else preset,
+        applicationFontEnabled = preferences.getBoolean("application_font", true),
         customAccentArgb = preferences.getLong("custom_accent", DEFAULT_ACCENT_ARGB),
     )
 }
@@ -66,6 +73,8 @@ internal fun Context.saveAppearanceConfig(config: AppearanceConfig) {
         .putBoolean("dynamic_color", config.dynamicColorEnabled)
         .putBoolean("dynamic_now_playing", config.dynamicNowPlayingEnabled)
         .putBoolean("liquid_glass", config.liquidGlassEnabled)
+        .putBoolean("reference_theme", true)
+        .putBoolean("application_font", config.applicationFontEnabled)
         .putString("accent_preset", config.accentPreset.name)
         .putLong("custom_accent", config.customAccentArgb)
         .apply()

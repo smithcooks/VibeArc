@@ -42,6 +42,11 @@
 
 ## v0.8 Liquid build
 
+The 27 September screenshot UI request supersedes the Liquid HTML styling. See `docs/UI_REFERENCE_REBUILD.md` for implemented layouts, functional limits and the outstanding phone comparison.
+
+- [x] Rebuild the app shell, browse screens, search and settings around the supplied monochrome screenshots.
+- [ ] Compare rendered phone screenshots against all supplied references; check large text and budget-phone scrolling.
+
 - [x] Apply the Liquid foundation, launcher icon, direct startup, and Player back navigation.
 - [x] Pre-resolve visible online results so Play starts a ready stream immediately.
 - [x] Add persisted appearance controls: AMOLED, dynamic color, accent, artwork tint, and optional glass.

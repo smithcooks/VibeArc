@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +30,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -87,6 +93,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
@@ -106,19 +113,26 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.util.UUID
 
-private val Ink = Color(0xFF0B0B0D)
-private val Panel = Color(0xFF141416)
-private val PanelRaised = Color(0xFF1B1B1E)
+private val Ink = Color(0xFF101010)
+private val Panel = Color(0xFF242424)
+private val PanelRaised = Color(0xFF303030)
 private val Peach = Color(0xFFE5B963)
-private val Paper = Color(0xFFF5F3EE)
-internal val MutedText = Color(0xFF9C9A93)
-private val FaintText = Color(0xFF6C6A65)
-private val DisplayFont = FontFamily(Font(R.font.space_grotesk))
-private val BodyFont = FontFamily(Font(R.font.manrope))
+private val Paper = Color(0xFFE6E6E6)
+internal val MutedText = Color(0xFFC2C2C2)
+private val FaintText = Color(0xFFB5B5B5)
+private val BodyFont = FontFamily(
+    Font(R.font.manrope_regular, weight = FontWeight.Normal),
+    Font(R.font.manrope_bold, weight = FontWeight.Bold),
+)
+private val DisplayFont = BodyFont
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         setContent {
             var appearance by remember { mutableStateOf(this@MainActivity.loadAppearanceConfig()) }
             VibeArcApp(appearance) { updated ->
@@ -138,6 +152,7 @@ private fun VibeArcTheme(
     val context = LocalContext.current
     val accent = Color(appearance.activeAccentArgb(artworkAccentArgb))
     val artworkColorsActive = appearance.dynamicNowPlayingEnabled && artworkAccentArgb != null
+    val neutral = appearance.accentPreset == AccentPreset.Mono && !artworkColorsActive
     val configuredScheme = if (
         appearance.dynamicColorEnabled && !artworkColorsActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     ) {
@@ -146,15 +161,15 @@ private fun VibeArcTheme(
         darkColorScheme(
             primary = accent,
             onPrimary = if (accent.luminance() > 0.45f) Color(0xFF171006) else Paper,
-            primaryContainer = lerp(Ink, accent, 0.32f),
+            primaryContainer = if (neutral) Color(0xFF484848) else lerp(Panel, accent, 0.30f),
             onPrimaryContainer = Paper,
-            secondary = Peach,
+            secondary = accent,
             onSecondary = Color(0xFF301B0B),
-            background = lerp(Ink, accent, 0.08f),
+            background = if (neutral) Ink else lerp(Ink, accent, 0.05f),
             onBackground = Paper,
-            surface = lerp(Panel, accent, 0.09f),
+            surface = if (neutral) Panel else lerp(Panel, accent, 0.08f),
             onSurface = Paper,
-            surfaceVariant = lerp(PanelRaised, accent, 0.13f),
+            surfaceVariant = if (neutral) PanelRaised else lerp(PanelRaised, accent, 0.10f),
             onSurfaceVariant = MutedText,
             outline = lerp(Color(0xFF4B4947), accent, 0.22f),
         )
@@ -174,15 +189,15 @@ private fun VibeArcTheme(
             extraLarge = RoundedCornerShape(40.dp),
         ),
         typography = Typography(
-            displaySmall = TextStyle(fontFamily = DisplayFont, fontSize = 42.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold),
-            headlineMedium = TextStyle(fontFamily = DisplayFont, fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold),
-            titleLarge = TextStyle(fontFamily = DisplayFont, fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-            titleMedium = TextStyle(fontFamily = DisplayFont, fontWeight = FontWeight.SemiBold),
-            bodyLarge = TextStyle(fontFamily = BodyFont, fontSize = 16.sp, lineHeight = 24.sp),
-            bodyMedium = TextStyle(fontFamily = BodyFont, fontSize = 14.sp, lineHeight = 20.sp),
-            bodySmall = TextStyle(fontFamily = BodyFont, fontSize = 12.sp, lineHeight = 16.sp),
-            labelLarge = TextStyle(fontFamily = BodyFont, fontWeight = FontWeight.SemiBold),
-            labelMedium = TextStyle(fontFamily = BodyFont, fontWeight = FontWeight.SemiBold),
+            displaySmall = TextStyle(fontFamily = if (appearance.applicationFontEnabled) DisplayFont else FontFamily.Default, fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold),
+            headlineMedium = TextStyle(fontFamily = if (appearance.applicationFontEnabled) DisplayFont else FontFamily.Default, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold),
+            titleLarge = TextStyle(fontFamily = if (appearance.applicationFontEnabled) DisplayFont else FontFamily.Default, fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
+            titleMedium = TextStyle(fontFamily = if (appearance.applicationFontEnabled) DisplayFont else FontFamily.Default, fontWeight = FontWeight.SemiBold),
+            bodyLarge = TextStyle(fontFamily = if (appearance.applicationFontEnabled) BodyFont else FontFamily.Default, fontSize = 16.sp, lineHeight = 24.sp),
+            bodyMedium = TextStyle(fontFamily = if (appearance.applicationFontEnabled) BodyFont else FontFamily.Default, fontSize = 14.sp, lineHeight = 20.sp),
+            bodySmall = TextStyle(fontFamily = if (appearance.applicationFontEnabled) BodyFont else FontFamily.Default, fontSize = 12.sp, lineHeight = 16.sp),
+            labelLarge = TextStyle(fontFamily = if (appearance.applicationFontEnabled) BodyFont else FontFamily.Default, fontWeight = FontWeight.SemiBold),
+            labelMedium = TextStyle(fontFamily = if (appearance.applicationFontEnabled) BodyFont else FontFamily.Default, fontWeight = FontWeight.SemiBold),
         ),
         content = content,
     )
@@ -221,6 +236,7 @@ private fun VibeArcApp(
     var library by remember { mutableStateOf(context.loadLibrary()) }
     var playlists by remember { mutableStateOf(context.loadPlaylists()) }
     var recentUris by remember { mutableStateOf(context.loadRecentUris()) }
+    var searchSeed by remember { mutableStateOf("") }
     var currentTrack by remember { mutableStateOf<Track?>(null) }
     var artworkAccentArgb by remember(currentTrack?.uri) { mutableStateOf<Long?>(null) }
     var isPlaying by remember { mutableStateOf(activePlayer?.isPlaying == true) }
@@ -235,6 +251,11 @@ private fun VibeArcApp(
     }
     val closePlayer = { currentTab = playerReturnTab(lastContentTab) }
     BackHandler(enabled = currentTab == Tab.Player, onBack = closePlayer)
+    BackHandler(enabled = currentTab !in MainTabs && currentTab != Tab.Player) { currentTab = playerReturnTab(lastContentTab) }
+    val navigate: (Tab) -> Unit = { tab ->
+        if (currentTab in MainTabs) lastContentTab = currentTab
+        currentTab = tab
+    }
 
     LaunchedEffect(activePlayer, library) {
         val connectedPlayer = activePlayer ?: return@LaunchedEffect
@@ -317,70 +338,55 @@ private fun VibeArcApp(
     val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
 
     VibeArcTheme(appearance, artworkAccentArgb) {
+    CompositionLocalProvider(LocalGlass provides appearance.liquidGlassEnabled) {
     Scaffold(
         topBar = {
-            if (currentTab != Tab.Player) LiquidAppHeader(
-                tab = currentTab,
-                trackCount = library.size,
-                currentTrack = currentTrack,
-                onSettings = {
-                    if (currentTab in MainTabs) lastContentTab = currentTab
-                    currentTab = Tab.Settings
-                },
-                onBack = { currentTab = playerReturnTab(lastContentTab) },
-            )
+            if (currentTab !in listOf(Tab.Player, Tab.Search, Tab.Library)) ReferenceHeader(
+                title = when(currentTab) { Tab.Home -> "Home"; Tab.Stats -> "Stats"; else -> currentTab.label },
+                onBack = if (currentTab !in MainTabs) ({ currentTab = playerReturnTab(lastContentTab) }) else null,
+            ) {
+                if (currentTab in MainTabs) {
+                    RoundAction("Discover", { navigate(Tab.Discover) }) { Glyph("discover") }
+                    Spacer(Modifier.width(8.dp))
+                    RoundAction("Search", { searchSeed = ""; navigate(Tab.Search) }) { Icon(Icons.Default.Search, null) }
+                    Spacer(Modifier.width(8.dp))
+                    RoundAction("Settings", { navigate(Tab.Settings) }) {
+                        if(currentTab == Tab.Stats) Glyph("account") else Icon(Icons.Default.Settings, null)
+                    }
+                }
+            }
         },
         bottomBar = {
             if (currentTab in MainTabs) Column(
-                modifier = Modifier.fillMaxWidth().systemBarsPadding().padding(bottom = 12.dp),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (currentTrack != null && activePlayer != null) {
-                    MiniPlayer(
-                        track = currentTrack!!,
-                        isPlaying = isPlaying,
-                        onOpen = openPlayer,
-                        onToggle = activePlayer::toggle,
-                        onNext = activePlayer::seekToNextMediaItem,
-                        onAccent = { artworkAccentArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
-                    )
-                }
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    color = if (appearance.liquidGlassEnabled) Color(0xE62A2A2D) else MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(30.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (appearance.liquidGlassEnabled) Color(0x29FFFFFF) else Color.Transparent,
-                    ),
-                    shadowElevation = if (appearance.liquidGlassEnabled) 16.dp else 0.dp,
-                ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    MainTabs.forEach { tab ->
-                        val selected = currentTab == tab
-                        Surface(
-                            modifier = Modifier.animateContentSize().clickable { currentTab = tab },
-                            color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                            shape = CircleShape,
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = if (selected) 16.dp else 13.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                if (currentTrack != null && activePlayer != null) MiniPlayer(
+                    track = currentTrack!!,
+                    isPlaying = isPlaying,
+                    onOpen = openPlayer,
+                    onToggle = activePlayer::toggle,
+                    onNext = activePlayer::seekToNextMediaItem,
+                    onAccent = { artworkAccentArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
+                )
+                ReferenceSurface(Modifier.widthIn(max = 340.dp).padding(horizontal = 28.dp), shape = CircleShape) {
+                    Row(Modifier.padding(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        MainTabs.forEach { tab ->
+                            val selected = currentTab == tab
+                            Surface(
+                                modifier = Modifier.clickable { currentTab = tab },
+                                color = if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                                shape = CircleShape,
                             ) {
-                                Icon(
-                                    tab.icon,
-                                    contentDescription = if (selected) null else tab.label,
-                                    tint = if (selected) MaterialTheme.colorScheme.primary else FaintText,
-                                )
-                                if (selected) Text(tab.label, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (tab == Tab.Home) Icon(Icons.Default.Home, if(selected) null else "Feed")
+                                    else Glyph(if(tab == Tab.Stats) "stats" else "playlist", Modifier.semantics { contentDescription = tab.label })
+                                    if(selected) Text(if(tab == Tab.Home) "Feed" else tab.label, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
-                }
                 }
             }
         },
@@ -392,17 +398,20 @@ private fun VibeArcApp(
                 recentTracks = recentTracks,
                 currentTrack = currentTrack,
                 onPlay = { track -> playTrack(track, recentTracks.ifEmpty { listOf(track) }) },
-                onExplore = { currentTab = Tab.Search },
+                onExplore = { searchSeed = ""; navigate(Tab.Search) },
                 onOpenPlayer = openPlayer,
+                onLibrary = { navigate(Tab.Library) },
+                onDiscover = { navigate(Tab.Discover) },
             )
             Tab.Search -> {
-                SearchScreen(padding, library) { track -> playTrack(track, library.ifEmpty { listOf(track) }) }
+                SearchScreen(padding, library, searchSeed, { currentTab = playerReturnTab(lastContentTab) }) { track -> playTrack(track, listOf(track)) }
             }
             Tab.Library -> LibraryScreen(
                 padding = padding,
                 tracks = library,
                 playlists = playlists,
                 onChooseFile = { filePicker.launch(arrayOf("audio/*")) },
+                onGenerator = { navigate(Tab.Generator) },
                 onPlay = playTrack,
                 onToggleFavorite = toggleFavorite,
                 onCreatePlaylist = { name ->
@@ -441,8 +450,18 @@ private fun VibeArcApp(
                 dynamicArtworkColor = appearance.dynamicNowPlayingEnabled,
                 onArtworkAccent = { artworkAccentArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
             ) else EmptyPlayer(padding) { currentTab = Tab.Search }
-            Tab.Settings -> SettingsScreen(padding, appearance, onAppearanceChange)
+            Tab.Settings -> SettingsScreen(padding, appearance, onAppearanceChange, { navigate(Tab.Downloads) })
+            Tab.Stats -> StatsScreen(padding, library, recentTracks) { track -> playTrack(track, recentTracks) }
+            Tab.Discover -> DiscoverScreen(padding, library, { track -> playTrack(track, library) }) { query ->
+                searchSeed = query
+                navigate(Tab.Search)
+            }
+            Tab.Generator -> GeneratorScreen(padding) { query ->
+                searchSeed = query
+                navigate(Tab.Search)
+            }
         }
+    }
     }
     }
 }
@@ -450,7 +469,10 @@ private fun VibeArcApp(
 internal enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     Home("Home", Icons.Default.Home),
     Search("Search", Icons.Default.Search),
-    Library("Library", Icons.AutoMirrored.Filled.List),
+    Library("Playlists", Icons.AutoMirrored.Filled.List),
+    Stats("Stats", Icons.AutoMirrored.Filled.List),
+    Discover("Discover", Icons.Default.Search),
+    Generator("Generator", Icons.AutoMirrored.Filled.List),
     Downloads("Downloads", Icons.AutoMirrored.Filled.List),
     Player("Playing", Icons.Default.PlayArrow),
     Settings("Settings", Icons.Default.Settings),
@@ -458,401 +480,7 @@ internal enum class Tab(val label: String, val icon: androidx.compose.ui.graphic
 
 internal fun playerReturnTab(candidate: Tab): Tab = if (candidate == Tab.Player) Tab.Home else candidate
 
-@Composable
-private fun LiquidAppHeader(
-    tab: Tab,
-    trackCount: Int,
-    currentTrack: Track?,
-    onSettings: () -> Unit,
-    onBack: () -> Unit,
-) {
-    val title = if (tab == Tab.Home) "VibeArc" else tab.label
-    val subtitle = when (tab) {
-        Tab.Home -> currentTrack?.let { "Playing ${it.title}" } ?: "Your music, shaped around you"
-        Tab.Search -> "YouTube Music and this device"
-        Tab.Library -> "$trackCount saved ${if (trackCount == 1) "track" else "tracks"}"
-        Tab.Downloads -> "Available when you are offline"
-        Tab.Settings -> "Sound, color and identity"
-        Tab.Player -> ""
-    }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (tab == Tab.Settings) {
-                FilledIconButton(onClick = onBack, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Spacer(Modifier.width(14.dp))
-            }
-            Column(Modifier.weight(1f)) {
-                Text("VIBEARC", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
-                Text(title, style = MaterialTheme.typography.headlineMedium)
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            }
-            if (tab != Tab.Settings) {
-                FilledIconButton(onClick = onSettings, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings")
-                }
-            }
-        }
-    }
-}
-
-private val MainTabs = listOf(Tab.Home, Tab.Search, Tab.Library, Tab.Downloads)
-
-@Composable
-private fun HomeScreen(
-    padding: PaddingValues,
-    recentTracks: List<Track>,
-    currentTrack: Track?,
-    onPlay: (Track) -> Unit,
-    onExplore: () -> Unit,
-    onOpenPlayer: () -> Unit,
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(padding),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-    ) {
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.35f)
-                    .clip(MaterialTheme.shapes.large)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable(onClick = if (currentTrack == null) onExplore else onOpenPlayer),
-            ) {
-                if (currentTrack != null) {
-                    TrackArtwork(currentTrack, null, Modifier.fillMaxSize())
-                }
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color(0x22000000), Color(0x44000000), Color(0xF2000000)),
-                            ),
-                        ),
-                )
-                Column(
-                    modifier = Modifier.align(Alignment.BottomStart).padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        if (currentTrack == null) "DISCOVER" else "NOW PLAYING",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
-                    )
-                    Text(currentTrack?.title ?: "Find your next track", style = MaterialTheme.typography.headlineMedium)
-                    Text(currentTrack?.artist ?: "Search YouTube Music", color = Color(0xFFD0CDC7), maxLines = 1)
-                    FilledIconButton(
-                        onClick = if (currentTrack == null) onExplore else onOpenPlayer,
-                        modifier = Modifier.size(56.dp),
-                    ) {
-                        Icon(
-                            if (currentTrack == null) Icons.Default.Search else Icons.Default.PlayArrow,
-                            contentDescription = if (currentTrack == null) "Search music" else "Open player",
-                        )
-                    }
-                }
-            }
-        }
-        if (recentTracks.isNotEmpty()) {
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    SectionTitle("Recently played")
-                    Text("${recentTracks.size} tracks", color = MaterialTheme.colorScheme.primary)
-                }
-            }
-            items(recentTracks, key = Track::uri) { track ->
-                TrackRow(track, onPlay = { onPlay(track) })
-            }
-        }
-    }
-}
-
-@Composable
-private fun LibraryScreen(
-    padding: PaddingValues,
-    tracks: List<Track>,
-    playlists: List<Playlist>,
-    onChooseFile: () -> Unit,
-    onPlay: (Track, List<Track>) -> Unit,
-    onToggleFavorite: (Track) -> Unit,
-    onCreatePlaylist: (String) -> Unit,
-    onRenamePlaylist: (String, String) -> Unit,
-    onDeletePlaylist: (String) -> Unit,
-    onAddToPlaylist: (String, String) -> Unit,
-    onRemoveFromPlaylist: (String, String) -> Unit,
-) {
-    var mode by remember { mutableStateOf(LibraryMode.Tracks) }
-    var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
-    var selectedGroup by remember { mutableStateOf<String?>(null) }
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var playlistToRename by remember { mutableStateOf<Playlist?>(null) }
-    var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
-    var trackToAdd by remember { mutableStateOf<Track?>(null) }
-    val visibleTracks = if (mode == LibraryMode.Favorites) tracks.filter(Track::isFavorite) else tracks
-    val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }
-    val playlistTracks = selectedPlaylist?.trackUris.orEmpty().mapNotNull { uri -> tracks.firstOrNull { it.uri == uri } }
-    val groupedTracks = remember(tracks, mode) {
-        when (mode) {
-            LibraryMode.Artists -> tracks.groupBy { it.artist.ifBlank { "Unknown artist" } }
-            LibraryMode.Albums -> tracks.groupBy { it.album.ifBlank { "Unknown album" } }
-            LibraryMode.Folders -> tracks.groupBy { it.folder.ifBlank { "Imported" } }
-            else -> emptyMap()
-        }
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(padding),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        item {
-            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.large) {
-                Row(Modifier.fillMaxWidth().padding(22.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Your collection", style = MaterialTheme.typography.titleLarge)
-                        Text("Tracks, artists, albums and playlists", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text("${tracks.size}", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-        item {
-            Button(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) {
-                Text("Add audio file")
-            }
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                LibraryMode.entries.forEach { option ->
-                    FilterChip(
-                        selected = mode == option,
-                        onClick = {
-                            mode = option
-                            selectedGroup = null
-                            if (option != LibraryMode.Playlists) selectedPlaylistId = null
-                        },
-                        label = {
-                            Text(
-                                when (option) {
-                                    LibraryMode.Tracks -> "Tracks"
-                                    LibraryMode.Artists -> "Artists"
-                                    LibraryMode.Albums -> "Albums"
-                                    LibraryMode.Folders -> "Folders"
-                                    LibraryMode.Favorites -> "Favorites (${tracks.count(Track::isFavorite)})"
-                                    LibraryMode.Playlists -> "Playlists (${playlists.size})"
-                                },
-                            )
-                        },
-                    )
-                }
-            }
-        }
-
-        if (mode == LibraryMode.Playlists) {
-            if (selectedPlaylist == null) {
-                item {
-                    Button(onClick = { showCreateDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Create playlist")
-                    }
-                }
-                if (playlists.isEmpty()) {
-                    item { EmptyLibraryCard("No playlists yet", "Create one to arrange tracks for any mood.") }
-                }
-                items(playlists, key = Playlist::id) { playlist ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().clickable { selectedPlaylistId = playlist.id },
-                    ) {
-                        Column(Modifier.padding(18.dp)) {
-                            Text(playlist.name, fontWeight = FontWeight.Bold)
-                            Text("${playlist.trackUris.size} tracks", color = MutedText)
-                        }
-                    }
-                }
-            } else {
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { selectedPlaylistId = null }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to playlists")
-                        }
-                        Text(selectedPlaylist.name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { playlistToRename = selectedPlaylist }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Rename ${selectedPlaylist.name}")
-                        }
-                        IconButton(onClick = { playlistToDelete = selectedPlaylist }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete ${selectedPlaylist.name}")
-                        }
-                    }
-                }
-                if (playlistTracks.isEmpty()) {
-                    item { EmptyLibraryCard("This playlist is empty", "Use the playlist button beside a track to add it.") }
-                } else {
-                    item {
-                        Button(
-                            onClick = { onPlay(playlistTracks.first(), playlistTracks) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Play playlist")
-                        }
-                    }
-                    items(playlistTracks, key = Track::uri) { track ->
-                        TrackRow(
-                            track = track,
-                            onPlay = { onPlay(track, playlistTracks) },
-                            trailingIcon = Icons.Default.Delete,
-                            trailingDescription = "Remove ${track.title} from ${selectedPlaylist.name}",
-                            onTrailingAction = { onRemoveFromPlaylist(selectedPlaylist.id, track.uri) },
-                        )
-                    }
-                }
-            }
-        } else if (mode == LibraryMode.Artists || mode == LibraryMode.Albums || mode == LibraryMode.Folders) {
-            val selectedTracks = selectedGroup?.let(groupedTracks::get).orEmpty()
-            if (selectedGroup == null) {
-                if (groupedTracks.isEmpty()) {
-                    item { EmptyLibraryCard("Nothing to browse yet", "Add audio files to browse your music here.") }
-                }
-                items(groupedTracks.entries.sortedBy { it.key.lowercase() }, key = { it.key }) { group ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().clickable { selectedGroup = group.key },
-                    ) {
-                        Column(Modifier.padding(18.dp)) {
-                            Text(group.key, fontWeight = FontWeight.Bold)
-                            Text("${group.value.size} ${if (group.value.size == 1) "track" else "tracks"}", color = MutedText)
-                        }
-                    }
-                }
-            } else {
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { selectedGroup = null }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                        Text(selectedGroup.orEmpty(), style = MaterialTheme.typography.titleLarge)
-                    }
-                }
-                if (selectedTracks.isNotEmpty()) {
-                    item {
-                        Button(
-                            onClick = { onPlay(selectedTracks.first(), selectedTracks) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Play all")
-                        }
-                    }
-                    items(selectedTracks, key = Track::uri) { track ->
-                        TrackRow(track = track, onPlay = { onPlay(track, selectedTracks) })
-                    }
-                }
-            }
-        } else {
-            if (visibleTracks.isEmpty()) {
-                item {
-                    EmptyLibraryCard(
-                        if (mode == LibraryMode.Favorites) "No favorites yet" else "Your library is empty",
-                        if (mode == LibraryMode.Favorites) "Tap the heart beside a track to save it here."
-                        else "Add an audio file to keep it in VibeArc.",
-                    )
-                }
-            }
-            items(visibleTracks, key = Track::uri) { track ->
-                TrackRow(
-                    track = track,
-                    onPlay = { onPlay(track, visibleTracks) },
-                    onFavorite = { onToggleFavorite(track) },
-                    isFavorite = track.isFavorite,
-                    trailingIcon = Icons.AutoMirrored.Filled.List.takeIf { playlists.isNotEmpty() },
-                    trailingDescription = "Add ${track.title} to a playlist",
-                    onTrailingAction = { trackToAdd = track }.takeIf { playlists.isNotEmpty() },
-                )
-            }
-        }
-    }
-
-    if (showCreateDialog) {
-        PlaylistNameDialog(
-            title = "Create playlist",
-            initialName = "",
-            onDismiss = { showCreateDialog = false },
-            onSave = {
-                onCreatePlaylist(it)
-                showCreateDialog = false
-            },
-        )
-    }
-    playlistToRename?.let { playlist ->
-        PlaylistNameDialog(
-            title = "Rename playlist",
-            initialName = playlist.name,
-            onDismiss = { playlistToRename = null },
-            onSave = {
-                onRenamePlaylist(playlist.id, it)
-                playlistToRename = null
-            },
-        )
-    }
-    playlistToDelete?.let { playlist ->
-        AlertDialog(
-            onDismissRequest = { playlistToDelete = null },
-            title = { Text("Delete ${playlist.name}?") },
-            text = { Text("The playlist will be removed. Your audio files stay in the library.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDeletePlaylist(playlist.id)
-                    selectedPlaylistId = null
-                    playlistToDelete = null
-                }) { Text("Delete") }
-            },
-            dismissButton = { TextButton(onClick = { playlistToDelete = null }) { Text("Cancel") } },
-        )
-    }
-    trackToAdd?.let { track ->
-        AlertDialog(
-            onDismissRequest = { trackToAdd = null },
-            title = { Text("Add ${track.title}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    playlists.forEach { playlist ->
-                        TextButton(
-                            onClick = {
-                                onAddToPlaylist(playlist.id, track.uri)
-                                trackToAdd = null
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text(playlist.name) }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { trackToAdd = null }) { Text("Cancel") } },
-        )
-    }
-}
+private val MainTabs = listOf(Tab.Home, Tab.Stats, Tab.Library)
 
 @Composable
 private fun DownloadsScreen(
@@ -912,7 +540,7 @@ private fun EmptyLibraryCard(title: String, message: String) {
 }
 
 @Composable
-private fun PlaylistNameDialog(
+internal fun PlaylistNameDialog(
     title: String,
     initialName: String,
     onDismiss: () -> Unit,
@@ -1026,7 +654,7 @@ private fun PlayerScreen(
                         Icon(
                             Icons.Default.Favorite,
                             contentDescription = if (track.isFavorite) "Remove from favorites" else "Add to favorites",
-                            tint = if (track.isFavorite) Peach else MutedText,
+                            tint = if (track.isFavorite) MaterialTheme.colorScheme.primary else MutedText,
                         )
                     }
                 }
@@ -1137,7 +765,7 @@ private fun MiniPlayer(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(30.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shadowElevation = 12.dp,
+        shadowElevation = 0.dp,
     ) {
         Row(
             Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(10.dp),
@@ -1146,7 +774,7 @@ private fun MiniPlayer(
             TrackArtwork(track, null, Modifier.size(58.dp).clip(RoundedCornerShape(20.dp)), onAccent)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(track.artist, color = MutedText, fontSize = 12.sp, maxLines = 1)
             }
             FilledIconButton(
@@ -1182,7 +810,7 @@ internal fun TrackRow(
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onPlay),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(6.dp),
     ) {
     Row(
         Modifier.fillMaxWidth().padding(10.dp),
@@ -1191,14 +819,8 @@ internal fun TrackRow(
         TrackArtwork(track, null, Modifier.size(58.dp).clip(RoundedCornerShape(16.dp)))
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(track.title, fontWeight = FontWeight.Bold)
-            Text(
-                buildString {
-                    append("${track.artist} • ${track.album}")
-                    if (track.durationMs > 0) append(" • ${DateUtils.formatElapsedTime(track.durationMs / 1_000)}")
-                },
-                color = MutedText,
-            )
+            Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = MutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (onFavorite == null) {
             Icon(
@@ -1211,7 +833,7 @@ internal fun TrackRow(
                 Icon(
                     Icons.Default.Favorite,
                     contentDescription = if (isFavorite) "Remove ${track.title} from favorites" else "Add ${track.title} to favorites",
-                    tint = if (isFavorite) Peach else MutedText,
+                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else MutedText,
                 )
             }
         }

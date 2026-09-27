@@ -30,7 +30,7 @@ class AppearanceSettingsTest {
 
         assertEquals(0xFF12AB34L, custom.resolvedAccentArgb())
         assertEquals(0xFFE76F51L, AppearanceConfig(accentPreset = AccentPreset.Coral).resolvedAccentArgb())
-        assertEquals(DEFAULT_ACCENT_ARGB, AppearanceConfig().resolvedAccentArgb())
+        assertEquals(0xFFD5D5D5L, AppearanceConfig().resolvedAccentArgb())
     }
 
     @Test
