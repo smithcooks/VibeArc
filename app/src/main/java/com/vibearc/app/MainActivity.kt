@@ -1,5 +1,6 @@
 package com.vibearc.app
 
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
@@ -12,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -109,6 +111,9 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -130,6 +135,7 @@ private val BodyFont = FontFamily(
 )
 private val DisplayFont = BodyFont
 private const val MaxBackupBytes = 8 * 1024 * 1024
+private const val YouTubeReadOnlyScope = "https://www.googleapis.com/auth/youtube.readonly"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -223,6 +229,62 @@ private fun VibeArcApp(
     }
     var player by remember { mutableStateOf<Player?>(null) }
     val uiScope = rememberCoroutineScope()
+    val authorizationClient = remember(context) { Identity.getAuthorizationClient(context) }
+    var youtubeAccountData by remember { mutableStateOf<YouTubeAccountData?>(null) }
+    var youtubeAccountBusy by remember { mutableStateOf(false) }
+
+    val loadYouTubeAccount: (String?) -> Unit = { accessToken ->
+        if (accessToken.isNullOrBlank()) {
+            youtubeAccountBusy = false
+            android.widget.Toast.makeText(context, "Google did not provide YouTube access", android.widget.Toast.LENGTH_LONG).show()
+        } else uiScope.launch {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching { YouTubeAccountApi.load(accessToken) }.getOrNull()
+            }
+            youtubeAccountBusy = false
+            if (loaded == null) {
+                android.widget.Toast.makeText(context, "Could not load your YouTube account", android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                youtubeAccountData = loaded
+                android.widget.Toast.makeText(context, "Connected ${loaded.account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val youtubeAuthorizationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) {
+            youtubeAccountBusy = false
+            return@rememberLauncherForActivityResult
+        }
+        val authorization = runCatching {
+            authorizationClient.getAuthorizationResultFromIntent(result.data)
+        }.getOrNull()
+        loadYouTubeAccount(authorization?.accessToken)
+    }
+    val connectYouTube: () -> Unit = {
+        if (!youtubeAccountBusy) {
+            youtubeAccountBusy = true
+            val request = AuthorizationRequest.builder()
+                .setRequestedScopes(listOf(Scope(YouTubeReadOnlyScope)))
+                .build()
+            authorizationClient.authorize(request)
+                .addOnSuccessListener { authorization ->
+                    val resolution = authorization.pendingIntent
+                    if (authorization.hasResolution() && resolution != null) {
+                        youtubeAuthorizationLauncher.launch(
+                            IntentSenderRequest.Builder(resolution.intentSender).build(),
+                        )
+                    } else {
+                        loadYouTubeAccount(authorization.accessToken)
+                    }
+                }
+                .addOnFailureListener {
+                    youtubeAccountBusy = false
+                    android.widget.Toast.makeText(context, "Could not connect your Google account", android.widget.Toast.LENGTH_LONG).show()
+                }
+        }
+    }
 
     DisposableEffect(controllerFuture) {
         controllerFuture.addListener(
@@ -546,6 +608,9 @@ private fun VibeArcApp(
             ) else EmptyPlayer(padding) { currentTab = Tab.Search }
             Tab.Settings -> SettingsScreen(
                 padding, appearance, onAppearanceChange,
+                youtubeAccountData = youtubeAccountData,
+                youtubeAccountBusy = youtubeAccountBusy,
+                onConnectYouTube = connectYouTube,
                 onDownloads = { navigate(Tab.Downloads) },
                 onBackup = { backupWriter.launch("VibeArc-backup.json") },
                 onRestore = { backupReader.launch(arrayOf("application/json", "text/plain")) },

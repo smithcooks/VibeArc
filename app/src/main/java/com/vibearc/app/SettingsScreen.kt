@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 internal fun SettingsScreen(
     padding: PaddingValues, appearance: AppearanceConfig,
     onAppearanceChange: (AppearanceConfig) -> Unit, onDownloads: () -> Unit,
+    youtubeAccountData: YouTubeAccountData?, youtubeAccountBusy: Boolean,
+    onConnectYouTube: () -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
 ) {
@@ -45,16 +47,16 @@ internal fun SettingsScreen(
     var custom by remember { mutableStateOf("#%06X".format(appearance.customAccentArgb and 0xFFFFFF)) }
     var error by remember { mutableStateOf(false) }
     val unavailable: (String,String)->Unit = { title,description -> info=title to description }
-    fun accountInfo() { unavailable("YouTube Music account","Account sign-in and playlist sync are not connected in this build. Public music search is available without signing in.") }
+    fun syncInfo() { unavailable("YouTube playlist sync","Your account and playlists can now be read safely. Playlist changes and history sync are not enabled yet.") }
     LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=22.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
         item { ReferenceRow("VibeArc","Local listening profile","account",onClick={unavailable("Your profile","Your library and appearance choices are stored on this device.")}) }
         item { SettingsHeading("YouTube Music") }
-        item { ReferenceRow("YouTube Music Account","Not connected","account",0,6,onClick={accountInfo()}) }
-        item { ReferenceRow("Two-way Playlist Sync","Requires a connected account","playlist",1,6,onClick={accountInfo()}) }
-        item { ReferenceRow("Select Playlists to Sync","No account playlists available","playlist",2,6,onClick={accountInfo()}) }
-        item { ReferenceRow("YouTube Playlists Shown","No account connected","album",3,6,onClick={accountInfo()}) }
-        item { ReferenceRow("Make YouTube Playlists Local","Requires playlist import","playlist",4,6,onClick={accountInfo()}) }
-        item { ReferenceRow("Sync Playback to YouTube Music History","Not connected","clock",5,6,onClick={accountInfo()}) }
+        item { ReferenceRow("YouTube Music Account",when { youtubeAccountBusy -> "Connecting…"; youtubeAccountData != null -> youtubeAccountData.account.displayName; else -> "Tap to connect Google" },"account",0,6,enabled=!youtubeAccountBusy,onClick=onConnectYouTube) }
+        item { ReferenceRow("Two-way Playlist Sync",if(youtubeAccountData == null) "Requires a connected account" else "Not enabled yet","playlist",1,6,onClick={syncInfo()}) }
+        item { ReferenceRow("Select Playlists to Sync",if(youtubeAccountData == null) "No account playlists available" else "${youtubeAccountData.playlists.size} playlists available","playlist",2,6,onClick={syncInfo()}) }
+        item { ReferenceRow("YouTube Playlists Shown",if(youtubeAccountData == null) "No account connected" else "${youtubeAccountData.playlists.size} account playlists","album",3,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }
+        item { ReferenceRow("Make YouTube Playlists Local","Requires playlist import","playlist",4,6,onClick={syncInfo()}) }
+        item { ReferenceRow("Sync Playback to YouTube Music History","Not enabled yet","clock",5,6,onClick={syncInfo()}) }
         item {
             Spacer(Modifier.height(24.dp))
             ReferenceSurface(Modifier.fillMaxWidth().clickable(onClick=onDownloads),highlighted=true) {
@@ -176,6 +178,14 @@ internal fun SettingsScreen(
                     "Download Quality" -> {
                         item { Text("Local audio keeps its original format and quality. Online downloading is not connected in this build.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         item { QualityChoice("Original file","Unchanged","No conversion or re-encoding.",true) {} }
+                    }
+                    "YouTube Playlists" -> {
+                        if (youtubeAccountData?.playlists.isNullOrEmpty()) item {
+                            Text("This account has no visible playlists.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else items(youtubeAccountData!!.playlists.size) { index ->
+                            val playlist=youtubeAccountData.playlists[index]
+                            ReferenceRow(playlist.title,"${playlist.itemCount} tracks","playlist",onClick={syncInfo()})
+                        }
                     }
                     "App icon" -> items(LauncherIconChoice.entries.size) { i ->
                         val choice=LauncherIconChoice.entries[i]
