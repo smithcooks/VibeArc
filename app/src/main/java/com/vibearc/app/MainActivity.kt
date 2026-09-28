@@ -232,6 +232,7 @@ private fun VibeArcApp(
     val authorizationClient = remember(context) { Identity.getAuthorizationClient(context) }
     var youtubeAccountData by remember { mutableStateOf<YouTubeAccountData?>(null) }
     var youtubeAccountBusy by remember { mutableStateOf(false) }
+    var youtubeAccessToken by remember { mutableStateOf<String?>(null) }
 
     val loadYouTubeAccount: (String?) -> Unit = { accessToken ->
         if (accessToken.isNullOrBlank()) {
@@ -245,6 +246,7 @@ private fun VibeArcApp(
             if (loaded == null) {
                 android.widget.Toast.makeText(context, "Could not load your YouTube account", android.widget.Toast.LENGTH_LONG).show()
             } else {
+                youtubeAccessToken = accessToken
                 youtubeAccountData = loaded
                 android.widget.Toast.makeText(context, "Connected ${loaded.account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
             }
@@ -493,6 +495,30 @@ private fun VibeArcApp(
         playlists = next.also(context::savePlaylists)
     }
     val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
+    val importYouTubePlaylist: (YouTubePlaylist) -> Unit = { remotePlaylist ->
+        val accessToken = youtubeAccessToken
+        if (accessToken == null) {
+            android.widget.Toast.makeText(context, "Connect your YouTube account again", android.widget.Toast.LENGTH_LONG).show()
+        } else uiScope.launch {
+            val importedTracks = withContext(Dispatchers.IO) {
+                runCatching { YouTubeAccountApi.loadPlaylist(accessToken, remotePlaylist) }.getOrNull()
+            }
+            when {
+                importedTracks == null -> android.widget.Toast.makeText(context, "Could not import this playlist", android.widget.Toast.LENGTH_LONG).show()
+                importedTracks.isEmpty() -> android.widget.Toast.makeText(context, "This playlist has no available tracks", android.widget.Toast.LENGTH_LONG).show()
+                else -> {
+                    library = importedTracks.fold(library) { current, track -> current.upsert(track) }.also(context::saveLibrary)
+                    val localPlaylist = Playlist(
+                        id = "youtube:${remotePlaylist.id}",
+                        name = remotePlaylist.title,
+                        trackUris = importedTracks.map(Track::uri),
+                    )
+                    playlists = (playlists.filterNot { it.id == localPlaylist.id } + localPlaylist).also(context::savePlaylists)
+                    android.widget.Toast.makeText(context, "Imported ${remotePlaylist.title}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     VibeArcTheme(appearance, artworkAccentArgb) {
     CompositionLocalProvider(LocalGlass provides appearance.liquidGlassEnabled) {
@@ -611,6 +637,7 @@ private fun VibeArcApp(
                 youtubeAccountData = youtubeAccountData,
                 youtubeAccountBusy = youtubeAccountBusy,
                 onConnectYouTube = connectYouTube,
+                onImportYouTubePlaylist = importYouTubePlaylist,
                 onDownloads = { navigate(Tab.Downloads) },
                 onBackup = { backupWriter.launch("VibeArc-backup.json") },
                 onRestore = { backupReader.launch(arrayOf("application/json", "text/plain")) },

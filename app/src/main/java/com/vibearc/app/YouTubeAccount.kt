@@ -24,6 +24,11 @@ internal data class YouTubePlaylistPage(
     val nextPageToken: String?,
 )
 
+internal data class YouTubePlaylistTrackPage(
+    val tracks: List<Track>,
+    val nextPageToken: String?,
+)
+
 internal data class YouTubeAccountData(
     val account: YouTubeAccount,
     val playlists: List<YouTubePlaylist>,
@@ -57,6 +62,27 @@ internal fun parseYouTubePlaylistPage(json: String): YouTubePlaylistPage {
         )
     }.take(50)
     return YouTubePlaylistPage(playlists, root.getString("nextPageToken", "").ifBlank { null })
+}
+
+internal fun parseYouTubePlaylistTracks(json: String, playlistTitle: String): YouTubePlaylistTrackPage {
+    val root = parseRoot(json)
+    val tracks = root.getArray("items").mapNotNull { value ->
+        val item = value as? JsonObject ?: return@mapNotNull null
+        val snippet = item.getObject("snippet")
+        val videoId = item.getObject("contentDetails").getString("videoId", "")
+        val title = snippet.getString("title", "")
+        if (videoId.isBlank() || title.isBlank() || title.startsWith('[')) return@mapNotNull null
+        Track(
+            title = title,
+            artist = snippet.getString("videoOwnerChannelTitle", "YouTube Music")
+                .removeSuffix(" - Topic").ifBlank { "YouTube Music" },
+            album = playlistTitle,
+            uri = "https://music.youtube.com/watch?v=$videoId",
+            artworkUri = snippet.thumbnailUrl(),
+            folder = "YouTube Music",
+        )
+    }.take(50)
+    return YouTubePlaylistTrackPage(tracks, root.getString("nextPageToken", "").ifBlank { null })
 }
 
 private fun parseRoot(json: String): JsonObject = runCatching { JsonParser.`object`().from(json) }
@@ -94,6 +120,27 @@ internal object YouTubeAccountApi {
             }
         }
         return YouTubeAccountData(account, playlists.distinctBy(YouTubePlaylist::id))
+    }
+
+    fun loadPlaylist(accessToken: String, playlist: YouTubePlaylist): List<Track> {
+        require(accessToken.isNotBlank()) { "Missing authorization" }
+        require(playlist.id.isNotBlank()) { "Missing playlist" }
+        return buildList {
+            var pageToken: String? = null
+            repeat(MaxPlaylistPages) {
+                val suffix = pageToken?.let { "&pageToken=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
+                val page = parseYouTubePlaylistTracks(
+                    get(
+                        "$ApiBase/playlistItems?part=snippet,contentDetails&playlistId=${URLEncoder.encode(playlist.id, Charsets.UTF_8.name())}&maxResults=50$suffix",
+                        accessToken,
+                    ),
+                    playlist.title,
+                )
+                addAll(page.tracks)
+                pageToken = page.nextPageToken
+                if (pageToken == null) return@buildList
+            }
+        }.distinctBy(Track::uri)
     }
 
     private fun get(url: String, accessToken: String): String {

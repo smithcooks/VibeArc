@@ -34,7 +34,7 @@ internal fun SettingsScreen(
     padding: PaddingValues, appearance: AppearanceConfig,
     onAppearanceChange: (AppearanceConfig) -> Unit, onDownloads: () -> Unit,
     youtubeAccountData: YouTubeAccountData?, youtubeAccountBusy: Boolean,
-    onConnectYouTube: () -> Unit,
+    onConnectYouTube: () -> Unit, onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
 ) {
@@ -55,7 +55,7 @@ internal fun SettingsScreen(
         item { ReferenceRow("Two-way Playlist Sync",if(youtubeAccountData == null) "Requires a connected account" else "Not enabled yet","playlist",1,6,onClick={syncInfo()}) }
         item { ReferenceRow("Select Playlists to Sync",if(youtubeAccountData == null) "No account playlists available" else "${youtubeAccountData.playlists.size} playlists available","playlist",2,6,onClick={syncInfo()}) }
         item { ReferenceRow("YouTube Playlists Shown",if(youtubeAccountData == null) "No account connected" else "${youtubeAccountData.playlists.size} account playlists","album",3,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }
-        item { ReferenceRow("Make YouTube Playlists Local","Requires playlist import","playlist",4,6,onClick={syncInfo()}) }
+        item { ReferenceRow("Make YouTube Playlists Local",if(youtubeAccountData == null) "Connect an account first" else "Choose a playlist to import","playlist",4,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }
         item { ReferenceRow("Sync Playback to YouTube Music History","Not enabled yet","clock",5,6,onClick={syncInfo()}) }
         item {
             Spacer(Modifier.height(24.dp))
@@ -180,11 +180,12 @@ internal fun SettingsScreen(
                         item { QualityChoice("Original file","Unchanged","No conversion or re-encoding.",true) {} }
                     }
                     "YouTube Playlists" -> {
+                        item { Text("Tap a playlist to add its available tracks to your VibeArc library. This does not download audio or modify YouTube.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         if (youtubeAccountData?.playlists.isNullOrEmpty()) item {
                             Text("This account has no visible playlists.",color=MaterialTheme.colorScheme.onSurfaceVariant)
                         } else items(youtubeAccountData!!.playlists.size) { index ->
                             val playlist=youtubeAccountData.playlists[index]
-                            ReferenceRow(playlist.title,"${playlist.itemCount} tracks","playlist",onClick={syncInfo()})
+                            ReferenceRow(playlist.title,"${playlist.itemCount} tracks","playlist",onClick={onImportYouTubePlaylist(playlist);sheet=null})
                         }
                     }
                     "App icon" -> items(LauncherIconChoice.entries.size) { i ->

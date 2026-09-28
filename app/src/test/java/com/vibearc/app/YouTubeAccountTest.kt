@@ -42,4 +42,38 @@ class YouTubeAccountTest {
     fun `account response rejects missing channel`() {
         parseYouTubeAccount("""{"items":[]}""")
     }
+
+    @Test
+    fun `playlist items map to playable tracks`() {
+        val response = """
+            {
+              "nextPageToken":"more",
+              "items":[{
+                "contentDetails":{"videoId":"video-1"},
+                "snippet":{
+                  "title":"Night Song",
+                  "videoOwnerChannelTitle":"The Artist - Topic",
+                  "thumbnails":{"high":{"url":"https://img.example/song.jpg"}}
+                }
+              }]
+            }
+        """.trimIndent()
+
+        assertEquals(
+            YouTubePlaylistTrackPage(
+                tracks = listOf(
+                    Track(
+                        title = "Night Song",
+                        artist = "The Artist",
+                        album = "Night Drive",
+                        uri = "https://music.youtube.com/watch?v=video-1",
+                        artworkUri = "https://img.example/song.jpg",
+                        folder = "YouTube Music",
+                    ),
+                ),
+                nextPageToken = "more",
+            ),
+            parseYouTubePlaylistTracks(response, "Night Drive"),
+        )
+    }
 }
