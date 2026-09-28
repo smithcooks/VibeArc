@@ -413,11 +413,12 @@ private fun VibeArcApp(
                 padding = padding,
                 recentTracks = recentTracks,
                 currentTrack = currentTrack,
-                onPlay = { track -> playTrack(track, recentTracks.ifEmpty { listOf(track) }) },
+                libraryTracks = library,
+                onPlay = playTrack,
                 onExplore = { searchSeed = ""; navigate(Tab.Search) },
-                onOpenPlayer = openPlayer,
                 onLibrary = { navigate(Tab.Library) },
                 onDiscover = { navigate(Tab.Discover) },
+                onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
             )
             Tab.Search -> {
                 SearchScreen(padding, library, searchSeed, { currentTab = playerReturnTab(lastContentTab) }) { track -> playTrack(track, listOf(track)) }

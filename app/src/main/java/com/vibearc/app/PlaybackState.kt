@@ -5,6 +5,9 @@ import java.util.Base64
 
 private const val RecentLimit = 20
 
+internal fun homeFeedTracks(library: List<Track>, recent: List<Track>, current: Track?): List<Track> =
+    (listOfNotNull(current) + recent + library).filter { isAllowedMediaUri(it.uri) }.distinctBy(Track::uri)
+
 private val AllowedMediaSchemes = setOf("https", "content", "file", "android.resource")
 
 internal fun isAllowedMediaUri(value: String): Boolean = runCatching {

@@ -5,6 +5,15 @@ import org.junit.Test
 
 class PlaybackStateTest {
     @Test
+    fun `home feed includes current music and keeps playable unique tracks`() {
+        val current = Track("Current", "Artist", "Album", "https://example.com/current")
+        val recent = Track("Recent", "Artist", "Album", "content://media/recent")
+        val local = Track("Local", "Other", "Album", "content://media/local")
+        val invalid = Track("Invalid", "", "", "javascript:bad")
+        assertEquals(listOf(current, recent, local), homeFeedTracks(listOf(local, recent, invalid), listOf(recent), current))
+        assertEquals(emptyList<Track>(), homeFeedTracks(emptyList(), emptyList(), null))
+    }
+    @Test
     fun `closing now playing returns to the previous screen with a safe home fallback`() {
         assertEquals(Tab.Library, playerReturnTab(Tab.Library))
         assertEquals(Tab.Home, playerReturnTab(Tab.Player))
