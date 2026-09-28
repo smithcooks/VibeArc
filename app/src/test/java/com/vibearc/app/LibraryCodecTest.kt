@@ -2,6 +2,7 @@ package com.vibearc.app
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.io.ByteArrayInputStream
 
 class LibraryCodecTest {
     @Test
@@ -103,5 +104,48 @@ class LibraryCodecTest {
 
         assertEquals(listOf("content://music/1"), withTrack.single().trackUris)
         assertEquals(emptyList<String>(), withTrack.removeTrackFromPlaylist("mix", "content://music/1").single().trackUris)
+    }
+
+    @Test
+    fun `backup JSON round trip preserves library and playlists`() {
+        val tracks = listOf(Track("Night Drive", "VibeArc", "Singles", "content://music/1", true))
+        val playlists = listOf(Playlist("mix", "My Mix", listOf("content://music/1")))
+
+        assertEquals(
+            VibeArcBackup(tracks, playlists),
+            BackupCodec.decode(BackupCodec.encode(tracks, playlists)),
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `backup rejects unsupported schema`() {
+        BackupCodec.decode("""{"schema":99,"tracks":"","playlists":""}""")
+    }
+
+    @Test
+    fun `restore merge keeps local data and updates matching playlists`() {
+        val localTrack = Track("Local", "Artist", "Album", "content://music/local")
+        val restoredTrack = Track("Restored", "Artist", "Album", "content://music/restored")
+        val localPlaylists = listOf(Playlist("mix", "Old name"), Playlist("local", "Local only"))
+        val backup = VibeArcBackup(
+            tracks = listOf(restoredTrack),
+            playlists = listOf(Playlist("mix", "Restored name", listOf(restoredTrack.uri))),
+        )
+
+        assertEquals(
+            VibeArcBackup(
+                tracks = listOf(localTrack, restoredTrack),
+                playlists = listOf(
+                    Playlist("mix", "Restored name", listOf(restoredTrack.uri)),
+                    Playlist("local", "Local only"),
+                ),
+            ),
+            mergeBackup(listOf(localTrack), localPlaylists, backup),
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `backup reader rejects files over its limit`() {
+        ByteArrayInputStream("12345".toByteArray()).readUtf8Limited(4)
     }
 }

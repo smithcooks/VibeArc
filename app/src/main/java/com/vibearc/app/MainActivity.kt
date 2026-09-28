@@ -129,6 +129,7 @@ private val BodyFont = FontFamily(
     Font(R.font.manrope_bold, weight = FontWeight.Bold),
 )
 private val DisplayFont = BodyFont
+private const val MaxBackupBytes = 8 * 1024 * 1024
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -341,6 +342,51 @@ private fun VibeArcApp(
         }
     }
 
+    val backupWriter = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        uiScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use {
+                        it.write(BackupCodec.encode(library, playlists))
+                    } ?: error("Could not open backup file")
+                }.isSuccess
+            }
+            android.widget.Toast.makeText(
+                context,
+                if (saved) "VibeArc backup saved" else "Could not save the backup",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+    val backupReader = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        uiScope.launch {
+            val backup = withContext(Dispatchers.IO) {
+                runCatching {
+                    val json = context.contentResolver.openInputStream(uri)?.use {
+                        it.readUtf8Limited(MaxBackupBytes)
+                    } ?: error("Could not open backup file")
+                    BackupCodec.decode(json)
+                }.getOrNull()
+            }
+            if (backup == null) {
+                android.widget.Toast.makeText(context, "This is not a valid VibeArc backup", android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val merged = mergeBackup(library, playlists, backup)
+            library = merged.tracks.also(context::saveLibrary)
+            playlists = merged.playlists.also(context::savePlaylists)
+            android.widget.Toast.makeText(
+                context,
+                "Restored ${backup.tracks.size} tracks and ${backup.playlists.size} playlists",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
     val playTrack: (Track, List<Track>) -> Unit = { track, source ->
         if (activePlayer != null && isAllowedMediaUri(track.uri)) {
             currentTrack = track
@@ -472,7 +518,12 @@ private fun VibeArcApp(
                 },
                 dynamicArtworkColor = appearance.dynamicNowPlayingEnabled,
             ) else EmptyPlayer(padding) { currentTab = Tab.Search }
-            Tab.Settings -> SettingsScreen(padding, appearance, onAppearanceChange, { navigate(Tab.Downloads) })
+            Tab.Settings -> SettingsScreen(
+                padding, appearance, onAppearanceChange,
+                onDownloads = { navigate(Tab.Downloads) },
+                onBackup = { backupWriter.launch("VibeArc-backup.json") },
+                onRestore = { backupReader.launch(arrayOf("application/json", "text/plain")) },
+            )
             Tab.Stats -> StatsScreen(padding, library, recentTracks) { track -> playTrack(track, recentTracks) }
             Tab.Discover -> DiscoverScreen(padding, library, { track -> playTrack(track, library) }) { query ->
                 searchSeed = query

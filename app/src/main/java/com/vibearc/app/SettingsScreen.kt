@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 internal fun SettingsScreen(
     padding: PaddingValues, appearance: AppearanceConfig,
     onAppearanceChange: (AppearanceConfig) -> Unit, onDownloads: () -> Unit,
+    onBackup: () -> Unit, onRestore: () -> Unit,
 ) {
     val context=LocalContext.current
     var info by remember { mutableStateOf<Pair<String,String>?>(null) }
@@ -133,8 +134,8 @@ internal fun SettingsScreen(
         item { ReferenceRow("Scrobble Music","Last.fm is not connected","stats",0,2,onClick={unavailable("Scrobbler","Scrobbling requires a Last.fm account integration, which is not configured in VibeArc.")}) }
         item { ReferenceRow("Submit Now Playing","Requires a connected scrobbler","clock",1,2,onClick={unavailable("Submit Now Playing","Your playback stays on this device. No listening history is submitted to Last.fm.")}) }
         item { SettingsHeading("Backup & Restore") }
-        item { ReferenceRow("Backup","JSON export not available yet","backup",0,2,onClick={unavailable("Backup","Portable JSON backup is planned but is not included in this UI build.")}) }
-        item { ReferenceRow("Restore","JSON import not available yet","restore",1,2,onClick={unavailable("Restore","Backup and playlist JSON import are not included in this UI build.")}) }
+        item { ReferenceRow("Backup","Save library and playlists to JSON","backup",0,2,onClick=onBackup) }
+        item { ReferenceRow("Restore","Merge a VibeArc JSON backup","restore",1,2,onClick=onRestore) }
         item { SettingsHeading("App icon") }
         item { ReferenceRow("Launcher Icon",selectedIcon.label,"album",onClick={sheet="App icon"}) }
         item { SettingsHeading("About") }

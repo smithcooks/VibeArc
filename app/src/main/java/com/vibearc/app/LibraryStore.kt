@@ -1,6 +1,10 @@
 package com.vibearc.app
 
 import android.content.Context
+import com.grack.nanojson.JsonParser
+import com.grack.nanojson.JsonWriter
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
 
@@ -20,6 +24,54 @@ internal data class Playlist(
     val name: String,
     val trackUris: List<String> = emptyList(),
 )
+
+internal data class VibeArcBackup(
+    val tracks: List<Track>,
+    val playlists: List<Playlist>,
+)
+
+internal object BackupCodec {
+    private const val Schema = 1
+
+    fun encode(tracks: List<Track>, playlists: List<Playlist>): String = JsonWriter.string()
+        .`object`()
+        .value("schema", Schema)
+        .value("tracks", LibraryCodec.encode(tracks))
+        .value("playlists", PlaylistCodec.encode(playlists))
+        .end()
+        .done()
+
+    fun decode(value: String): VibeArcBackup {
+        val root = runCatching { JsonParser.`object`().from(value) }
+            .getOrElse { throw IllegalArgumentException("Invalid VibeArc backup", it) }
+        require((root["schema"] as? Number)?.toInt() == Schema) { "Unsupported VibeArc backup" }
+        return VibeArcBackup(
+            tracks = LibraryCodec.decode(root.getString("tracks", "")),
+            playlists = PlaylistCodec.decode(root.getString("playlists", "")),
+        )
+    }
+}
+
+internal fun mergeBackup(
+    currentTracks: List<Track>,
+    currentPlaylists: List<Playlist>,
+    backup: VibeArcBackup,
+): VibeArcBackup = VibeArcBackup(
+    tracks = backup.tracks.fold(currentTracks) { tracks, track -> tracks.upsert(track) },
+    playlists = (currentPlaylists + backup.playlists).associateBy(Playlist::id).values.toList(),
+)
+
+internal fun InputStream.readUtf8Limited(maxBytes: Int): String {
+    require(maxBytes > 0)
+    val output = ByteArrayOutputStream(minOf(maxBytes, 8_192))
+    val buffer = ByteArray(8_192)
+    while (output.size() <= maxBytes) {
+        val count = read(buffer, 0, minOf(buffer.size, maxBytes - output.size() + 1))
+        if (count < 0) return output.toString(UTF_8.name())
+        output.write(buffer, 0, count)
+    }
+    throw IllegalArgumentException("Backup is too large")
+}
 
 internal object LibraryCodec {
     private val encoder = Base64.getUrlEncoder().withoutPadding()
