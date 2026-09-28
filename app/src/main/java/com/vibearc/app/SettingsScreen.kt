@@ -38,6 +38,7 @@ internal fun SettingsScreen(
     var info by remember { mutableStateOf<Pair<String,String>?>(null) }
     var sheet by remember { mutableStateOf<String?>(null) }
     var highestQuality by remember { mutableStateOf(context.prefersHighestAudioQuality()) }
+    var wavySeekbar by remember { mutableStateOf(context.wavySeekbarEnabled()) }
     var selectedIcon by remember { mutableStateOf(context.selectedLauncherIcon()) }
     var custom by remember { mutableStateOf("#%06X".format(appearance.customAccentArgb and 0xFFFFFF)) }
     var error by remember { mutableStateOf(false) }
@@ -109,12 +110,12 @@ internal fun SettingsScreen(
         }
         item { SettingsHeading("Experimental") }
         item { ReferenceRow("Liquid Glass","Translucent materials across the app","glass",0,5,appearance.liquidGlassEnabled,onClick={onAppearanceChange(appearance.copy(liquidGlassEnabled=!appearance.liquidGlassEnabled))}) }
-        item { ReferenceRow("Lyrics Animation","Synced lyrics not connected","lyrics",1,5,onClick={unavailable("Lyrics Animation","Time-synced lyrics need a lyrics source. This build does not yet provide lyrics or word highlighting.")}) }
+        item { ReferenceRow("Lyrics Animation","Player lyrics screen · source not connected","lyrics",1,5,onClick={unavailable("Lyrics Animation","Open the quotation-mark button in Now Playing to view the new lyrics screen. Live lyrics and highlighting need a connected source, which will be added later.")}) }
         item { ReferenceRow("Equalizer","Open your device's audio controls","equalizer",2,5,onClick={
             val intent=Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).putExtra(AudioEffect.EXTRA_PACKAGE_NAME,context.packageName).putExtra(AudioEffect.EXTRA_CONTENT_TYPE,AudioEffect.CONTENT_TYPE_MUSIC)
             if(runCatching{context.startActivity(intent)}.isFailure) unavailable("Equalizer","This phone does not provide a system equalizer panel. A built-in equalizer is not included yet.")
         }) }
-        item { ReferenceRow("Wavy Seekbar","Not available in this build","wave",3,5,onClick={unavailable("Wavy Seekbar","The player currently uses a standard seek bar. The animated waveform remains planned.")}) }
+        item { ReferenceRow("Wavy Seekbar","Lightweight wave while music plays","wave",3,5,wavySeekbar,onClick={wavySeekbar=!wavySeekbar;context.getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putBoolean("wavy_seekbar",wavySeekbar).apply()}) }
         item { ReferenceRow("Studio Master Clarity","Original source audio","spark",4,5,onClick={unavailable("Studio Master Clarity","VibeArc plays the source audio. It does not convert lossy audio into studio-master or lossless quality.")}) }
         item { SettingsHeading("Audio & Streaming") }
         item { ReferenceRow("Streaming Quality",if(highestQuality) "Highest available · YouTube Music" else "Balanced · YouTube Music","quality",0,6,onClick={sheet="Streaming Quality"}) }
@@ -219,6 +220,8 @@ private const val SettingsPreferencesName="vibearc_settings"
 private const val HighestAudioQualityKey="highest_audio_quality"
 internal fun Context.prefersHighestAudioQuality():Boolean =
     getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getBoolean(HighestAudioQualityKey,true)
+internal fun Context.wavySeekbarEnabled():Boolean =
+    getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getBoolean("wavy_seekbar",true)
 private fun Context.saveHighestAudioQuality(enabled:Boolean) {
     getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putBoolean(HighestAudioQualityKey,enabled).apply()
 }

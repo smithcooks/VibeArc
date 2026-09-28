@@ -280,7 +280,12 @@ private fun VibeArcApp(
                 isPlaying = value
             }
 
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                queueTracks = activePlayer.queueTracks()
+            }
+
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (mediaItem == null) currentTrack = null
                 mediaItem?.track?.let { track ->
                     currentTrack = library.firstOrNull { it.uri == track.uri } ?: track
                     recentUris = recentUris.recordRecentUri(mediaItem.mediaId)
@@ -444,7 +449,7 @@ private fun VibeArcApp(
                 repeatMode = playerRepeatMode,
                 sleepRemainingMillis = sleepRemainingMillis,
                 onBack = closePlayer,
-                onFavorite = { toggleFavorite(currentTrack!!) },
+                onFavorite = if (library.any { it.uri == currentTrack!!.uri }) ({ toggleFavorite(currentTrack!!) }) else null,
                 onToggleShuffle = { activePlayer.shuffleModeEnabled = !activePlayer.shuffleModeEnabled },
                 onCycleRepeat = { activePlayer.repeatMode = activePlayer.repeatMode.nextRepeatMode() },
                 onCycleSleepTimer = {
@@ -576,199 +581,6 @@ internal fun PlaylistNameDialog(
     )
 }
 
-@Composable
-private fun PlayerScreen(
-    padding: PaddingValues,
-    player: Player,
-    track: Track,
-    isPlaying: Boolean,
-    queue: List<Track>,
-    shuffleEnabled: Boolean,
-    repeatMode: Int,
-    sleepRemainingMillis: Long,
-    onBack: () -> Unit,
-    onFavorite: (() -> Unit)?,
-    onToggleShuffle: () -> Unit,
-    onCycleRepeat: () -> Unit,
-    onCycleSleepTimer: () -> Unit,
-    dynamicArtworkColor: Boolean,
-    onArtworkAccent: (Color) -> Unit,
-) {
-    val themeAccent = MaterialTheme.colorScheme.primary
-    var ambientAccent by remember(track.uri, dynamicArtworkColor, themeAccent) { mutableStateOf(themeAccent) }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    if (dynamicArtworkColor) {
-                        listOf(ambientAccent.copy(alpha = 0.48f), MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background)
-                    } else {
-                        listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background)
-                    },
-                ),
-            )
-            .padding(padding),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                FilledIconButton(onClick = onBack, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NOW PLAYING", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-                    Text(track.album.ifBlank { "VibeArc" }, maxLines = 1)
-                }
-                Spacer(Modifier.size(52.dp))
-            }
-        }
-        item {
-            TrackArtwork(
-                track = track,
-                contentDescription = "Artwork for ${track.title}",
-                sizePx = 768,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(MaterialTheme.shapes.extraLarge),
-                onAccent = {
-                    if (dynamicArtworkColor) ambientAccent = it
-                    onArtworkAccent(it)
-                },
-            )
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().animateContentSize(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(track.title, style = MaterialTheme.typography.headlineMedium)
-                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
-                        Text(track.artist, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                if (onFavorite != null) {
-                    IconButton(onClick = onFavorite) {
-                        Icon(
-                            Icons.Default.Favorite,
-                            contentDescription = if (track.isFavorite) "Remove from favorites" else "Add to favorites",
-                            tint = if (track.isFavorite) MaterialTheme.colorScheme.primary else MutedText,
-                        )
-                    }
-                }
-            }
-        }
-        item {
-            PlayerProgress(player, track.uri, isPlaying)
-        }
-        item {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.extraLarge) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(
-                    onClick = player::seekToPreviousMediaItem,
-                    enabled = player.hasPreviousMediaItem(),
-                    modifier = Modifier.size(56.dp).clearAndSetSemantics { contentDescription = "Previous track" },
-                ) {
-                    Text("‹", fontSize = 42.sp)
-                }
-                FilledIconButton(
-                    onClick = player::toggle,
-                    modifier = Modifier.size(76.dp).clearAndSetSemantics {
-                        contentDescription = if (isPlaying) "Pause" else "Play"
-                    },
-                ) {
-                    if (isPlaying) {
-                        Text("Ⅱ", fontSize = 30.sp)
-                    } else {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(38.dp))
-                    }
-                }
-                IconButton(
-                    onClick = player::seekToNextMediaItem,
-                    enabled = player.hasNextMediaItem(),
-                    modifier = Modifier.size(56.dp).clearAndSetSemantics { contentDescription = "Next track" },
-                ) {
-                    Text("›", fontSize = 42.sp)
-                }
-            }
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                FilterChip(
-                    selected = shuffleEnabled,
-                    onClick = onToggleShuffle,
-                    label = { Text(if (shuffleEnabled) "Shuffle on" else "Shuffle off") },
-                )
-                FilterChip(
-                    selected = repeatMode != Player.REPEAT_MODE_OFF,
-                    onClick = onCycleRepeat,
-                    label = { Text(repeatMode.repeatLabel()) },
-                )
-            }
-        }
-        item {
-            TextButton(onClick = onCycleSleepTimer, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    if (sleepRemainingMillis == 0L) "Sleep timer off"
-                    else "Sleep in ${((sleepRemainingMillis + 59_999) / 60_000)} min",
-                )
-            }
-        }
-        item { SectionTitle("Queue") }
-        if (queue.isEmpty()) {
-            item { Text("The queue is empty.", color = MutedText) }
-        } else {
-            items(queue.indices.toList(), key = { index -> "$index-${queue[index].uri}" }) { index ->
-                val queuedTrack = queue[index]
-                TrackRow(
-                    track = queuedTrack,
-                    onPlay = { player.seekTo(index, 0L) },
-                    trailingIcon = Icons.AutoMirrored.Filled.List.takeIf { index == player.currentMediaItemIndex },
-                    trailingDescription = "Currently playing",
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlayerProgress(player: Player, trackUri: String, isPlaying: Boolean) {
-    // Keep progress ticks inside this small subtree, not the artwork and queue.
-    var position by remember(trackUri) { mutableLongStateOf(0L) }
-    var duration by remember(trackUri) { mutableLongStateOf(1L) }
-    var dragging by remember(trackUri) { mutableStateOf(false) }
-    LaunchedEffect(player, trackUri, isPlaying) {
-        while (currentCoroutineContext().isActive) {
-            if (!dragging) position = player.currentPosition.coerceAtLeast(0L)
-            duration = player.duration.coerceAtLeast(1L)
-            delay(if (isPlaying) 500 else 1_000)
-        }
-    }
-    Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp)) {
-            Slider(
-                value = position.coerceAtMost(duration).toFloat(),
-                onValueChange = { dragging = true; position = it.toLong() },
-                onValueChangeFinished = { player.seekTo(position); dragging = false },
-                valueRange = 0f..duration.toFloat(),
-                modifier = Modifier.semantics { contentDescription = "Playback position" },
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(DateUtils.formatElapsedTime(position / 1_000), color = MutedText)
-                Text(DateUtils.formatElapsedTime(duration / 1_000), color = MutedText)
-            }
-        }
-    }
-}
 
 @Composable
 private fun MiniPlayer(

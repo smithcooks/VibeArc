@@ -62,6 +62,40 @@ internal fun Glyph(name: String, modifier: Modifier = Modifier, color: Color = M
         fun rect(x: Float, y: Float, w: Float, h: Float) =
             drawRect(color, Offset(x*u,y*u), Size(w*u,h*u))
         when (name) {
+            "back" -> { line(19f,12f,5f,12f); line(5f,12f,12f,5f); line(5f,12f,12f,19f) }
+            "down" -> { line(6f,9f,12f,15f); line(12f,15f,18f,9f) }
+            "up" -> { line(6f,15f,12f,9f); line(12f,9f,18f,15f) }
+            "pause" -> { rect(6f,4f,4f,16f); rect(14f,4f,4f,16f) }
+            "previous", "next" -> {
+                val next = name == "next"
+                rect(if(next) 18f else 3f,5f,3f,14f)
+                val p = Path().apply {
+                    moveTo((if(next) 5f else 19f)*u,5*u)
+                    lineTo((if(next) 17f else 7f)*u,12*u)
+                    lineTo((if(next) 5f else 19f)*u,19*u); close()
+                }; drawPath(p,color)
+            }
+            "repeat" -> {
+                line(4f,7f,20f,7f); line(20f,7f,16f,3f); line(20f,7f,16f,11f)
+                line(20f,17f,4f,17f); line(4f,17f,8f,13f); line(4f,17f,8f,21f)
+            }
+            "quote" -> {
+                for(x in listOf(4f,14f)) { rect(x,6f,6f,7f); line(x+5f,13f,x+2f,18f,3f) }
+            }
+            "delete" -> { line(5f,6f,19f,6f); line(9f,3f,15f,3f); line(7f,7f,7f,21f); line(7f,21f,17f,21f); line(17f,21f,17f,7f) }
+            "expand" -> {
+                line(3f,8f,3f,3f); line(3f,3f,8f,3f); line(16f,3f,21f,3f); line(21f,3f,21f,8f)
+                line(3f,16f,3f,21f); line(3f,21f,8f,21f); line(16f,21f,21f,21f); line(21f,21f,21f,16f)
+            }
+            "heart", "heartFilled" -> {
+                val p = Path().apply {
+                    moveTo(12*u,21*u); cubicTo(1*u,13*u,0f,6*u,6*u,4*u)
+                    cubicTo(9*u,3*u,11*u,5*u,12*u,7*u)
+                    cubicTo(13*u,5*u,15*u,3*u,18*u,4*u)
+                    cubicTo(24*u,6*u,23*u,13*u,12*u,21*u); close()
+                }
+                if(name == "heartFilled") drawPath(p,color) else drawPath(p,color,style=Stroke(2*u))
+            }
             "stats", "equalizer" -> {
                 rect(3f,10f,3f,11f); rect(8f,3f,3f,18f); rect(13f,6f,3f,15f); rect(18f,12f,3f,9f)
             }
