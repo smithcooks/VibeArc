@@ -112,7 +112,7 @@ internal fun SettingsScreen(
         }
         item { SettingsHeading("Experimental") }
         item { ReferenceRow("Liquid Glass","Translucent materials across the app","glass",0,5,appearance.liquidGlassEnabled,onClick={onAppearanceChange(appearance.copy(liquidGlassEnabled=!appearance.liquidGlassEnabled))}) }
-        item { ReferenceRow("Lyrics Animation","Player lyrics screen · source not connected","lyrics",1,5,onClick={unavailable("Lyrics Animation","Open the quotation-mark button in Now Playing to view the new lyrics screen. Live lyrics and highlighting need a connected source, which will be added later.")}) }
+        item { ReferenceRow("Lyrics Animation","Synced line highlighting · LRCLIB","lyrics",1,5,onClick={unavailable("Lyrics Animation","Open the quotation-mark button in Now Playing. VibeArc requests matching lyrics from LRCLIB and highlights synchronized lines when available.")}) }
         item { ReferenceRow("Equalizer","Open your device's audio controls","equalizer",2,5,onClick={
             val intent=Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).putExtra(AudioEffect.EXTRA_PACKAGE_NAME,context.packageName).putExtra(AudioEffect.EXTRA_CONTENT_TYPE,AudioEffect.CONTENT_TYPE_MUSIC)
             if(runCatching{context.startActivity(intent)}.isFailure) unavailable("Equalizer","This phone does not provide a system equalizer panel. A built-in equalizer is not included yet.")

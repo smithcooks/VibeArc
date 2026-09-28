@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,7 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun PlayerScreen(
@@ -155,14 +158,85 @@ private fun PlayingQueueScreen(player: Player, queue: List<Track>) {
 @Composable
 private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy: Boolean) {
     var expanded by remember { mutableStateOf(false) }
+    var request by remember(track.uri) { mutableIntStateOf(0) }
+    var loading by remember(track.uri) { mutableStateOf(true) }
+    var failed by remember(track.uri) { mutableStateOf(false) }
+    var lyrics by remember(track.uri) { mutableStateOf<LyricsDocument?>(null) }
+    var position by remember(track.uri) { mutableLongStateOf(0L) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(track.uri, request) {
+        loading = true
+        failed = false
+        val result = withContext(Dispatchers.IO) { runCatching { LyricsProvider.fetch(track) } }
+        lyrics = result.getOrNull()
+        failed = result.isFailure
+        loading = false
+    }
+    LaunchedEffect(player, track.uri, isPlaying) {
+        while(isActive) {
+            position = player.currentPosition.coerceAtLeast(0L)
+            delay(if(isPlaying) 250 else 1_000)
+        }
+    }
+    val activeLine = activeLyricIndex(lyrics?.syncedLines.orEmpty(), position)
+    LaunchedEffect(activeLine) {
+        if(activeLine >= 0) listState.animateScrollToItem((activeLine - 1).coerceAtLeast(0))
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape) {
-            Text("LYRICS • NOT CONNECTED", Modifier.padding(horizontal = 14.dp, vertical = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
+            Text(
+                when {
+                    loading -> "LYRICS • LOADING"
+                    lyrics?.syncedLines?.isNotEmpty() == true -> "LINE SYNC • LRCLIB"
+                    lyrics != null -> "LYRICS • LRCLIB"
+                    else -> "LYRICS • UNAVAILABLE"
+                },
+                Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp,
+            )
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("The words belong here.", fontSize = 30.sp, lineHeight = 38.sp, fontWeight = FontWeight.Bold)
-                Text("Synced lyrics are not available yet. Once a lyrics source is connected, the current line will be highlighted here.", color = MutedText, style = MaterialTheme.typography.bodyLarge)
+            when {
+                loading -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    CircularProgressIndicator()
+                    Text("Finding lyrics…", color = MutedText)
+                }
+                failed -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Lyrics could not be loaded.", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text("Check your connection and try again.", color = MutedText)
+                    TextButton(onClick = { request++ }) { Text("Try again") }
+                }
+                lyrics == null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("No lyrics found.", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Text("LRCLIB does not have lyrics matching this track yet.", color = MutedText)
+                }
+                lyrics?.instrumental == true -> Text("Instrumental", fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                lyrics?.syncedLines?.isEmpty() == true && lyrics?.plainLines?.isEmpty() == true ->
+                    Text("No lyrics found.", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                lyrics?.syncedLines?.isNotEmpty() == true -> LazyColumn(
+                    Modifier.fillMaxSize(), state = listState,
+                    contentPadding = PaddingValues(vertical = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
+                    items(lyrics!!.syncedLines.size) { index ->
+                        val line = lyrics!!.syncedLines[index]
+                        Text(
+                            line.text,
+                            color = if(index == activeLine) MaterialTheme.colorScheme.onSurface else MutedText.copy(alpha = .45f),
+                            fontSize = if(index == activeLine) 28.sp else 23.sp,
+                            lineHeight = 34.sp,
+                            fontWeight = if(index == activeLine) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
+                else -> LazyColumn(
+                    Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 60.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    items(lyrics!!.plainLines) { line ->
+                        Text(line, fontSize = 23.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
             Box(Modifier.align(Alignment.BottomEnd).padding(bottom = 12.dp)) {
                 PlayerAction(if(expanded) "Show playback controls" else "Expand lyrics", "expand") { expanded = !expanded }
