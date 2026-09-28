@@ -33,4 +33,4 @@ The sizing test checks that a 1024×1024 input uses sample size 4 for thumbnails
 
 ## Still required for full V8
 
-Connected YouTube account and two-way playlist sync; optional Last.fm account/scrobbling; synced lyrics; built-in equalizer; wavy seek bar; actual stream-format selection; supported downloads/folder selection; JSON backup/restore; playlist-file imports; real discovery/generator integration; final security/release verification. Settings descriptions must continue to state what is unavailable. No lossless, bit-perfect, or zero-buffering guarantee is made.
+Connected YouTube account and two-way playlist sync; optional Last.fm account/scrobbling; synced lyrics; built-in equalizer; actual stream-format selection; supported downloads/folder selection; JSON backup/restore; playlist-file imports; real discovery/generator integration; final security/release verification. The 28 September UI pass adds the player/queue/lyrics layouts and lightweight wavy seek bar. Settings descriptions must continue to state what is unavailable. No lossless, bit-perfect, or zero-buffering guarantee is made.

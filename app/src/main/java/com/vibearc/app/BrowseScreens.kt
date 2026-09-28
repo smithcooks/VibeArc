@@ -121,7 +121,7 @@ internal fun HomeScreen(
                 ShelfHeading("Albums for you", "Albums from your collection")
                 if(albums.isEmpty()) FeedEmpty("Add music to build your album collection.", onLibrary)
                 else androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(albums, key = { it.artist + "|" + it.album }) { album ->
+                    items(albums, key = Track::uri) { album ->
                         ShelfCard(album, album.album, album.artist) {
                             val songs = pool.filter { it.artist == album.artist && it.album == album.album }
                             onPlay(album, songs)

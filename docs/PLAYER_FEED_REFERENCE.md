@@ -10,3 +10,5 @@ The seven supplied screenshots define this UI pass. Preserve VibeArc branding, a
 - Responsive: scroll on compact/tall-font screens; labels truncate instead of forcing controls off-screen. All player pages have visible back navigation and Android Back handling. Reuse cached, size-bounded artwork; no blur or continuously running background effects.
 
 Verification: Kotlin/unit tests/lint plus APK packaging; user will inspect the APK manually on the Samsung M12. Pixel-level fidelity and device frame timing remain unverified until that check.
+
+Implemented: player, lyrics empty-state and editable queue pages; optional lightweight wavy seek bar; home carousels, artist mixes/spotlight/tiles, favorites and album shelves. Artwork colors now follow the current track independently of which player subpage is visible. Test the quotation-mark button, queue removal/reordering, Android Back, all shelf Play actions, glass off/on, and large font settings. Lyrics text/highlighting, remote recommendations, release feeds and accounts are explicitly deferred to the feature phase.

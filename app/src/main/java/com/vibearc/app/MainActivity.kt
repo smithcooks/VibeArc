@@ -244,6 +244,13 @@ private fun VibeArcApp(
     var searchSeed by remember { mutableStateOf("") }
     var currentTrack by remember { mutableStateOf<Track?>(null) }
     var artworkAccentArgb by remember(currentTrack?.uri) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(currentTrack?.uri, currentTrack?.artworkUri, appearance.dynamicNowPlayingEnabled) {
+        artworkAccentArgb = currentTrack?.artworkUri?.takeIf {
+            appearance.dynamicNowPlayingEnabled && it.isNotBlank()
+        }?.let {
+            ArtworkCache.load(it, 160)?.accent?.toArgb()?.toLong()?.and(0xFFFFFFFFL)
+        }
+    }
     var isPlaying by remember { mutableStateOf(activePlayer?.isPlaying == true) }
     var queueTracks by remember { mutableStateOf(activePlayer?.queueTracks().orEmpty()) }
     var shuffleEnabled by remember { mutableStateOf(activePlayer?.shuffleModeEnabled == true) }
@@ -383,7 +390,6 @@ private fun VibeArcApp(
                     onOpen = openPlayer,
                     onToggle = activePlayer::toggle,
                     onNext = activePlayer::seekToNextMediaItem,
-                    onAccent = { artworkAccentArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
                 )
                 ReferenceSurface(Modifier.widthIn(max = 340.dp).padding(horizontal = 28.dp), shape = CircleShape) {
                     Row(Modifier.padding(5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -465,7 +471,6 @@ private fun VibeArcApp(
                     )
                 },
                 dynamicArtworkColor = appearance.dynamicNowPlayingEnabled,
-                onArtworkAccent = { artworkAccentArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
             ) else EmptyPlayer(padding) { currentTab = Tab.Search }
             Tab.Settings -> SettingsScreen(padding, appearance, onAppearanceChange, { navigate(Tab.Downloads) })
             Tab.Stats -> StatsScreen(padding, library, recentTracks) { track -> playTrack(track, recentTracks) }
@@ -590,7 +595,6 @@ private fun MiniPlayer(
     onOpen: () -> Unit,
     onToggle: () -> Unit,
     onNext: () -> Unit,
-    onAccent: (Color) -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -603,7 +607,7 @@ private fun MiniPlayer(
             Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TrackArtwork(track, null, Modifier.size(58.dp).clip(RoundedCornerShape(20.dp)), onAccent)
+            TrackArtwork(track, null, Modifier.size(58.dp).clip(RoundedCornerShape(20.dp)))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)

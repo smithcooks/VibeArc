@@ -39,7 +39,7 @@ internal fun PlayerScreen(
     queue: List<Track>, shuffleEnabled: Boolean, repeatMode: Int, sleepRemainingMillis: Long,
     onBack: () -> Unit, onFavorite: (() -> Unit)?, onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit, onCycleSleepTimer: () -> Unit,
-    dynamicArtworkColor: Boolean, onArtworkAccent: (Color) -> Unit,
+    dynamicArtworkColor: Boolean,
 ) {
     var page by rememberSaveable { mutableStateOf("player") }
     var menu by remember { mutableStateOf(false) }
@@ -76,13 +76,13 @@ internal fun PlayerScreen(
                 }
             }
             when (page) {
-                "queue" -> PlayingQueueScreen(player, queue, track)
+                "queue" -> PlayingQueueScreen(player, queue)
                 "lyrics" -> LyricsScreen(player, track, isPlaying, wavy)
                 else -> {
                     LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         item {
-                            TrackArtwork(track, "Artwork for ${track.title}", Modifier.size(artworkSize).clip(RoundedCornerShape(28.dp)), onArtworkAccent, 768)
+                            TrackArtwork(track, "Artwork for ${track.title}", Modifier.size(artworkSize).clip(RoundedCornerShape(28.dp)), sizePx = 768)
                         }
                         item {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -116,7 +116,7 @@ internal fun PlayerScreen(
 }
 
 @Composable
-private fun PlayingQueueScreen(player: Player, queue: List<Track>, track: Track) {
+private fun PlayingQueueScreen(player: Player, queue: List<Track>) {
     var reorder by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         item {
