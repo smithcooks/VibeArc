@@ -34,6 +34,7 @@ internal fun SettingsScreen(
     padding: PaddingValues, appearance: AppearanceConfig,
     onAppearanceChange: (AppearanceConfig) -> Unit, onDownloads: () -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
+    onImportPlaylist: () -> Unit,
 ) {
     val context=LocalContext.current
     var info by remember { mutableStateOf<Pair<String,String>?>(null) }
@@ -129,7 +130,7 @@ internal fun SettingsScreen(
                 .onFailure {unavailable("Background Playback","Open Android Settings → Apps → VibeArc → Battery.")}
         }) }
         item { SettingsHeading("Library & Playlist Imports") }
-        item { ReferenceRow("Import Playlist from File","Playlist file import not connected","download",onClick={unavailable("Import Playlist","You can add audio files from My Library. Playlist-file import is still planned.")}) }
+        item { ReferenceRow("Import Playlist from File","CSV, TSV, M3U/M3U8, or TXT","download",onClick=onImportPlaylist) }
         item { SettingsHeading("Scrobbler") }
         item { ReferenceRow("Scrobble Music","Last.fm is not connected","stats",0,2,onClick={unavailable("Scrobbler","Scrobbling requires a Last.fm account integration, which is not configured in VibeArc.")}) }
         item { ReferenceRow("Submit Now Playing","Requires a connected scrobbler","clock",1,2,onClick={unavailable("Submit Now Playing","Your playback stays on this device. No listening history is submitted to Last.fm.")}) }

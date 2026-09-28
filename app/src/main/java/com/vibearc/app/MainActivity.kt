@@ -386,6 +386,32 @@ private fun VibeArcApp(
             ).show()
         }
     }
+    val playlistReader = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        uiScope.launch {
+            val imported = withContext(Dispatchers.IO) {
+                runCatching {
+                    val contents = context.contentResolver.openInputStream(uri)?.use {
+                        it.readUtf8Limited(MaxBackupBytes)
+                    } ?: error("Could not open playlist file")
+                    val fileName = Uri.decode(uri.lastPathSegment.orEmpty())
+                        .substringAfterLast('/').substringAfterLast(':')
+                        .ifBlank { "Imported playlist.txt" }
+                    parsePlaylistFile(fileName, contents, library, UUID.randomUUID().toString())
+                }.getOrNull()
+            }
+            if (imported == null) {
+                android.widget.Toast.makeText(context, "Could not import this playlist", android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            playlists = (playlists + imported).also(context::savePlaylists)
+            android.widget.Toast.makeText(
+                context,
+                "Imported ${imported.name} · ${imported.trackUris.size} matched tracks",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     val playTrack: (Track, List<Track>) -> Unit = { track, source ->
         if (activePlayer != null && isAllowedMediaUri(track.uri)) {
@@ -523,6 +549,9 @@ private fun VibeArcApp(
                 onDownloads = { navigate(Tab.Downloads) },
                 onBackup = { backupWriter.launch("VibeArc-backup.json") },
                 onRestore = { backupReader.launch(arrayOf("application/json", "text/plain")) },
+                onImportPlaylist = {
+                    playlistReader.launch(arrayOf("text/*", "audio/x-mpegurl", "application/vnd.apple.mpegurl"))
+                },
             )
             Tab.Stats -> StatsScreen(padding, library, recentTracks) { track -> playTrack(track, recentTracks) }
             Tab.Discover -> DiscoverScreen(padding, library, { track -> playTrack(track, library) }) { query ->

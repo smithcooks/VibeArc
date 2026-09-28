@@ -73,6 +73,37 @@ internal fun InputStream.readUtf8Limited(maxBytes: Int): String {
     throw IllegalArgumentException("Backup is too large")
 }
 
+internal fun parsePlaylistFile(
+    fileName: String,
+    contents: String,
+    library: List<Track>,
+    id: String,
+): Playlist {
+    require(id.isNotBlank()) { "Playlist id cannot be blank" }
+    val extension = fileName.substringAfterLast('.', "").lowercase()
+    val trackUris = contents.lineSequence().mapNotNull { line ->
+        val clean = line.trim()
+        if (clean.isBlank() || clean.startsWith('#')) return@mapNotNull null
+        val candidates = when (extension) {
+            "csv" -> clean.split(',')
+            "tsv" -> clean.split('\t')
+            else -> listOf(clean)
+        }.map { it.trim().removeSurrounding("\"") }
+        candidates.firstNotNullOfOrNull { candidate ->
+            val fileStem = candidate.substringAfterLast('/').substringAfterLast('\\').substringBeforeLast('.')
+            library.firstOrNull { track ->
+                track.uri == candidate || track.title.equals(candidate, ignoreCase = true) ||
+                    track.title.equals(fileStem, ignoreCase = true)
+            }?.uri
+        }
+    }.distinct().toList()
+    return Playlist(
+        id = id,
+        name = fileName.substringBeforeLast('.', fileName).ifBlank { "Imported playlist" },
+        trackUris = trackUris,
+    )
+}
+
 internal object LibraryCodec {
     private val encoder = Base64.getUrlEncoder().withoutPadding()
     private val decoder = Base64.getUrlDecoder()

@@ -148,4 +148,35 @@ class LibraryCodecTest {
     fun `backup reader rejects files over its limit`() {
         ByteArrayInputStream("12345".toByteArray()).readUtf8Limited(4)
     }
+
+    @Test
+    fun `M3U import matches library URIs and file names`() {
+        val tracks = listOf(
+            Track("First Song", "Artist", "Album", "content://music/first"),
+            Track("Second Song", "Artist", "Album", "content://music/second"),
+        )
+        val contents = """
+            #EXTM3U
+            #EXTINF:180,First Song
+            content://music/first
+            /storage/emulated/0/Music/Second Song.mp3
+            /storage/emulated/0/Music/Missing Song.mp3
+        """.trimIndent()
+
+        assertEquals(
+            Playlist("imported", "Road Trip", listOf("content://music/first", "content://music/second")),
+            parsePlaylistFile("Road Trip.m3u", contents, tracks, "imported"),
+        )
+    }
+
+    @Test
+    fun `CSV import skips headers and unknown tracks`() {
+        val track = Track("First Song", "Artist", "Album", "content://music/first")
+        val contents = "title,artist,uri\n\"First Song\",\"Artist\",\"content://music/first\"\nUnknown,Artist,missing"
+
+        assertEquals(
+            Playlist("csv", "Saved", listOf(track.uri)),
+            parsePlaylistFile("Saved.csv", contents, listOf(track), "csv"),
+        )
+    }
 }
