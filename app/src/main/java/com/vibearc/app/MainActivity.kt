@@ -83,6 +83,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,6 +111,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import java.util.UUID
 
@@ -217,6 +221,7 @@ private fun VibeArcApp(
         ).buildAsync()
     }
     var player by remember { mutableStateOf<Player?>(null) }
+    val uiScope = rememberCoroutineScope()
 
     DisposableEffect(controllerFuture) {
         controllerFuture.addListener(
@@ -308,13 +313,19 @@ private fun VibeArcApp(
         runCatching {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        val imported = context.trackFrom(uri)
-        library = library.upsert(imported).also(context::saveLibrary)
-        currentTrack = library.first { it.uri == imported.uri }
-        activePlayer?.let { connectedPlayer ->
-            connectedPlayer.loadQueue(library, currentTrack!!)
-            queueTracks = connectedPlayer.queueTracks()
-            openPlayer()
+        uiScope.launch {
+            val imported = withContext(Dispatchers.IO) { runCatching { context.trackFrom(uri) }.getOrNull() }
+            if (imported == null) {
+                android.widget.Toast.makeText(context, "Could not read this audio file. Please choose it again.", android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            library = library.upsert(imported).also(context::saveLibrary)
+            currentTrack = library.first { it.uri == imported.uri }
+            activePlayer?.let { connectedPlayer ->
+                connectedPlayer.loadQueue(library, currentTrack!!)
+                queueTracks = connectedPlayer.queueTracks()
+                openPlayer()
+            }
         }
     }
 
@@ -583,18 +594,8 @@ private fun PlayerScreen(
     dynamicArtworkColor: Boolean,
     onArtworkAccent: (Color) -> Unit,
 ) {
-    var position by remember { mutableLongStateOf(0L) }
-    var duration by remember { mutableLongStateOf(1L) }
     val themeAccent = MaterialTheme.colorScheme.primary
     var ambientAccent by remember(track.uri, dynamicArtworkColor, themeAccent) { mutableStateOf(themeAccent) }
-
-    LaunchedEffect(player, isPlaying) {
-        while (currentCoroutineContext().isActive) {
-            position = player.currentPosition.coerceAtLeast(0L)
-            duration = player.duration.coerceAtLeast(1L)
-            delay(if (isPlaying) 500 else 1_000)
-        }
-    }
 
     LazyColumn(
         modifier = Modifier
@@ -628,6 +629,7 @@ private fun PlayerScreen(
             TrackArtwork(
                 track = track,
                 contentDescription = "Artwork for ${track.title}",
+                sizePx = 768,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
@@ -661,20 +663,7 @@ private fun PlayerScreen(
             }
         }
         item {
-            Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp)) {
-            Slider(
-                value = position.coerceAtMost(duration).toFloat(),
-                onValueChange = { position = it.toLong() },
-                onValueChangeFinished = { player.seekTo(position) },
-                valueRange = 0f..duration.toFloat(),
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(DateUtils.formatElapsedTime(position / 1_000), color = MutedText)
-                Text(DateUtils.formatElapsedTime(duration / 1_000), color = MutedText)
-            }
-            }
-            }
+            PlayerProgress(player, track.uri, isPlaying)
         }
         item {
             Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.extraLarge) {
@@ -746,6 +735,36 @@ private fun PlayerScreen(
                     trailingIcon = Icons.AutoMirrored.Filled.List.takeIf { index == player.currentMediaItemIndex },
                     trailingDescription = "Currently playing",
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayerProgress(player: Player, trackUri: String, isPlaying: Boolean) {
+    // Keep progress ticks inside this small subtree, not the artwork and queue.
+    var position by remember(trackUri) { mutableLongStateOf(0L) }
+    var duration by remember(trackUri) { mutableLongStateOf(1L) }
+    var dragging by remember(trackUri) { mutableStateOf(false) }
+    LaunchedEffect(player, trackUri, isPlaying) {
+        while (currentCoroutineContext().isActive) {
+            if (!dragging) position = player.currentPosition.coerceAtLeast(0L)
+            duration = player.duration.coerceAtLeast(1L)
+            delay(if (isPlaying) 500 else 1_000)
+        }
+    }
+    Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp)) {
+            Slider(
+                value = position.coerceAtMost(duration).toFloat(),
+                onValueChange = { dragging = true; position = it.toLong() },
+                onValueChangeFinished = { player.seekTo(position); dragging = false },
+                valueRange = 0f..duration.toFloat(),
+                modifier = Modifier.semantics { contentDescription = "Playback position" },
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(DateUtils.formatElapsedTime(position / 1_000), color = MutedText)
+                Text(DateUtils.formatElapsedTime(duration / 1_000), color = MutedText)
             }
         }
     }

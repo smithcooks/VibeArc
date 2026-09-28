@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -25,11 +26,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 
 @Composable
 internal fun TrackArtwork(
@@ -37,17 +34,18 @@ internal fun TrackArtwork(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     onAccent: (Color) -> Unit = {},
+    sizePx: Int = 160,
 ) {
-    val fallbackAccent = MaterialTheme.colorScheme.primary
-    var artwork by remember(track.artworkUri) {
+    val accentCallback by rememberUpdatedState(onAccent)
+    var artwork by remember(track.artworkUri, sizePx) {
         mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
     }
-    LaunchedEffect(track.artworkUri, fallbackAccent) {
-        val bitmap = track.artworkUri.takeIf(String::isNotBlank)?.let { artworkUri ->
-            withContext(Dispatchers.IO) { loadArtwork(artworkUri) }
+    LaunchedEffect(track.artworkUri, sizePx) {
+        val loaded = track.artworkUri.takeIf(String::isNotBlank)?.let {
+            ArtworkCache.load(it, sizePx)
         }
-        artwork = bitmap?.asImageBitmap()
-        onAccent(bitmap?.averageAccent() ?: fallbackAccent)
+        artwork = loaded?.bitmap?.asImageBitmap()
+        loaded?.let { accentCallback(it.accent) }
     }
     val loadedArtwork = artwork
     if (loadedArtwork == null) {
@@ -74,24 +72,7 @@ internal fun TrackArtwork(
     }
 }
 
-private fun loadArtwork(value: String) = runCatching {
-    val uri = Uri.parse(value)
-    if (uri.scheme == "https") {
-        val connection = URL(value).openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 10_000
-            connection.setRequestProperty("User-Agent", "VibeArc/0.8")
-            connection.inputStream.use(BitmapFactory::decodeStream)
-        } finally {
-            connection.disconnect()
-        }
-    } else if (uri.scheme == "file") {
-        BitmapFactory.decodeFile(uri.path)
-    } else null
-}.getOrNull()
-
-private fun android.graphics.Bitmap.averageAccent(): Color {
+internal fun android.graphics.Bitmap.averageAccent(): Color {
     val sample = android.graphics.Bitmap.createScaledBitmap(this, 12, 12, true)
     val pixels = IntArray(144).also { sample.getPixels(it, 0, 12, 0, 0, 12, 12) }
     val colorful = pixels.filter { pixel ->
@@ -102,6 +83,7 @@ private fun android.graphics.Bitmap.averageAccent(): Color {
     val red = colorful.sumOf(android.graphics.Color::red) / colorful.size
     val green = colorful.sumOf(android.graphics.Color::green) / colorful.size
     val blue = colorful.sumOf(android.graphics.Color::blue) / colorful.size
+    if (sample !== this) sample.recycle()
     return Color(red, green, blue)
 }
 

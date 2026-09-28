@@ -43,7 +43,7 @@ internal fun HomeScreen(
             Text(now.format(DateTimeFormatter.ofPattern("EEEE, MMMM d")), color=MutedText)
             Spacer(Modifier.height(10.dp))
             Box(Modifier.fillMaxWidth().heightIn(min=208.dp).clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surface)) {
-                if(hero!=null) TrackArtwork(hero,null,Modifier.matchParentSize())
+                if(hero!=null) TrackArtwork(hero,null,Modifier.matchParentSize(),sizePx=768)
                 Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha=.4f),Color(0xF21D1D1D)))))
                 Column(Modifier.padding(20.dp), verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     Surface(color=Color.White.copy(alpha=.18f),shape=CircleShape) {

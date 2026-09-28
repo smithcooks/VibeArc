@@ -23,6 +23,9 @@ android {
     }
 
     signingConfigs {
+        providers.gradleProperty("testKeystore").orNull?.let { path ->
+            getByName("debug").storeFile = rootProject.file(path)
+        }
         if (releaseSigning.isNotEmpty()) create("release") {
             storeFile = rootProject.file(releaseSigning.getProperty("storeFile"))
             storePassword = releaseSigning.getProperty("storePassword")
@@ -39,6 +42,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+        }
+        create("performance") {
+            initWith(getByName("release"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            // The Windows sandbox denies ZipFS access in the optional resource shrinker.
+            // Keep code optimization; retaining unused resources only affects APK size.
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
         }
     }
 
