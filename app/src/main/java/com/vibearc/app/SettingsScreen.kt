@@ -40,6 +40,8 @@ internal fun SettingsScreen(
     onToggleYouTubePlaylistSync: (String) -> Unit,
     onPullSelectedYouTubePlaylists: () -> Unit,
     onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
+    lastFmUsername: String?, lastFmBusy: Boolean, lastFmConfigured: Boolean, lastFmError: String?,
+    onConnectLastFm: (String) -> Unit, onRefreshLastFm: () -> Unit, onDisconnectLastFm: () -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
 ) {
@@ -50,6 +52,7 @@ internal fun SettingsScreen(
     var wavySeekbar by remember { mutableStateOf(context.wavySeekbarEnabled()) }
     var selectedIcon by remember { mutableStateOf(context.selectedLauncherIcon()) }
     var custom by remember { mutableStateOf("#%06X".format(appearance.customAccentArgb and 0xFFFFFF)) }
+    var lastFmInput by remember(lastFmUsername) { mutableStateOf(lastFmUsername.orEmpty()) }
     var error by remember { mutableStateOf(false) }
     val unavailable: (String,String)->Unit = { title,description -> info=title to description }
     fun syncInfo() { unavailable("YouTube playlist sync","Your account and playlists can now be read safely. Playlist changes and history sync are not enabled yet.") }
@@ -139,8 +142,8 @@ internal fun SettingsScreen(
         item { SettingsHeading("Library & Playlist Imports") }
         item { ReferenceRow("Import Playlist from File","CSV, TSV, M3U/M3U8, or TXT","download",onClick=onImportPlaylist) }
         item { SettingsHeading("Scrobbler") }
-        item { ReferenceRow("Scrobble Music","Last.fm is not connected","stats",0,2,onClick={unavailable("Scrobbler","Scrobbling requires a Last.fm account integration, which is not configured in VibeArc.")}) }
-        item { ReferenceRow("Submit Now Playing","Requires a connected scrobbler","clock",1,2,onClick={unavailable("Submit Now Playing","Your playback stays on this device. No listening history is submitted to Last.fm.")}) }
+        item { ReferenceRow("Last.fm Profile",when { lastFmBusy -> "Loading…"; lastFmUsername != null -> lastFmUsername; !lastFmConfigured -> "API key required for this build"; else -> "Tap to connect a public profile" },"stats",0,2,onClick={sheet="Last.fm"}) }
+        item { ReferenceRow("Scrobbling & Now Playing",if(lastFmUsername == null) "Connect a profile first" else "Secure server signing required","clock",1,2,onClick={unavailable("Last.fm scrobbling","Public Last.fm statistics are connected. Scrobbling and Now Playing stay disabled until VibeArc has a server-side signer; the shared secret will not be embedded in the APK.")}) }
         item { SettingsHeading("Backup & Restore") }
         item { ReferenceRow("Backup","Save library and playlists to JSON","backup",0,2,onClick=onBackup) }
         item { ReferenceRow("Restore","Merge a VibeArc JSON backup","restore",1,2,onClick=onRestore) }
@@ -169,11 +172,28 @@ internal fun SettingsScreen(
             LazyColumn(contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item {
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
-                        Glyph(if(title.contains("Quality")) "quality" else "palette",Modifier.size(36.dp))
+                        Glyph(when {
+                            title == "Last.fm" -> "stats"
+                            title.contains("Quality") -> "quality"
+                            else -> "palette"
+                        },Modifier.size(36.dp))
                         Text(title,style=MaterialTheme.typography.headlineMedium)
                     }
                 }
                 when(title) {
+                    "Last.fm" -> {
+                        item { Text("Connect a public Last.fm profile to show listening statistics and top tracks. This does not submit your playback history.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if (!lastFmConfigured) item { Text("This APK was built without LASTFM_API_KEY. Add it to local.properties or the build environment, then rebuild.",color=MaterialTheme.colorScheme.error) }
+                        item { OutlinedTextField(lastFmInput,{lastFmInput=it.take(64)},label={Text("Last.fm username")},singleLine=true,modifier=Modifier.fillMaxWidth()) }
+                        lastFmError?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error) } }
+                        item {
+                            Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                                Button(onClick={onConnectLastFm(lastFmInput);sheet=null},enabled=lastFmConfigured && !lastFmBusy) { Text(if(lastFmUsername == null) "Connect" else "Update") }
+                                if(lastFmUsername != null) OutlinedButton(onClick=onRefreshLastFm,enabled=!lastFmBusy) { Text("Refresh") }
+                            }
+                        }
+                        if(lastFmUsername != null) item { TextButton(onClick={onDisconnectLastFm();sheet=null}) { Text("Disconnect public profile") } }
+                    }
                     "YouTube Account" -> {
                         item { Text(youtubeAccountData?.account?.displayName.orEmpty(),style=MaterialTheme.typography.titleLarge) }
                         item { ReferenceRow("Switch account","Choose another Google account","account",0,2,onClick={sheet=null;onSwitchYouTubeAccount()}) }

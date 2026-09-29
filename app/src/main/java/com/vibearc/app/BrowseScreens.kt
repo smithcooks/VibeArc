@@ -237,9 +237,63 @@ private fun HomeShortcut(title:String,subtitle:String,track:Track?,modifier:Modi
 }
 
 @Composable
-internal fun StatsScreen(padding:PaddingValues,tracks:List<Track>,recent:List<Track>,onPlay:(Track)->Unit) {
+internal fun StatsScreen(
+    padding:PaddingValues, tracks:List<Track>, recent:List<Track>, lastFm:LastFmSnapshot?,
+    lastFmBusy:Boolean, lastFmError:String?, onLastFmRefresh:()->Unit,
+    onPlay:(Track)->Unit, onSearch:(String)->Unit,
+) {
     var reverse by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().padding(top=padding.calculateTopPadding()),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=padding.calculateBottomPadding()+16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        if(lastFmBusy) item {
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                CircularProgressIndicator(Modifier.size(24.dp),strokeWidth=3.dp); Text("Loading Last.fm…",color=MutedText)
+            }
+        }
+        if(lastFmError != null) item {
+            ReferenceSurface {
+                Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text(lastFmError,Modifier.weight(1f),color=MaterialTheme.colorScheme.error)
+                    TextButton(onClick=onLastFmRefresh) { Text("Retry") }
+                }
+            }
+        }
+        if(lastFm != null) {
+            item { Surface(shape=CircleShape,color=MaterialTheme.colorScheme.surface) { Text("Last.fm · ${lastFm.profile.username}",Modifier.padding(horizontal=14.dp,vertical=8.dp),fontWeight=FontWeight.Bold) } }
+            item {
+                ReferenceSurface {
+                    Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                        Surface(color=MaterialTheme.colorScheme.primaryContainer,shape=RoundedCornerShape(24.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                                Text(lastFm.profile.playCount.toString(),style=MaterialTheme.typography.displaySmall)
+                                Text("Scrobbles",fontWeight=FontWeight.Bold)
+                            }
+                        }
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            listOf(lastFm.profile.trackCount to "Tracks",lastFm.profile.artistCount to "Artists",lastFm.profile.albumCount to "Albums").forEach { (count,label) ->
+                                ReferenceSurface(Modifier.weight(1f),shape=RoundedCornerShape(18.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(vertical=14.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                                        Text(count.toString(),fontWeight=FontWeight.Bold); Text(label,style=MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if(lastFm.topTracks.isNotEmpty()) {
+                item { SectionTitle("Top tracks on Last.fm") }
+                items(lastFm.topTracks) { track ->
+                    ReferenceRow(track.title,"${track.artist} · ${track.playCount} plays","stats",onClick={onSearch("${track.artist} ${track.title}")})
+                }
+            }
+            if(lastFm.recentTracks.isNotEmpty()) {
+                item { SectionTitle("Recent on Last.fm") }
+                items(lastFm.recentTracks) { track ->
+                    ReferenceRow(track.title,if(track.nowPlaying) "${track.artist} · Now playing" else track.artist,"clock",onClick={onSearch("${track.artist} ${track.title}")})
+                }
+            }
+            item { SectionTitle("On this device") }
+        }
         item {
             Surface(shape=CircleShape,color=MaterialTheme.colorScheme.surface) { Text("On this device",Modifier.padding(horizontal=14.dp,vertical=8.dp),fontWeight=FontWeight.Bold) }
         }

@@ -9,6 +9,13 @@ plugins {
 val releaseSigning = Properties().apply {
     rootProject.file("keystore.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
 }
+val localConfig = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
+}
+val lastFmApiKey = providers.environmentVariable("LASTFM_API_KEY").orNull
+    ?: providers.gradleProperty("LASTFM_API_KEY").orNull
+    ?: localConfig.getProperty("LASTFM_API_KEY", "")
+val escapedLastFmApiKey = lastFmApiKey.replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.vibearc.app"
@@ -20,6 +27,7 @@ android {
         targetSdk = 35
         versionCode = 9
         versionName = "0.9.0-beta"
+        buildConfigField("String", "LASTFM_API_KEY", "\"$escapedLastFmApiKey\"")
     }
 
     signingConfigs {
@@ -67,6 +75,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

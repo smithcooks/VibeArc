@@ -241,6 +241,45 @@ private fun VibeArcApp(
     var youtubeSelectedPlaylistIds by remember {
         mutableStateOf(cachedYouTubeState?.selectedPlaylistIds.orEmpty())
     }
+    var lastFmUsername by remember { mutableStateOf(context.loadLastFmUsername()) }
+    var lastFmSnapshot by remember { mutableStateOf<LastFmSnapshot?>(null) }
+    var lastFmBusy by remember { mutableStateOf(false) }
+    var lastFmError by remember { mutableStateOf<String?>(null) }
+    var lastFmRefresh by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(lastFmUsername, lastFmRefresh) {
+        val username = lastFmUsername ?: return@LaunchedEffect
+        if (BuildConfig.LASTFM_API_KEY.isBlank()) {
+            lastFmError = "This build does not include a Last.fm API key."
+            return@LaunchedEffect
+        }
+        lastFmBusy = true
+        lastFmError = null
+        val loaded = withContext(Dispatchers.IO) {
+            runCatching { LastFmApi.load(username, BuildConfig.LASTFM_API_KEY) }
+        }
+        lastFmSnapshot = loaded.getOrNull()
+        lastFmError = loaded.exceptionOrNull()?.let { "Could not load the Last.fm profile." }
+        lastFmBusy = false
+    }
+
+    val connectLastFm: (String) -> Unit = { value ->
+        val username = validLastFmUsername(value)
+        if (username == null) {
+            android.widget.Toast.makeText(context, "Enter a valid Last.fm username", android.widget.Toast.LENGTH_LONG).show()
+        } else {
+            context.saveLastFmUsername(username)
+            lastFmUsername = username
+            lastFmSnapshot = null
+            lastFmRefresh++
+        }
+    }
+    val disconnectLastFm: () -> Unit = {
+        context.saveLastFmUsername(null)
+        lastFmUsername = null
+        lastFmSnapshot = null
+        lastFmError = null
+    }
 
     fun loadYouTubeAccount(accessToken: String?, announce: Boolean) {
         if (accessToken.isNullOrBlank()) {
@@ -734,6 +773,13 @@ private fun VibeArcApp(
                 },
                 onPullSelectedYouTubePlaylists = pullSelectedYouTubePlaylists,
                 onImportYouTubePlaylist = importYouTubePlaylist,
+                lastFmUsername = lastFmUsername,
+                lastFmBusy = lastFmBusy,
+                lastFmConfigured = BuildConfig.LASTFM_API_KEY.isNotBlank(),
+                lastFmError = lastFmError,
+                onConnectLastFm = connectLastFm,
+                onRefreshLastFm = { lastFmRefresh++ },
+                onDisconnectLastFm = disconnectLastFm,
                 onDownloads = { navigate(Tab.Downloads) },
                 onBackup = { backupWriter.launch("VibeArc-backup.json") },
                 onRestore = { backupReader.launch(arrayOf("application/json", "text/plain")) },
@@ -741,7 +787,12 @@ private fun VibeArcApp(
                     playlistReader.launch(arrayOf("text/*", "audio/x-mpegurl", "application/vnd.apple.mpegurl"))
                 },
             )
-            Tab.Stats -> StatsScreen(padding, library, recentTracks) { track -> playTrack(track, recentTracks) }
+            Tab.Stats -> StatsScreen(
+                padding, library, recentTracks, lastFmSnapshot, lastFmBusy, lastFmError,
+                onLastFmRefresh = { lastFmRefresh++ },
+                onPlay = { track -> playTrack(track, recentTracks) },
+                onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
+            )
             Tab.Discover -> DiscoverScreen(padding, library, { track -> playTrack(track, library) }) { query ->
                 searchSeed = query
                 navigate(Tab.Search)
