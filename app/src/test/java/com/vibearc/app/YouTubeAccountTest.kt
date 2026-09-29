@@ -80,6 +80,11 @@ class YouTubeAccountTest {
         )
     }
 
+    @Test
+    fun `created playlist response requires an id`() {
+        assertEquals("playlist-new", parseCreatedYouTubePlaylistId("""{"id":"playlist-new"}"""))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `account response rejects missing channel`() {
         parseYouTubeAccount("""{"items":[]}""")

@@ -739,6 +739,29 @@ private fun VibeArcApp(
         }
     }
 
+    val createYouTubePlaylist: (String) -> Unit = { title ->
+        val accessToken = youtubeAccessToken
+        if (accessToken == null) {
+            android.widget.Toast.makeText(context, "Connect your YouTube account again", android.widget.Toast.LENGTH_LONG).show()
+        } else if (!youtubeSyncBusy) uiScope.launch {
+            youtubeSyncBusy = true
+            val createdId = withContext(Dispatchers.IO) {
+                runCatching { YouTubeAccountApi.createPlaylist(accessToken, title) }.getOrNull()
+            }
+            youtubeSyncBusy = false
+            if (createdId == null) {
+                android.widget.Toast.makeText(context, "Could not create the YouTube playlist", android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                val created = YouTubePlaylist(createdId, title.trim(), 0, "")
+                youtubeAccountData = youtubeAccountData?.copy(playlists = youtubeAccountData!!.playlists + created)
+                youtubeSelectedPlaylistIds = youtubeSelectedPlaylistIds + createdId
+                updatePlaylists(playlists.createPlaylist(created.title, "youtube:$createdId"))
+                youtubeAccountData?.account?.let { context.saveYouTubeAccountState(YouTubeAccountState(it, youtubeSelectedPlaylistIds)) }
+                android.widget.Toast.makeText(context, "Created ${created.title}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     fun applyYouTubeSync(useLocalAsSource: Boolean) {
         val accessToken = youtubeAccessToken ?: return
         val previews = youtubeSyncPreview ?: return
@@ -858,8 +881,39 @@ private fun VibeArcApp(
                 onCreatePlaylist = { name ->
                     updatePlaylists(playlists.createPlaylist(name, UUID.randomUUID().toString()))
                 },
-                onRenamePlaylist = { id, name -> updatePlaylists(playlists.renamePlaylist(id, name)) },
-                onDeletePlaylist = { id -> updatePlaylists(playlists.deletePlaylist(id)) },
+                onRenamePlaylist = { id, name ->
+                    val remoteId = id.takeIf { it.startsWith("youtube:") }?.removePrefix("youtube:")
+                    val remote = youtubeAccountData?.playlists?.firstOrNull { it.id == remoteId }
+                    val accessToken = youtubeAccessToken
+                    if (remote == null) updatePlaylists(playlists.renamePlaylist(id, name))
+                    else if (accessToken == null) android.widget.Toast.makeText(context,"Reconnect YouTube before renaming",android.widget.Toast.LENGTH_LONG).show()
+                    else uiScope.launch {
+                        youtubeSyncBusy = true
+                        val changed = withContext(Dispatchers.IO) { runCatching { YouTubeAccountApi.updatePlaylist(accessToken,remote,name) }.isSuccess }
+                        youtubeSyncBusy = false
+                        if (changed) {
+                            updatePlaylists(playlists.renamePlaylist(id,name))
+                            youtubeAccountData = youtubeAccountData?.copy(playlists=youtubeAccountData!!.playlists.map { if(it.id==remote.id) it.copy(title=name.trim()) else it })
+                        } else android.widget.Toast.makeText(context,"Could not rename the YouTube playlist",android.widget.Toast.LENGTH_LONG).show()
+                    }
+                },
+                onDeletePlaylist = { id ->
+                    val remoteId = id.takeIf { it.startsWith("youtube:") }?.removePrefix("youtube:")
+                    val accessToken = youtubeAccessToken
+                    if (remoteId == null) updatePlaylists(playlists.deletePlaylist(id))
+                    else if (accessToken == null) android.widget.Toast.makeText(context,"Reconnect YouTube before deleting",android.widget.Toast.LENGTH_LONG).show()
+                    else uiScope.launch {
+                        youtubeSyncBusy = true
+                        val deleted = withContext(Dispatchers.IO) { runCatching { YouTubeAccountApi.deletePlaylist(accessToken,remoteId) }.isSuccess }
+                        youtubeSyncBusy = false
+                        if (deleted) {
+                            updatePlaylists(playlists.deletePlaylist(id))
+                            youtubeAccountData = youtubeAccountData?.copy(playlists=youtubeAccountData!!.playlists.filterNot { it.id==remoteId })
+                            youtubeSelectedPlaylistIds = youtubeSelectedPlaylistIds - remoteId
+                            youtubeAccountData?.account?.let { context.saveYouTubeAccountState(YouTubeAccountState(it,youtubeSelectedPlaylistIds)) }
+                        } else android.widget.Toast.makeText(context,"Could not delete the YouTube playlist",android.widget.Toast.LENGTH_LONG).show()
+                    }
+                },
                 onAddToPlaylist = { id, uri -> updatePlaylists(playlists.addTrackToPlaylist(id, uri)) },
                 onRemoveFromPlaylist = { id, uri -> updatePlaylists(playlists.removeTrackFromPlaylist(id, uri)) },
             )
@@ -928,6 +982,7 @@ private fun VibeArcApp(
                     }
                 },
                 onPullSelectedYouTubePlaylists = previewSelectedYouTubePlaylists,
+                onCreateYouTubePlaylist = createYouTubePlaylist,
                 onImportYouTubePlaylist = importYouTubePlaylist,
                 lastFmUsername = lastFmUsername,
                 lastFmBusy = lastFmBusy,

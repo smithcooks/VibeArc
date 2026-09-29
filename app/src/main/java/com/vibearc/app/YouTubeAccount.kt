@@ -23,6 +23,9 @@ internal data class YouTubePlaylist(
     val title: String,
     val itemCount: Int,
     val artworkUrl: String,
+    val description: String = "",
+    val privacyStatus: String = "private",
+    val tags: List<String> = emptyList(),
 )
 
 internal data class YouTubePlaylistPage(
@@ -168,10 +171,19 @@ internal fun parseYouTubePlaylistPage(json: String): YouTubePlaylistPage {
             itemCount = ((item.getObject("contentDetails")["itemCount"] as? Number)?.toInt() ?: 0)
                 .coerceAtLeast(0),
             artworkUrl = snippet.thumbnailUrl(),
+            description = snippet.getString("description", ""),
+            privacyStatus = item.getObject("status").getString("privacyStatus", "private")
+                .takeIf { it in setOf("private", "public", "unlisted") } ?: "private",
+            tags = snippet.getArray("tags").mapNotNull { (it as? String)?.take(500) }.take(500),
         )
     }.take(50)
     return YouTubePlaylistPage(playlists, root.getString("nextPageToken", "").ifBlank { null })
 }
+
+internal fun parseCreatedYouTubePlaylistId(json: String): String =
+    parseRoot(json).getString("id", "").also {
+        require(it.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "Missing playlist id" }
+    }
 
 internal fun parseYouTubePlaylistTracks(json: String, playlistTitle: String): YouTubePlaylistTrackPage {
     val page = parseYouTubePlaylistItems(json, playlistTitle)
@@ -230,7 +242,7 @@ internal object YouTubeAccountApi {
             repeat(MaxPlaylistPages) {
                 val suffix = pageToken?.let { "&pageToken=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
                 val page = parseYouTubePlaylistPage(
-                    get("$ApiBase/playlists?part=snippet,contentDetails&mine=true&maxResults=50$suffix", accessToken),
+                    get("$ApiBase/playlists?part=snippet,contentDetails,status&mine=true&maxResults=50$suffix", accessToken),
                 )
                 addAll(page.playlists)
                 pageToken = page.nextPageToken
@@ -284,6 +296,39 @@ internal object YouTubeAccountApi {
         request(
             "DELETE",
             "$ApiBase/playlistItems?id=${URLEncoder.encode(itemId, Charsets.UTF_8.name())}",
+            accessToken,
+        )
+    }
+
+    fun createPlaylist(accessToken: String, title: String): String {
+        val cleanTitle = title.trim().also { require(it.isNotEmpty() && it.length <= 150) { "Invalid playlist title" } }
+        val body = JsonWriter.string().`object`()
+            .`object`("snippet").value("title", cleanTitle).value("description", "Created by VibeArc").end()
+            .`object`("status").value("privacyStatus", "private").end()
+            .end().done()
+        return parseCreatedYouTubePlaylistId(request("POST", "$ApiBase/playlists?part=snippet,status", accessToken, body))
+    }
+
+    fun updatePlaylist(accessToken: String, playlist: YouTubePlaylist, title: String) {
+        requireApiId(playlist.id, "playlist")
+        val cleanTitle = title.trim().also { require(it.isNotEmpty() && it.length <= 150) { "Invalid playlist title" } }
+        val root = JsonWriter.string().`object`().value("id", playlist.id)
+        val snippet = root.`object`("snippet")
+            .value("title", cleanTitle)
+            .value("description", playlist.description)
+        val tags = snippet.array("tags")
+        playlist.tags.forEach { tags.value(it) }
+        tags.end()
+        snippet.end()
+        root.`object`("status").value("privacyStatus", playlist.privacyStatus).end()
+        request("PUT", "$ApiBase/playlists?part=snippet,status", accessToken, root.end().done())
+    }
+
+    fun deletePlaylist(accessToken: String, playlistId: String) {
+        requireApiId(playlistId, "playlist")
+        request(
+            "DELETE",
+            "$ApiBase/playlists?id=${URLEncoder.encode(playlistId, Charsets.UTF_8.name())}",
             accessToken,
         )
     }

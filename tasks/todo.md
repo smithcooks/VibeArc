@@ -59,8 +59,8 @@
 
 - [x] Add a read-only local/remote playlist diff; baseline-backed conflict states remain before remote writes.
 - [x] Add a non-destructive foreground pull for the selected YouTube playlists.
-- [ ] Add opt-in official YouTube playlist/item writes using `youtube.force-ssl`.
-- [ ] Confirm destructive remote deletes and never silently overwrite conflicts.
+- [x] Add opt-in official YouTube playlist/item writes using `youtube.force-ssl`.
+- [x] Confirm destructive remote deletes and never silently overwrite conflicts.
 - [ ] Add bounded foreground sync, cancellation, timeouts, and useful failure messages.
 - [ ] Add scheduled sync only after foreground sync is proven reliable.
 

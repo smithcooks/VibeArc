@@ -39,6 +39,7 @@ internal fun SettingsScreen(
     onSwitchYouTubeAccount: () -> Unit,
     onToggleYouTubePlaylistSync: (String) -> Unit,
     onPullSelectedYouTubePlaylists: () -> Unit,
+    onCreateYouTubePlaylist: (String) -> Unit,
     onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
     lastFmUsername: String?, lastFmBusy: Boolean, lastFmConfigured: Boolean, lastFmError: String?,
     onConnectLastFm: (String) -> Unit, onRefreshLastFm: () -> Unit, onDisconnectLastFm: () -> Unit,
@@ -53,6 +54,7 @@ internal fun SettingsScreen(
     var selectedIcon by remember { mutableStateOf(context.selectedLauncherIcon()) }
     var custom by remember { mutableStateOf("#%06X".format(appearance.customAccentArgb and 0xFFFFFF)) }
     var lastFmInput by remember(lastFmUsername) { mutableStateOf(lastFmUsername.orEmpty()) }
+    var youtubePlaylistTitle by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
     val unavailable: (String,String)->Unit = { title,description -> info=title to description }
     fun syncInfo() { unavailable("YouTube Music history","Google does not provide a supported YouTube Data API method for writing listening history, so VibeArc cannot safely enable this switch.") }
@@ -202,6 +204,12 @@ internal fun SettingsScreen(
                     }
                     "Sync Playlists" -> {
                         item { Text("Choose playlists to compare. VibeArc always shows the changes and asks again before removing anything from YouTube.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        item {
+                            Row(horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
+                                OutlinedTextField(youtubePlaylistTitle,{youtubePlaylistTitle=it.take(150)},label={Text("New YouTube playlist")},singleLine=true,modifier=Modifier.weight(1f))
+                                Button(onClick={onCreateYouTubePlaylist(youtubePlaylistTitle);youtubePlaylistTitle=""},enabled=youtubePlaylistTitle.isNotBlank()&&!youtubeSyncBusy) { Text("Create") }
+                            }
+                        }
                         if (youtubeAccountData?.playlists.isNullOrEmpty()) item {
                             Text("This account has no visible playlists.",color=MaterialTheme.colorScheme.onSurfaceVariant)
                         } else items(youtubeAccountData!!.playlists.size) { index ->

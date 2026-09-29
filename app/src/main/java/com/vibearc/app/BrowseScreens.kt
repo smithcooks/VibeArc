@@ -426,7 +426,7 @@ internal fun LibraryScreen(
     if(create) PlaylistNameDialog("Create playlist","",{create=false},{onCreatePlaylist(it);create=false})
     rename?.let { p -> PlaylistNameDialog("Rename playlist",p.name,{rename=null},{onRenamePlaylist(p.id,it);rename=null}) }
     delete?.let { p ->
-        AlertDialog(onDismissRequest={delete=null},title={Text("Delete ${p.name}?")},text={Text("Your audio files will be kept.")},
+        AlertDialog(onDismissRequest={delete=null},title={Text("Delete ${p.name}?")},text={Text(if(p.id.startsWith("youtube:")) "This permanently deletes the playlist from YouTube. Your audio files will be kept." else "Your audio files will be kept.")},
             confirmButton={TextButton(onClick={onDeletePlaylist(p.id);delete=null}){Text("Delete")}},
             dismissButton={TextButton(onClick={delete=null}){Text("Cancel")}})
     }
