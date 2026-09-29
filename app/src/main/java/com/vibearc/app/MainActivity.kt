@@ -112,7 +112,10 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -230,28 +233,41 @@ private fun VibeArcApp(
     var player by remember { mutableStateOf<Player?>(null) }
     val uiScope = rememberCoroutineScope()
     val authorizationClient = remember(context) { Identity.getAuthorizationClient(context) }
+    val cachedYouTubeState = remember { context.loadYouTubeAccountState() }
     var youtubeAccountData by remember { mutableStateOf<YouTubeAccountData?>(null) }
-    var youtubeAccountBusy by remember { mutableStateOf(false) }
+    var youtubeAccountBusy by remember { mutableStateOf(cachedYouTubeState != null) }
     var youtubeAccessToken by remember { mutableStateOf<String?>(null) }
+    var youtubeSelectedPlaylistIds by remember {
+        mutableStateOf(cachedYouTubeState?.selectedPlaylistIds.orEmpty())
+    }
 
-    val loadYouTubeAccount: (String?) -> Unit = { accessToken ->
+    fun loadYouTubeAccount(accessToken: String?, announce: Boolean) {
         if (accessToken.isNullOrBlank()) {
             youtubeAccountBusy = false
-            android.widget.Toast.makeText(context, "Google did not provide YouTube access", android.widget.Toast.LENGTH_LONG).show()
+            if (announce) android.widget.Toast.makeText(context, "Google did not provide YouTube access", android.widget.Toast.LENGTH_LONG).show()
         } else uiScope.launch {
             val loaded = withContext(Dispatchers.IO) {
                 runCatching { YouTubeAccountApi.load(accessToken) }.getOrNull()
             }
             youtubeAccountBusy = false
             if (loaded == null) {
-                android.widget.Toast.makeText(context, "Could not load your YouTube account", android.widget.Toast.LENGTH_LONG).show()
+                if (announce) android.widget.Toast.makeText(context, "Could not load your YouTube account", android.widget.Toast.LENGTH_LONG).show()
             } else {
+                val saved = context.loadYouTubeAccountState()
+                youtubeSelectedPlaylistIds = saved?.selectedPlaylistIds
+                    ?.takeIf { saved.account.channelId == loaded.account.channelId }.orEmpty()
                 youtubeAccessToken = accessToken
                 youtubeAccountData = loaded
-                android.widget.Toast.makeText(context, "Connected ${loaded.account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
+                context.saveYouTubeAccountState(YouTubeAccountState(loaded.account, youtubeSelectedPlaylistIds))
+                if (announce) android.widget.Toast.makeText(context, "Connected ${loaded.account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
+
+    fun acceptYouTubeAuthorization(authorization: AuthorizationResult?, announce: Boolean) {
+        loadYouTubeAccount(authorization?.accessToken, announce)
+    }
+
     val youtubeAuthorizationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
@@ -262,9 +278,10 @@ private fun VibeArcApp(
         val authorization = runCatching {
             authorizationClient.getAuthorizationResultFromIntent(result.data)
         }.getOrNull()
-        loadYouTubeAccount(authorization?.accessToken)
+        acceptYouTubeAuthorization(authorization, announce = true)
     }
-    val connectYouTube: () -> Unit = {
+
+    fun requestYouTubeAuthorization(allowResolution: Boolean, announce: Boolean) {
         if (!youtubeAccountBusy) {
             youtubeAccountBusy = true
             val request = AuthorizationRequest.builder()
@@ -273,18 +290,47 @@ private fun VibeArcApp(
             authorizationClient.authorize(request)
                 .addOnSuccessListener { authorization ->
                     val resolution = authorization.pendingIntent
-                    if (authorization.hasResolution() && resolution != null) {
+                    if (allowResolution && authorization.hasResolution() && resolution != null) {
                         youtubeAuthorizationLauncher.launch(
                             IntentSenderRequest.Builder(resolution.intentSender).build(),
                         )
+                    } else if (authorization.hasResolution()) {
+                        youtubeAccountBusy = false
+                        youtubeAccountData = null
                     } else {
-                        loadYouTubeAccount(authorization.accessToken)
+                        acceptYouTubeAuthorization(authorization, announce)
                     }
                 }
                 .addOnFailureListener {
                     youtubeAccountBusy = false
-                    android.widget.Toast.makeText(context, "Could not connect your Google account", android.widget.Toast.LENGTH_LONG).show()
+                    if (announce) android.widget.Toast.makeText(context, "Could not connect your Google account", android.widget.Toast.LENGTH_LONG).show()
                 }
+        }
+    }
+    val connectYouTube: () -> Unit = { requestYouTubeAuthorization(allowResolution = true, announce = true) }
+
+    fun disconnectYouTube(reconnect: Boolean) {
+        if (youtubeAccountBusy) return
+        youtubeAccountBusy = true
+        GoogleSignIn.getClient(context, GoogleSignInOptions.DEFAULT_SIGN_IN).revokeAccess().addOnCompleteListener { task ->
+            youtubeAccessToken = null
+            youtubeAccountData = null
+            youtubeSelectedPlaylistIds = emptySet()
+            context.clearYouTubeAccountState()
+            youtubeAccountBusy = false
+            when {
+                reconnect && task.isSuccessful -> connectYouTube()
+                reconnect -> android.widget.Toast.makeText(context, "Could not revoke the current account; reconnect manually", android.widget.Toast.LENGTH_LONG).show()
+                task.isSuccessful -> android.widget.Toast.makeText(context, "YouTube account disconnected", android.widget.Toast.LENGTH_SHORT).show()
+                else -> android.widget.Toast.makeText(context, "Local account data removed; Google access could not be revoked", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    LaunchedEffect(cachedYouTubeState?.account?.channelId) {
+        if (cachedYouTubeState != null) {
+            youtubeAccountBusy = false
+            requestYouTubeAuthorization(allowResolution = false, announce = false)
         }
     }
 
@@ -636,7 +682,20 @@ private fun VibeArcApp(
                 padding, appearance, onAppearanceChange,
                 youtubeAccountData = youtubeAccountData,
                 youtubeAccountBusy = youtubeAccountBusy,
+                youtubeSelectedPlaylistIds = youtubeSelectedPlaylistIds,
                 onConnectYouTube = connectYouTube,
+                onDisconnectYouTube = { disconnectYouTube(reconnect = false) },
+                onSwitchYouTubeAccount = { disconnectYouTube(reconnect = true) },
+                onToggleYouTubePlaylistSync = { playlistId ->
+                    youtubeSelectedPlaylistIds = if (playlistId in youtubeSelectedPlaylistIds) {
+                        youtubeSelectedPlaylistIds - playlistId
+                    } else {
+                        youtubeSelectedPlaylistIds + playlistId
+                    }
+                    youtubeAccountData?.account?.let { account ->
+                        context.saveYouTubeAccountState(YouTubeAccountState(account, youtubeSelectedPlaylistIds))
+                    }
+                },
                 onImportYouTubePlaylist = importYouTubePlaylist,
                 onDownloads = { navigate(Tab.Downloads) },
                 onBackup = { backupWriter.launch("VibeArc-backup.json") },

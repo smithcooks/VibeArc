@@ -40,6 +40,57 @@
 - [ ] Keep offline downloads, DRM/ad bypasses, geographic bypasses, and credential capture out of scope.
 - [ ] Do not call the provider stack production-ready or ship it to Google Play without written permission or a sanctioned replacement.
 
+## v0.9 connected library
+
+### Slice 1: safe account continuity
+
+- [x] Bump the app to v0.9 and keep v0.8 release files untouched.
+- [x] Persist the connected YouTube account summary without persisting OAuth access tokens.
+- [x] Reacquire an authorized token through Google Play services on launch.
+- [x] Add disconnect and account switching; clear cached account data and sync selections on disconnect.
+- [x] Persist per-playlist sync selections and expose them in Settings.
+
+### Checkpoint
+
+- [x] Account/session and selection unit tests pass.
+- [x] Debug APK builds; cached state contains only account display data and selected playlist IDs.
+
+### Slice 2: playlist synchronization
+
+- [ ] Add a read-only local/remote playlist diff with explicit conflict states.
+- [ ] Add opt-in official YouTube playlist/item writes using `youtube.force-ssl`.
+- [ ] Confirm destructive remote deletes and never silently overwrite conflicts.
+- [ ] Add bounded foreground sync, cancellation, timeouts, and useful failure messages.
+- [ ] Add scheduled sync only after foreground sync is proven reliable.
+
+### Slice 3: Last.fm
+
+- [ ] Load the Last.fm API key from local/CI configuration, never source control.
+- [ ] Add public listening statistics and recommendation/radio data.
+- [ ] Choose a server-side signing design before browser auth, Now Playing, or scrobbling; never embed the shared secret or collect a password.
+
+### Slice 4: compliant downloads and quality
+
+- [ ] Add folder selection, progress, cancellation, retry, cleanup, and storage reporting for local or explicitly licensed direct-download sources.
+- [ ] Export legitimately retrieved synchronized lyrics as `.lrc`.
+- [ ] Report real source format/bitrate; do not advertise unavailable lossless tiers.
+- [ ] Keep YouTube media downloading/audio extraction excluded without written approval.
+
+### Slice 5: playback and discovery
+
+- [ ] Add crossfade and built-in EQ only where Media3/device support is measurable and stable.
+- [ ] Add word-timed lyrics when provider data contains word timestamps; retain line timing fallback.
+- [ ] Build recommendations, radio, releases, and generator from connected official data sources.
+- [ ] Keep bit-perfect, Hi-Res, lossless, and Studio Master as capability reporting—not guarantees.
+
+### Slice 6: release
+
+- [ ] Add HTTPS update metadata checks and verify downloaded artifacts before install.
+- [ ] Publish privacy, copyright, attribution, and GPL notices.
+- [ ] Configure the user-owned production keystore and build the release AAB.
+- [ ] Complete the security review and YouTube OAuth/API compliance process.
+- [ ] Publish tested v0.9 source and artifacts to GitHub.
+
 ## v0.8 Liquid build
 
 The 27 September screenshot UI request supersedes the Liquid HTML styling. See `docs/UI_REFERENCE_REBUILD.md` for implemented layouts, functional limits and the outstanding phone comparison.

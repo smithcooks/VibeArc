@@ -70,15 +70,41 @@ not a stable or policy-compliant route to a Google Play production release.
 - Verify release signing, permissions, startup behavior, and performance on
   budget-class devices before publishing a v0.8 release.
 
-### v0.9 — Community beta and release decision
+### v0.9 — Connected library beta
 
-- Add contract fixtures, expiring-URL refresh, cancellation, timeouts, and
-  minimal provider health logging.
-- Test slow networks, no network, removed content, and fallback behavior.
-- Publish privacy, copyright, provider-attribution, and GPL notices.
-- Run device testing and community beta feedback.
-- Decide between an experimental open-source distribution and a sanctioned
-  provider suitable for stores.
+Build this as complete vertical slices, with a usable checkpoint after each
+slice instead of wiring every screen to unfinished services at once.
+
+1. Persist only the Google account summary and playlist-sync choices. Reacquire
+   short-lived OAuth tokens through Google Play services; never store raw tokens.
+   Add disconnect and account switching before adding any remote writes.
+2. Add per-playlist sync selection and a read-only sync preview. Add opt-in
+   remote writes only through the official YouTube Data API with the
+   `youtube.force-ssl` scope, destructive-change confirmation, and explicit
+   local/remote conflict handling.
+3. Add foreground sync first. Add scheduled sync only after foreground sync is
+   reliable, cancellable, bounded, and observable.
+4. Add Last.fm public statistics and recommendations when an API key is supplied
+   outside source control. Browser authentication, Now Playing, and scrobbling
+   require a server-side signing strategy; do not embed the Last.fm shared secret
+   in the APK or collect a Last.fm password.
+5. Add Storage Access Framework folder selection, progress, retry, cancellation,
+   and cleanup for user-owned local files or explicitly licensed direct-download
+   sources. YouTube audiovisual downloads, audio extraction, and offline copies
+   remain excluded without YouTube's prior written approval.
+6. Report the real format/bitrate exposed by each playable source. Do not label a
+   lossy source as FLAC, lossless, Hi-Res, bit-perfect, or Studio Master.
+7. Extend lyrics to word timestamps only when a licensed/provider response
+   contains them; keep line-synced LRC as the honest fallback and allow `.lrc`
+   export for lyrics VibeArc legitimately retrieved.
+8. Add update metadata checking and verified artifacts, then complete release
+   signing, AAB generation, security review, notices, and provider compliance.
+
+The official YouTube Data API supports playlist CRUD and playlist-item CRUD. It
+does not expose a supported endpoint for writing YouTube Music listening history,
+so history sync stays unavailable unless Google adds one. YouTube media downloads,
+isolated/background audio, and the current unofficial playback stack are not a
+Play Store production path.
 
 ### v1.0 — Conditional production release
 

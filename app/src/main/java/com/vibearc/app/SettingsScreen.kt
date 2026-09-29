@@ -34,7 +34,11 @@ internal fun SettingsScreen(
     padding: PaddingValues, appearance: AppearanceConfig,
     onAppearanceChange: (AppearanceConfig) -> Unit, onDownloads: () -> Unit,
     youtubeAccountData: YouTubeAccountData?, youtubeAccountBusy: Boolean,
-    onConnectYouTube: () -> Unit, onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
+    youtubeSelectedPlaylistIds: Set<String>,
+    onConnectYouTube: () -> Unit, onDisconnectYouTube: () -> Unit,
+    onSwitchYouTubeAccount: () -> Unit,
+    onToggleYouTubePlaylistSync: (String) -> Unit,
+    onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
 ) {
@@ -51,9 +55,9 @@ internal fun SettingsScreen(
     LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=22.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
         item { ReferenceRow("VibeArc","Local listening profile","account",onClick={unavailable("Your profile","Your library and appearance choices are stored on this device.")}) }
         item { SettingsHeading("YouTube Music") }
-        item { ReferenceRow("YouTube Music Account",when { youtubeAccountBusy -> "Connecting…"; youtubeAccountData != null -> youtubeAccountData.account.displayName; else -> "Tap to connect Google" },"account",0,6,enabled=!youtubeAccountBusy,onClick=onConnectYouTube) }
+        item { ReferenceRow("YouTube Music Account",when { youtubeAccountBusy -> "Connecting…"; youtubeAccountData != null -> youtubeAccountData.account.displayName; else -> "Tap to connect Google" },"account",0,6,enabled=!youtubeAccountBusy,onClick=if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Account"})) }
         item { ReferenceRow("Two-way Playlist Sync",if(youtubeAccountData == null) "Requires a connected account" else "Not enabled yet","playlist",1,6,onClick={syncInfo()}) }
-        item { ReferenceRow("Select Playlists to Sync",if(youtubeAccountData == null) "No account playlists available" else "${youtubeAccountData.playlists.size} playlists available","playlist",2,6,onClick={syncInfo()}) }
+        item { ReferenceRow("Select Playlists to Sync",when { youtubeAccountData == null -> "No account playlists available"; youtubeSelectedPlaylistIds.isEmpty() -> "None selected"; else -> "${youtubeSelectedPlaylistIds.size} selected" },"playlist",2,6,onClick=if(youtubeAccountData == null) onConnectYouTube else ({sheet="Sync Playlists"})) }
         item { ReferenceRow("YouTube Playlists Shown",if(youtubeAccountData == null) "No account connected" else "${youtubeAccountData.playlists.size} account playlists","album",3,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }
         item { ReferenceRow("Make YouTube Playlists Local",if(youtubeAccountData == null) "Connect an account first" else "Choose a playlist to import","playlist",4,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }
         item { ReferenceRow("Sync Playback to YouTube Music History","Not enabled yet","clock",5,6,onClick={syncInfo()}) }
@@ -149,7 +153,7 @@ internal fun SettingsScreen(
                 Column(Modifier.fillMaxWidth().padding(28.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.vibearc_icon),"VibeArc icon",Modifier.size(76.dp).clip(RoundedCornerShape(20.dp)))
                     Text("VibeArc",style=MaterialTheme.typography.displaySmall)
-                    Surface(shape=CircleShape,color=MaterialTheme.colorScheme.primaryContainer) { Text("Version 0.8.0",Modifier.padding(horizontal=18.dp,vertical=6.dp),fontWeight=FontWeight.Bold) }
+                    Surface(shape=CircleShape,color=MaterialTheme.colorScheme.primaryContainer) { Text("Version 0.9.0 beta",Modifier.padding(horizontal=18.dp,vertical=6.dp),fontWeight=FontWeight.Bold) }
                     Text("Your music, your space",color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -169,6 +173,20 @@ internal fun SettingsScreen(
                     }
                 }
                 when(title) {
+                    "YouTube Account" -> {
+                        item { Text(youtubeAccountData?.account?.displayName.orEmpty(),style=MaterialTheme.typography.titleLarge) }
+                        item { ReferenceRow("Switch account","Choose another Google account","account",0,2,onClick={sheet=null;onSwitchYouTubeAccount()}) }
+                        item { ReferenceRow("Disconnect","Remove VibeArc's YouTube access","delete",1,2,onClick={sheet=null;onDisconnectYouTube()}) }
+                    }
+                    "Sync Playlists" -> {
+                        item { Text("Choose the playlists v0.9 may compare for synchronization. Selecting a playlist does not modify YouTube yet.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if (youtubeAccountData?.playlists.isNullOrEmpty()) item {
+                            Text("This account has no visible playlists.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else items(youtubeAccountData!!.playlists.size) { index ->
+                            val playlist=youtubeAccountData.playlists[index]
+                            ReferenceRow(playlist.title,"${playlist.itemCount} tracks","playlist",index,youtubeAccountData.playlists.size,playlist.id in youtubeSelectedPlaylistIds,onClick={onToggleYouTubePlaylistSync(playlist.id)})
+                        }
+                    }
                     "Streaming Quality" -> {
                         item { Text("Select your preferred stream. Actual bitrate and format depend on the track and the available source.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         item { QualityChoice("Max Quality","Highest available","Select the highest-bitrate playable audio source.",highestQuality) { highestQuality=true;context.saveHighestAudioQuality(true) } }

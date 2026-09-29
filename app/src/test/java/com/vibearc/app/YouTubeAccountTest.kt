@@ -5,6 +5,24 @@ import org.junit.Test
 
 class YouTubeAccountTest {
     @Test
+    fun `cached account state round trips without credentials`() {
+        val state = YouTubeAccountState(
+            account = YouTubeAccount("channel-1", "Smith", "https://img.example/avatar.jpg"),
+            selectedPlaylistIds = setOf("playlist-b", "playlist-a"),
+        )
+
+        val encoded = YouTubeAccountStateCodec.encode(state)
+
+        assertEquals(state, YouTubeAccountStateCodec.decode(encoded))
+        assertEquals(false, encoded.contains("access_token"))
+    }
+
+    @Test
+    fun `cached account state rejects damaged data`() {
+        assertEquals(null, YouTubeAccountStateCodec.decode("not-a-state"))
+    }
+
+    @Test
     fun `account response maps channel identity`() {
         val response = """
             {"items":[{"id":"channel-1","snippet":{"title":"Smith","thumbnails":{"high":{"url":"https://img.example/avatar.jpg"}}}}]}

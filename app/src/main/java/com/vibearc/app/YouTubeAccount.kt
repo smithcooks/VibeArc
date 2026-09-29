@@ -1,10 +1,13 @@
 package com.vibearc.app
 
+import android.content.Context
 import com.grack.nanojson.JsonObject
 import com.grack.nanojson.JsonParser
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.Base64
 
 internal data class YouTubeAccount(
     val channelId: String,
@@ -33,6 +36,48 @@ internal data class YouTubeAccountData(
     val account: YouTubeAccount,
     val playlists: List<YouTubePlaylist>,
 )
+
+internal data class YouTubeAccountState(
+    val account: YouTubeAccount,
+    val selectedPlaylistIds: Set<String> = emptySet(),
+)
+
+internal object YouTubeAccountStateCodec {
+    private val encoder = Base64.getUrlEncoder().withoutPadding()
+    private val decoder = Base64.getUrlDecoder()
+
+    fun encode(state: YouTubeAccountState): String = (
+        listOf(state.account.channelId, state.account.displayName, state.account.artworkUrl) +
+            state.selectedPlaylistIds.filter(String::isNotBlank).distinct().sorted()
+        ).joinToString("\n") { encoder.encodeToString(it.toByteArray(UTF_8)) }
+
+    fun decode(value: String): YouTubeAccountState? = runCatching {
+        val fields = value.lineSequence().filter(String::isNotBlank)
+            .map { String(decoder.decode(it), UTF_8) }.toList()
+        require(fields.size >= 3 && fields[0].isNotBlank() && fields[1].isNotBlank())
+        YouTubeAccountState(
+            YouTubeAccount(fields[0], fields[1], fields[2]),
+            fields.drop(3).filter(String::isNotBlank).toSet(),
+        )
+    }.getOrNull()
+}
+
+private const val YouTubeAccountPreferences = "youtube_account"
+private const val YouTubeAccountStateKey = "state"
+
+internal fun Context.loadYouTubeAccountState(): YouTubeAccountState? = YouTubeAccountStateCodec.decode(
+    getSharedPreferences(YouTubeAccountPreferences, Context.MODE_PRIVATE)
+        .getString(YouTubeAccountStateKey, "").orEmpty(),
+)
+
+internal fun Context.saveYouTubeAccountState(state: YouTubeAccountState) {
+    getSharedPreferences(YouTubeAccountPreferences, Context.MODE_PRIVATE).edit()
+        .putString(YouTubeAccountStateKey, YouTubeAccountStateCodec.encode(state)).apply()
+}
+
+internal fun Context.clearYouTubeAccountState() {
+    getSharedPreferences(YouTubeAccountPreferences, Context.MODE_PRIVATE).edit().clear().apply()
+}
 
 internal fun parseYouTubeAccount(json: String): YouTubeAccount {
     val item = parseRoot(json).getArray("items").firstOrNull() as? JsonObject
