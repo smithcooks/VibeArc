@@ -28,4 +28,14 @@ class LastFmTest {
         assertNull(validLastFmUsername("bad\nname"))
         assertNull(validLastFmUsername("x".repeat(65)))
     }
+
+    @Test
+    fun `similar track responses become playable search suggestions`() {
+        val json = """{"similartracks":{"track":[{"name":"Let It Happen","artist":{"name":"Tame Impala"},"match":"0.91","image":[{"#text":"http://img/let-it-happen","size":"large"}]},{"name":"","artist":{"name":"Unknown"}}]}}"""
+
+        assertEquals(
+            listOf(LastFmTrack("Let It Happen", "Tame Impala", artworkUrl = "https://img/let-it-happen")),
+            parseLastFmSimilarTracks(json),
+        )
+    }
 }

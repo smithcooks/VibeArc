@@ -243,6 +243,8 @@ private fun VibeArcApp(
     }
     var lastFmUsername by remember { mutableStateOf(context.loadLastFmUsername()) }
     var lastFmSnapshot by remember { mutableStateOf<LastFmSnapshot?>(null) }
+    var lastFmRecommendations by remember { mutableStateOf<List<LastFmTrack>>(emptyList()) }
+    var lastFmRecommendationsBusy by remember { mutableStateOf(false) }
     var lastFmBusy by remember { mutableStateOf(false) }
     var lastFmError by remember { mutableStateOf<String?>(null) }
     var lastFmRefresh by remember { mutableIntStateOf(0) }
@@ -259,6 +261,7 @@ private fun VibeArcApp(
             runCatching { LastFmApi.load(username, BuildConfig.LASTFM_API_KEY) }
         }
         lastFmSnapshot = loaded.getOrNull()
+        lastFmRecommendations = emptyList()
         lastFmError = loaded.exceptionOrNull()?.let { "Could not load the Last.fm profile." }
         lastFmBusy = false
     }
@@ -271,6 +274,7 @@ private fun VibeArcApp(
             context.saveLastFmUsername(username)
             lastFmUsername = username
             lastFmSnapshot = null
+            lastFmRecommendations = emptyList()
             lastFmRefresh++
         }
     }
@@ -278,6 +282,7 @@ private fun VibeArcApp(
         context.saveLastFmUsername(null)
         lastFmUsername = null
         lastFmSnapshot = null
+        lastFmRecommendations = emptyList()
         lastFmError = null
     }
 
@@ -393,6 +398,16 @@ private fun VibeArcApp(
     var library by remember { mutableStateOf(context.loadLibrary()) }
     var playlists by remember { mutableStateOf(context.loadPlaylists()) }
     var recentUris by remember { mutableStateOf(context.loadRecentUris()) }
+
+    LaunchedEffect(currentTab, lastFmSnapshot) {
+        if (currentTab != Tab.Discover || lastFmRecommendations.isNotEmpty()) return@LaunchedEffect
+        val seed = lastFmSnapshot?.topTracks?.firstOrNull() ?: return@LaunchedEffect
+        lastFmRecommendationsBusy = true
+        lastFmRecommendations = withContext(Dispatchers.IO) {
+            runCatching { LastFmApi.similarTracks(seed, BuildConfig.LASTFM_API_KEY) }.getOrDefault(emptyList())
+        }
+        lastFmRecommendationsBusy = false
+    }
     var searchSeed by remember { mutableStateOf("") }
     var currentTrack by remember { mutableStateOf<Track?>(null) }
     var artworkAccentArgb by remember(currentTrack?.uri) { mutableStateOf<Long?>(null) }
@@ -793,10 +808,12 @@ private fun VibeArcApp(
                 onPlay = { track -> playTrack(track, recentTracks) },
                 onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
             )
-            Tab.Discover -> DiscoverScreen(padding, library, { track -> playTrack(track, library) }) { query ->
-                searchSeed = query
-                navigate(Tab.Search)
-            }
+            Tab.Discover -> DiscoverScreen(
+                padding, library, lastFmSnapshot?.topTracks?.firstOrNull(),
+                lastFmRecommendations, lastFmRecommendationsBusy,
+                onPlay = { track -> playTrack(track, library) },
+                onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
+            )
             Tab.Generator -> GeneratorScreen(padding) { query ->
                 searchSeed = query
                 navigate(Tab.Search)

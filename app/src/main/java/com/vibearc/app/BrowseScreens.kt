@@ -457,9 +457,20 @@ private fun PlaylistTile(title:String,subtitle:String,track:Track?,index:Int,cou
 }
 
 @Composable
-internal fun DiscoverScreen(padding:PaddingValues,tracks:List<Track>,onPlay:(Track)->Unit,onSearch:(String)->Unit) {
+internal fun DiscoverScreen(
+    padding:PaddingValues, tracks:List<Track>, lastFmSeed:LastFmTrack?,
+    lastFmRecommendations:List<LastFmTrack>, lastFmBusy:Boolean,
+    onPlay:(Track)->Unit, onSearch:(String)->Unit,
+) {
     LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-        item { Text("Rediscover your library",color=MutedText,modifier=Modifier.padding(bottom=12.dp)) }
+        if(lastFmSeed != null) {
+            item { SectionTitle("Last.fm radio · ${lastFmSeed.artist}") }
+            if(lastFmBusy) item { CircularProgressIndicator(Modifier.padding(18.dp).size(24.dp),strokeWidth=3.dp) }
+            items(lastFmRecommendations) { track ->
+                ReferenceRow(track.title,track.artist,"spark",onClick={onSearch("${track.artist} ${track.title}")})
+            }
+            item { SectionTitle("Rediscover your library") }
+        } else item { Text("Rediscover your library",color=MutedText,modifier=Modifier.padding(bottom=12.dp)) }
         if(tracks.isEmpty()) item { ReferenceRow("Explore music","Search genres and moods on YouTube Music","discover",onClick={onSearch("")}) }
         items(tracks,key=Track::uri) { TrackRow(it,{onPlay(it)}) }
         item { TextButton(onClick={onSearch("")}) { Text("Find more music") } }

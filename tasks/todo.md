@@ -68,7 +68,7 @@
 
 - [x] Load the Last.fm API key from local/CI configuration, never source control.
 - [x] Add public profile, listening statistics, top tracks, and recent tracks.
-- [ ] Add Last.fm recommendation/radio data.
+- [x] Add Last.fm track-radio recommendations to Discover.
 - [ ] Choose a server-side signing design before browser auth, Now Playing, or scrobbling; never embed the shared secret or collect a password.
 
 ### Slice 4: compliant downloads and quality

@@ -78,6 +78,19 @@ internal fun parseLastFmSnapshot(infoJson: String, topJson: String, recentJson: 
     return LastFmSnapshot(profile, topTracks.take(20), recentTracks.take(20))
 }
 
+internal fun parseLastFmSimilarTracks(value: String): List<LastFmTrack> =
+    parseLastFmRoot(value).getObject("similartracks").getArray("track")
+        .mapNotNull { it as? JsonObject }
+        .mapNotNull { track ->
+            val title = track.getString("name", "")
+            val artist = track.getObject("artist").getString("name", "")
+            if (title.isBlank() || artist.isBlank()) null else LastFmTrack(
+                title = title,
+                artist = artist,
+                artworkUrl = track.imageUrl(),
+            )
+        }.take(20)
+
 private fun parseLastFmRoot(value: String): JsonObject = JsonParser.`object`().from(value).also { root ->
     root["error"]?.let { error("Last.fm request failed ($it)") }
 }
@@ -100,16 +113,29 @@ internal object LastFmApi {
         val user = requireNotNull(validLastFmUsername(username)) { "Invalid Last.fm username" }
         require(apiKey.isNotBlank()) { "Last.fm API key is not configured" }
         return parseLastFmSnapshot(
-            get("user.getInfo", user, apiKey),
-            get("user.getTopTracks", user, apiKey, "limit" to "20", "period" to "overall"),
-            get("user.getRecentTracks", user, apiKey, "limit" to "20", "extended" to "0"),
+            get("user.getInfo", apiKey, "user" to user),
+            get("user.getTopTracks", apiKey, "user" to user, "limit" to "20", "period" to "overall"),
+            get("user.getRecentTracks", apiKey, "user" to user, "limit" to "20", "extended" to "0"),
         )
     }
 
-    private fun get(method: String, username: String, apiKey: String, vararg extras: Pair<String, String>): String {
+    fun similarTracks(seed: LastFmTrack, apiKey: String): List<LastFmTrack> {
+        // https://www.last.fm/api/show/track.getSimilar
+        require(apiKey.isNotBlank()) { "Last.fm API key is not configured" }
+        require(seed.artist.isNotBlank() && seed.title.isNotBlank()) { "A track and artist are required" }
+        return parseLastFmSimilarTracks(get(
+            "track.getSimilar",
+            apiKey,
+            "artist" to seed.artist.take(256),
+            "track" to seed.title.take(256),
+            "autocorrect" to "1",
+            "limit" to "20",
+        ))
+    }
+
+    private fun get(method: String, apiKey: String, vararg extras: Pair<String, String>): String {
         val parameters = listOf(
             "method" to method,
-            "user" to username,
             "api_key" to apiKey,
             "format" to "json",
         ) + extras
