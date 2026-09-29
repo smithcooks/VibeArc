@@ -33,11 +33,12 @@ import androidx.compose.ui.unit.dp
 internal fun SettingsScreen(
     padding: PaddingValues, appearance: AppearanceConfig,
     onAppearanceChange: (AppearanceConfig) -> Unit, onDownloads: () -> Unit,
-    youtubeAccountData: YouTubeAccountData?, youtubeAccountBusy: Boolean,
+    youtubeAccountData: YouTubeAccountData?, youtubeAccountBusy: Boolean, youtubeSyncBusy: Boolean,
     youtubeSelectedPlaylistIds: Set<String>,
     onConnectYouTube: () -> Unit, onDisconnectYouTube: () -> Unit,
     onSwitchYouTubeAccount: () -> Unit,
     onToggleYouTubePlaylistSync: (String) -> Unit,
+    onPullSelectedYouTubePlaylists: () -> Unit,
     onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
@@ -56,7 +57,7 @@ internal fun SettingsScreen(
         item { ReferenceRow("VibeArc","Local listening profile","account",onClick={unavailable("Your profile","Your library and appearance choices are stored on this device.")}) }
         item { SettingsHeading("YouTube Music") }
         item { ReferenceRow("YouTube Music Account",when { youtubeAccountBusy -> "Connecting…"; youtubeAccountData != null -> youtubeAccountData.account.displayName; else -> "Tap to connect Google" },"account",0,6,enabled=!youtubeAccountBusy,onClick=if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Account"})) }
-        item { ReferenceRow("Two-way Playlist Sync",if(youtubeAccountData == null) "Requires a connected account" else "Not enabled yet","playlist",1,6,onClick={syncInfo()}) }
+        item { ReferenceRow("Playlist Sync",when { youtubeAccountData == null -> "Requires a connected account"; youtubeSyncBusy -> "Pulling selected playlists…"; youtubeSelectedPlaylistIds.isEmpty() -> "Select playlists first"; else -> "Pull ${youtubeSelectedPlaylistIds.size} selected · remote writes not enabled" },"playlist",1,6,enabled=!youtubeSyncBusy,onClick=if(youtubeAccountData == null) onConnectYouTube else onPullSelectedYouTubePlaylists) }
         item { ReferenceRow("Select Playlists to Sync",when { youtubeAccountData == null -> "No account playlists available"; youtubeSelectedPlaylistIds.isEmpty() -> "None selected"; else -> "${youtubeSelectedPlaylistIds.size} selected" },"playlist",2,6,onClick=if(youtubeAccountData == null) onConnectYouTube else ({sheet="Sync Playlists"})) }
         item { ReferenceRow("YouTube Playlists Shown",if(youtubeAccountData == null) "No account connected" else "${youtubeAccountData.playlists.size} account playlists","album",3,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }
         item { ReferenceRow("Make YouTube Playlists Local",if(youtubeAccountData == null) "Connect an account first" else "Choose a playlist to import","playlist",4,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }

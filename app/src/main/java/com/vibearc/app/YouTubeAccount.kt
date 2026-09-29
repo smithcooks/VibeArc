@@ -4,7 +4,9 @@ import android.content.Context
 import com.grack.nanojson.JsonObject
 import com.grack.nanojson.JsonParser
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
@@ -41,6 +43,37 @@ internal data class YouTubeAccountState(
     val account: YouTubeAccount,
     val selectedPlaylistIds: Set<String> = emptySet(),
 )
+
+internal data class YouTubePlaylistDiff(
+    val remoteOnlyTracks: List<Track>,
+    val localOnlyVideoIds: List<String>,
+    val unsupportedLocalUris: List<String>,
+)
+
+internal fun previewYouTubePlaylistSync(
+    localTrackUris: List<String>,
+    remoteTracks: List<Track>,
+): YouTubePlaylistDiff {
+    val localVideoIds = localTrackUris.mapNotNull(::youtubeVideoId).distinct()
+    val remoteVideoIds = remoteTracks.mapNotNull { youtubeVideoId(it.uri) }.toSet()
+    return YouTubePlaylistDiff(
+        remoteOnlyTracks = remoteTracks.filter { track ->
+            youtubeVideoId(track.uri)?.let { it !in localVideoIds } == true
+        }.distinctBy(Track::uri),
+        localOnlyVideoIds = localVideoIds.filterNot(remoteVideoIds::contains),
+        unsupportedLocalUris = localTrackUris.filter { youtubeVideoId(it) == null }.distinct(),
+    )
+}
+
+private fun youtubeVideoId(value: String): String? = runCatching {
+    val uri = URI(value)
+    require(uri.scheme == "https" && uri.host in setOf("music.youtube.com", "www.youtube.com", "youtube.com"))
+    uri.rawQuery.orEmpty().split('&').firstNotNullOfOrNull { part ->
+        val fields = part.split('=', limit = 2)
+        if (fields.firstOrNull() == "v") URLDecoder.decode(fields.getOrNull(1).orEmpty(), UTF_8.name())
+            .takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,64}")) } else null
+    }
+}.getOrNull()
 
 internal object YouTubeAccountStateCodec {
     private val encoder = Base64.getUrlEncoder().withoutPadding()

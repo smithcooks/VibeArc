@@ -23,6 +23,30 @@ class YouTubeAccountTest {
     }
 
     @Test
+    fun `playlist diff separates pull push and unsupported local tracks`() {
+        val remote = listOf(
+            Track("Shared", "Artist", "Mix", "https://music.youtube.com/watch?v=shared"),
+            Track("Remote", "Artist", "Mix", "https://music.youtube.com/watch?v=remote"),
+        )
+
+        assertEquals(
+            YouTubePlaylistDiff(
+                remoteOnlyTracks = listOf(remote[1]),
+                localOnlyVideoIds = listOf("local"),
+                unsupportedLocalUris = listOf("content://music/device-only"),
+            ),
+            previewYouTubePlaylistSync(
+                listOf(
+                    "https://music.youtube.com/watch?v=shared",
+                    "https://www.youtube.com/watch?v=local&list=mix",
+                    "content://music/device-only",
+                ),
+                remote,
+            ),
+        )
+    }
+
+    @Test
     fun `account response maps channel identity`() {
         val response = """
             {"items":[{"id":"channel-1","snippet":{"title":"Smith","thumbnails":{"high":{"url":"https://img.example/avatar.jpg"}}}}]}

@@ -236,6 +236,7 @@ private fun VibeArcApp(
     val cachedYouTubeState = remember { context.loadYouTubeAccountState() }
     var youtubeAccountData by remember { mutableStateOf<YouTubeAccountData?>(null) }
     var youtubeAccountBusy by remember { mutableStateOf(cachedYouTubeState != null) }
+    var youtubeSyncBusy by remember { mutableStateOf(false) }
     var youtubeAccessToken by remember { mutableStateOf<String?>(null) }
     var youtubeSelectedPlaylistIds by remember {
         mutableStateOf(cachedYouTubeState?.selectedPlaylistIds.orEmpty())
@@ -541,6 +542,16 @@ private fun VibeArcApp(
         playlists = next.also(context::savePlaylists)
     }
     val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
+    fun mergeYouTubePlaylist(remotePlaylist: YouTubePlaylist, remoteTracks: List<Track>): Int {
+        val id = "youtube:${remotePlaylist.id}"
+        val currentUris = playlists.firstOrNull { it.id == id }?.trackUris.orEmpty()
+        val diff = previewYouTubePlaylistSync(currentUris, remoteTracks)
+        library = remoteTracks.fold(library) { current, track -> current.upsert(track) }.also(context::saveLibrary)
+        val localPlaylist = Playlist(id, remotePlaylist.title, (currentUris + remoteTracks.map(Track::uri)).distinct())
+        playlists = (playlists.filterNot { it.id == id } + localPlaylist).also(context::savePlaylists)
+        return diff.remoteOnlyTracks.size
+    }
+
     val importYouTubePlaylist: (YouTubePlaylist) -> Unit = { remotePlaylist ->
         val accessToken = youtubeAccessToken
         if (accessToken == null) {
@@ -553,16 +564,37 @@ private fun VibeArcApp(
                 importedTracks == null -> android.widget.Toast.makeText(context, "Could not import this playlist", android.widget.Toast.LENGTH_LONG).show()
                 importedTracks.isEmpty() -> android.widget.Toast.makeText(context, "This playlist has no available tracks", android.widget.Toast.LENGTH_LONG).show()
                 else -> {
-                    library = importedTracks.fold(library) { current, track -> current.upsert(track) }.also(context::saveLibrary)
-                    val localPlaylist = Playlist(
-                        id = "youtube:${remotePlaylist.id}",
-                        name = remotePlaylist.title,
-                        trackUris = importedTracks.map(Track::uri),
-                    )
-                    playlists = (playlists.filterNot { it.id == localPlaylist.id } + localPlaylist).also(context::savePlaylists)
+                    mergeYouTubePlaylist(remotePlaylist, importedTracks)
                     android.widget.Toast.makeText(context, "Imported ${remotePlaylist.title}", android.widget.Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+    val pullSelectedYouTubePlaylists: () -> Unit = {
+        val accessToken = youtubeAccessToken
+        val selected = youtubeAccountData?.playlists.orEmpty()
+            .filter { it.id in youtubeSelectedPlaylistIds }
+        if (accessToken == null) {
+            android.widget.Toast.makeText(context, "Connect your YouTube account again", android.widget.Toast.LENGTH_LONG).show()
+        } else if (selected.isEmpty()) {
+            android.widget.Toast.makeText(context, "Select at least one playlist", android.widget.Toast.LENGTH_SHORT).show()
+        } else if (!youtubeSyncBusy) uiScope.launch {
+            youtubeSyncBusy = true
+            val loaded = withContext(Dispatchers.IO) {
+                selected.mapNotNull { playlist ->
+                    runCatching { YouTubeAccountApi.loadPlaylist(accessToken, playlist) }
+                        .getOrNull()?.let { playlist to it }
+                }
+            }
+            val added = loaded.sumOf { (playlist, tracks) -> mergeYouTubePlaylist(playlist, tracks) }
+            youtubeSyncBusy = false
+            val failures = selected.size - loaded.size
+            val message = buildString {
+                append("Pulled $added new track")
+                if (added != 1) append('s')
+                if (failures > 0) append(" · $failures playlist${if (failures == 1) "" else "s"} failed")
+            }
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -682,6 +714,7 @@ private fun VibeArcApp(
                 padding, appearance, onAppearanceChange,
                 youtubeAccountData = youtubeAccountData,
                 youtubeAccountBusy = youtubeAccountBusy,
+                youtubeSyncBusy = youtubeSyncBusy,
                 youtubeSelectedPlaylistIds = youtubeSelectedPlaylistIds,
                 onConnectYouTube = connectYouTube,
                 onDisconnectYouTube = { disconnectYouTube(reconnect = false) },
@@ -696,6 +729,7 @@ private fun VibeArcApp(
                         context.saveYouTubeAccountState(YouTubeAccountState(account, youtubeSelectedPlaylistIds))
                     }
                 },
+                onPullSelectedYouTubePlaylists = pullSelectedYouTubePlaylists,
                 onImportYouTubePlaylist = importYouTubePlaylist,
                 onDownloads = { navigate(Tab.Downloads) },
                 onBackup = { backupWriter.launch("VibeArc-backup.json") },
