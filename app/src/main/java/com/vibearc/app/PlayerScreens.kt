@@ -29,6 +29,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -205,6 +208,7 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
             Text(
                 when {
                     loading -> "LYRICS • LOADING"
+                    lyrics?.syncedLines?.any { it.words.isNotEmpty() } == true -> "WORD SYNC • ENHANCED LRC"
                     lyrics?.syncedLines?.isNotEmpty() == true -> "LINE SYNC • LRCLIB"
                     lyrics != null -> "LYRICS • LRCLIB"
                     else -> "LYRICS • UNAVAILABLE"
@@ -238,8 +242,19 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
                 ) {
                     items(lyrics!!.syncedLines.size) { index ->
                         val line = lyrics!!.syncedLines[index]
+                        val activeWord = if(index == activeLine) activeLyricWordIndex(line, position) else -1
+                        val animatedText = if(line.words.isEmpty()) null else buildAnnotatedString {
+                            line.words.forEachIndexed { wordIndex, word ->
+                                withStyle(SpanStyle(color = when {
+                                    index != activeLine -> MutedText.copy(alpha = .45f)
+                                    wordIndex == activeWord -> MaterialTheme.colorScheme.primary
+                                    wordIndex < activeWord -> MaterialTheme.colorScheme.onSurface
+                                    else -> MutedText.copy(alpha = .55f)
+                                })) { append(word.text) }
+                            }
+                        }
                         Text(
-                            line.text,
+                            animatedText ?: androidx.compose.ui.text.AnnotatedString(line.text),
                             color = if(index == activeLine) MaterialTheme.colorScheme.onSurface else MutedText.copy(alpha = .45f),
                             fontSize = if(index == activeLine) 28.sp else 23.sp,
                             lineHeight = 34.sp,

@@ -89,7 +89,7 @@
 ### Slice 5: playback and discovery
 
 - [ ] Add crossfade and built-in EQ only where Media3/device support is measurable and stable.
-- [ ] Add word-timed lyrics when provider data contains word timestamps; retain line timing fallback.
+- [x] Add enhanced-LRC word timing when provider data contains word timestamps; retain line timing fallback.
 - [ ] Build recommendations, radio, releases, and generator from connected official data sources.
 - [ ] Keep bit-perfect, Hi-Res, lossless, and Studio Master as capability reporting—not guarantees.
 

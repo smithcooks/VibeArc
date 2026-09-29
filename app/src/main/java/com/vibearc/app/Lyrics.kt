@@ -7,7 +7,8 @@ import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 
-internal data class LyricLine(val startMs: Long, val text: String)
+internal data class LyricWord(val startMs: Long, val text: String)
+internal data class LyricLine(val startMs: Long, val text: String, val words: List<LyricWord> = emptyList())
 
 internal data class LyricsDocument(
     val syncedLines: List<LyricLine>,
@@ -16,20 +17,35 @@ internal data class LyricsDocument(
 )
 
 private val LrcTimestamp = Regex("\\[(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?]")
+private val EnhancedLrcTimestamp = Regex("<(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?>")
+
+private fun MatchResult.timestampMs(): Long {
+    val minutes = groupValues[1].toLong()
+    val seconds = groupValues[2].toLong()
+    val millis = groupValues[3].padEnd(3, '0').take(3).toLongOrNull() ?: 0L
+    return (minutes * 60 + seconds) * 1_000 + millis
+}
 
 internal fun parseLrc(value: String): List<LyricLine> = value.lineSequence().flatMap { row ->
     val timestamps = LrcTimestamp.findAll(row).toList()
-    val text = row.substringAfterLast(']', "").trim()
+    val content = row.substringAfterLast(']', "")
+    val wordMatches = EnhancedLrcTimestamp.findAll(content).toList()
+    val words = wordMatches.mapIndexedNotNull { index, match ->
+        val end = wordMatches.getOrNull(index + 1)?.range?.first ?: content.length
+        content.substring(match.range.last + 1, end).takeIf(String::isNotBlank)
+            ?.let { LyricWord(match.timestampMs(), it) }
+    }
+    val text = EnhancedLrcTimestamp.replace(content, "").trim()
     if (timestamps.isEmpty() || text.isEmpty()) emptySequence() else timestamps.asSequence().map { match ->
-        val minutes = match.groupValues[1].toLong()
-        val seconds = match.groupValues[2].toLong()
-        val millis = match.groupValues[3].padEnd(3, '0').take(3).toLongOrNull() ?: 0L
-        LyricLine((minutes * 60 + seconds) * 1_000 + millis, text)
+        LyricLine(match.timestampMs(), text, words)
     }
 }.sortedBy(LyricLine::startMs).toList()
 
 internal fun activeLyricIndex(lines: List<LyricLine>, positionMs: Long): Int =
     lines.indexOfLast { it.startMs <= positionMs }
+
+internal fun activeLyricWordIndex(line: LyricLine, positionMs: Long): Int =
+    line.words.indexOfLast { it.startMs <= positionMs }
 
 internal fun encodeLrc(lines: List<LyricLine>): String = lines.sortedBy(LyricLine::startMs).joinToString("\n") { line ->
     val totalSeconds = line.startMs.coerceAtLeast(0L) / 1_000

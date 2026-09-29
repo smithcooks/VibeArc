@@ -28,6 +28,19 @@ class LyricsTest {
     }
 
     @Test
+    fun `enhanced LRC parser keeps word timestamps`() {
+        val line = parseLrc("[00:01.00]<00:01.00>Hello <00:01.50>world").single()
+
+        assertEquals("Hello world", line.text)
+        assertEquals(
+            listOf(LyricWord(1_000, "Hello "), LyricWord(1_500, "world")),
+            line.words,
+        )
+        assertEquals(0, activeLyricWordIndex(line, 1_200))
+        assertEquals(1, activeLyricWordIndex(line, 1_700))
+    }
+
+    @Test
     fun `lyrics response prefers synchronized lines`() {
         val json = """{"instrumental":false,"plainLyrics":"Plain","syncedLyrics":"[00:01.00]Synced"}"""
 
