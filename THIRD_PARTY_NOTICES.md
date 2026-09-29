@@ -1,15 +1,24 @@
 # Third-party notices
 
-VibeArc v0.8 uses
-[NewPipeExtractor v0.26.5](https://github.com/TeamNewPipe/NewPipeExtractor),
-licensed under the GNU General Public License version 3 or later.
+VibeArc uses AndroidX and Media3 components distributed under the Apache
+License 2.0, Google Play services subject to Google's applicable terms, and
+NewPipeExtractor, which is licensed under GPL-3.0-or-later. Distributing a build
+that includes NewPipeExtractor requires a GPL-compatible VibeArc source release
+and the corresponding source obligations to be met.
 
-VibeArc also uses AndroidX, Jetpack Compose, Media3, nanojson, and core-library
-desugaring components under their respective open-source licenses. Dependency
-versions are declared in `app/build.gradle.kts`.
+Network features access YouTube/YouTube Music, LRCLIB, Last.fm, and GitHub.
+Their names, artwork, metadata, lyrics, and other content remain subject to the
+respective service terms and rights holders. VibeArc does not grant rights to
+download or redistribute third-party media.
 
-Manrope and Space Grotesk are bundled under the SIL Open Font License 1.1.
-Their license texts are in the `licenses` directory.
+Authoritative project and service terms:
 
-The VibeArc source corresponding to each GitHub release is available from that
-release's source archive and Git tag.
+- https://github.com/TeamNewPipe/NewPipeExtractor
+- https://www.apache.org/licenses/LICENSE-2.0
+- https://developers.google.com/youtube/terms/developer-policies
+- https://www.youtube.com/static?template=terms
+- https://www.last.fm/api/tos
+- https://lrclib.net
+
+This is a release checklist notice, not legal advice. Preserve dependency
+license texts and complete a publisher review before public distribution.

@@ -150,6 +150,7 @@ internal fun SettingsScreen(
         item { SettingsHeading("App icon") }
         item { ReferenceRow("Launcher Icon",selectedIcon.label,"album",onClick={sheet="App icon"}) }
         item { SettingsHeading("About") }
+        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library and settings on this device, keeps OAuth tokens only in memory, and includes no analytics or ad SDK. Online features contact YouTube, LRCLIB, Last.fm, and GitHub. Full PRIVACY.md and THIRD_PARTY_NOTICES.md files are included with the source release.")}) }
         item { ReferenceRow("Updates & Support","VibeArc on GitHub","spark",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/Akumukage/VibeArc")))}}) }
         item {
             Spacer(Modifier.height(24.dp))

@@ -95,8 +95,9 @@
 
 ### Slice 6: release
 
-- [ ] Add HTTPS update metadata checks and verify downloaded artifacts before install.
-- [ ] Publish privacy, copyright, attribution, and GPL notices.
+- [x] Add automatic HTTPS update metadata checks with a fixed, validated GitHub release URL.
+- [x] Add privacy, provider-attribution, copyright-boundary, and GPL-obligation notices.
+- [ ] Verify downloaded artifacts before install; requires stable production signing and release hashes.
 - [ ] Configure the user-owned production keystore and build the release AAB.
 - [ ] Complete the security review and YouTube OAuth/API compliance process.
 - [ ] Publish tested v0.9 source and artifacts to GitHub.

@@ -259,6 +259,13 @@ private fun VibeArcApp(
     var lastFmBusy by remember { mutableStateOf(false) }
     var lastFmError by remember { mutableStateOf<String?>(null) }
     var lastFmRefresh by remember { mutableIntStateOf(0) }
+    var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+
+    LaunchedEffect(Unit) {
+        availableUpdate = withContext(Dispatchers.IO) {
+            runCatching { AppUpdateChecker.available(BuildConfig.VERSION_NAME) }.getOrNull()
+        }
+    }
 
     LaunchedEffect(lastFmUsername, lastFmRefresh) {
         val username = lastFmUsername ?: return@LaunchedEffect
@@ -999,6 +1006,20 @@ private fun VibeArcApp(
         },
         dismissButton = { TextButton(onClick = { confirmRemoteRemoval = false }) { Text("Cancel") } },
     )
+    availableUpdate?.let { update ->
+        AlertDialog(
+            onDismissRequest = { availableUpdate = null },
+            title = { Text("VibeArc ${update.version} is available") },
+            text = { Text("Open the verified VibeArc GitHub release page to review and install the update. In-app APK installation stays disabled until production signing is configured.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.pageUrl))) }
+                    availableUpdate = null
+                }) { Text("Open release") }
+            },
+            dismissButton = { TextButton(onClick = { availableUpdate = null }) { Text("Later") } },
+        )
+    }
     }
     }
 }
