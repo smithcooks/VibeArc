@@ -22,6 +22,9 @@ internal object ArtworkCache {
     }
     private val permits = Semaphore(2)
 
+    fun peek(uri: String, target: Int): Artwork? = cache.get("$uri@$target")
+        ?: cache.snapshot().entries.firstOrNull { (key) -> key.startsWith("$uri@") }?.value
+
     suspend fun load(uri: String, target: Int): Artwork? {
         val key = "$uri@$target"
         cache.get(key)?.let { return it }
@@ -38,11 +41,11 @@ internal object ArtworkCache {
     private fun fetch(value: String, target: Int): Artwork? = runCatching {
         val uri = Uri.parse(value)
         val bytes = if (uri.scheme == "https") {
-            val connection = URL(value).openConnection() as HttpURLConnection
+            val connection = URL(artworkUrlForTarget(value, target)).openConnection() as HttpURLConnection
             try {
                 connection.connectTimeout = 8_000
                 connection.readTimeout = 8_000
-                connection.setRequestProperty("User-Agent", "VibeArc/0.8")
+                connection.setRequestProperty("User-Agent", "VibeArc/0.9.0")
                 check(connection.responseCode in 200..299)
                 connection.inputStream.use { readBounded(it, 8 * 1024 * 1024) }
             } finally { connection.disconnect() }

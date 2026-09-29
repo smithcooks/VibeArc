@@ -3,6 +3,13 @@ package com.vibearc.app
 import java.io.InputStream
 import java.io.ByteArrayOutputStream
 
+private val GoogleArtworkDimensions = Regex("=w\\d+-h\\d+")
+
+internal fun artworkUrlForTarget(url: String, target: Int): String =
+    if ("googleusercontent.com" in url) {
+        url.replace(GoogleArtworkDimensions, "=w$target-h$target")
+    } else url
+
 internal fun artworkSampleSize(width: Int, height: Int, target: Int): Int {
     require(width > 0 && height > 0 && target > 0)
     var sample = 1

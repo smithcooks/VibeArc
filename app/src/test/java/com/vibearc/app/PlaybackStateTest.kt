@@ -20,6 +20,13 @@ class PlaybackStateTest {
     }
 
     @Test
+    fun `player and child screens keep separate back destinations`() {
+        assertEquals(Tab.Search, backDestination(Tab.Player, Tab.Home, Tab.Search))
+        assertEquals(Tab.Home, backDestination(Tab.Search, Tab.Home, Tab.Search))
+        assertEquals(Tab.Library, backDestination(Tab.Settings, Tab.Library, Tab.Search))
+    }
+
+    @Test
     fun `selected online track is added to the queue instead of falling back to demo`() {
         val local = Track("First Light", "Local artist", "Signals", "content://music/first-light")
         val online = Track("Ocean Eyes", "Billie Eilish", "YouTube Music", "https://audio.example/ocean")

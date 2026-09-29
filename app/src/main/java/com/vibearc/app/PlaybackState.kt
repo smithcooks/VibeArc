@@ -28,6 +28,9 @@ internal fun List<String>.recordRecentUri(uri: String): List<String> {
     return (listOf(uri) + filterNot { it == uri }).take(RecentLimit)
 }
 
+internal fun backDestination(current: Tab, lastMain: Tab, playerReturn: Tab): Tab =
+    playerReturnTab(if (current == Tab.Player) playerReturn else lastMain)
+
 internal object RecentUriCodec {
     private val encoder = Base64.getUrlEncoder().withoutPadding()
     private val decoder = Base64.getUrlDecoder()

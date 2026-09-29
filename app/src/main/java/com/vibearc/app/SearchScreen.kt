@@ -95,7 +95,7 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
         if (requestedQuery.isBlank() || category == "Playlists") {
             searching = false
         } else {
-            delay(600)
+            delay(250)
             searching = true
             hasSearched = true
             try {

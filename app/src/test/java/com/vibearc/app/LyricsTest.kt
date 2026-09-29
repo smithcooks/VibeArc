@@ -38,6 +38,25 @@ class LyricsTest {
     }
 
     @Test
+    fun `lyrics search selects matching cleaned metadata instead of the first result`() {
+        val response = """[
+            {"trackName":"Other","artistName":"Someone","duration":200,"instrumental":false,"plainLyrics":"Wrong","syncedLyrics":""},
+            {"trackName":"Loser","artistName":"Tame Impala","duration":232,"instrumental":false,"plainLyrics":"Right","syncedLyrics":"[00:01.00]Right"}
+        ]""".trimIndent()
+        val track = Track(
+            "Loser (Official Music Video)",
+            "Tame Impala - Topic",
+            "YouTube Music",
+            "https://example.com/loser",
+            durationMs = 232_000,
+        )
+
+        assertEquals("Loser", lyricsSearchTitle(track.title))
+        assertEquals("Tame Impala", lyricsSearchArtist(track.artist))
+        assertEquals("Right", parseLyricsSearchResponse(response, track)?.syncedLines?.single()?.text)
+    }
+
+    @Test
     fun `LRC export preserves millisecond timestamps`() {
         assertEquals(
             "[00:01.250]First\n[01:02.003]Second",

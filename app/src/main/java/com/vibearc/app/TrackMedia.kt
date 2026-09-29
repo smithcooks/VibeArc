@@ -8,8 +8,6 @@ import android.provider.OpenableColumns
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,14 +16,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
 import java.io.File
 
 @Composable
@@ -38,7 +33,11 @@ internal fun TrackArtwork(
 ) {
     val accentCallback by rememberUpdatedState(onAccent)
     var artwork by remember(track.artworkUri, sizePx) {
-        mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
+        mutableStateOf(
+            track.artworkUri.takeIf(String::isNotBlank)
+                ?.let { ArtworkCache.peek(it, sizePx) }
+                ?.bitmap?.asImageBitmap(),
+        )
     }
     LaunchedEffect(track.artworkUri, sizePx) {
         val loaded = track.artworkUri.takeIf(String::isNotBlank)?.let {
@@ -53,15 +52,7 @@ internal fun TrackArtwork(
             modifier = modifier.background(
                 Brush.linearGradient(listOf(Color(0xFF4A3426), Color(0xFF181513))),
             ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.vibearc_icon),
-                contentDescription = contentDescription,
-                modifier = Modifier.fillMaxSize().padding(8.dp),
-                contentScale = ContentScale.Fit,
-            )
-        }
+        )
     } else {
         Image(
             bitmap = loadedArtwork,

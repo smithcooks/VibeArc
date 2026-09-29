@@ -350,6 +350,7 @@ private fun VibeArcApp(
 
     var currentTab by remember { mutableStateOf(Tab.Home) }
     var lastContentTab by remember { mutableStateOf(Tab.Home) }
+    var playerBackTab by remember { mutableStateOf(Tab.Home) }
     var library by remember { mutableStateOf(context.loadLibrary()) }
     var playlists by remember { mutableStateOf(context.loadPlaylists()) }
     var recentUris by remember { mutableStateOf(context.loadRecentUris()) }
@@ -370,12 +371,14 @@ private fun VibeArcApp(
     var sleepRemainingMillis by remember { mutableLongStateOf(0L) }
 
     val openPlayer = {
-        if (currentTab != Tab.Player) lastContentTab = currentTab
+        if (currentTab != Tab.Player) playerBackTab = currentTab
         currentTab = Tab.Player
     }
-    val closePlayer = { currentTab = playerReturnTab(lastContentTab) }
-    BackHandler(enabled = currentTab == Tab.Player, onBack = closePlayer)
-    BackHandler(enabled = currentTab !in MainTabs && currentTab != Tab.Player) { currentTab = playerReturnTab(lastContentTab) }
+    val navigateBack = {
+        currentTab = backDestination(currentTab, lastContentTab, playerBackTab)
+    }
+    val closePlayer = navigateBack
+    BackHandler(enabled = currentTab !in MainTabs, onBack = navigateBack)
     val navigate: (Tab) -> Unit = { tab ->
         if (currentTab in MainTabs) lastContentTab = currentTab
         currentTab = tab
@@ -604,7 +607,7 @@ private fun VibeArcApp(
         topBar = {
             if (currentTab !in listOf(Tab.Player, Tab.Search, Tab.Library)) ReferenceHeader(
                 title = when(currentTab) { Tab.Home -> "Home"; Tab.Stats -> "Stats"; else -> currentTab.label },
-                onBack = if (currentTab !in MainTabs) ({ currentTab = playerReturnTab(lastContentTab) }) else null,
+                onBack = if (currentTab !in MainTabs) navigateBack else null,
             ) {
                 if (currentTab in MainTabs) {
                     RoundAction("Discover", { navigate(Tab.Discover) }) { Glyph("discover") }
@@ -665,7 +668,7 @@ private fun VibeArcApp(
                 onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
             )
             Tab.Search -> {
-                SearchScreen(padding, library, searchSeed, { currentTab = playerReturnTab(lastContentTab) }) { track -> playTrack(track, listOf(track)) }
+                SearchScreen(padding, library, searchSeed, navigateBack) { track -> playTrack(track, listOf(track)) }
             }
             Tab.Library -> LibraryScreen(
                 padding = padding,

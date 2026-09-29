@@ -16,4 +16,11 @@ class ArtworkSizingTest {
             readBounded(byteArrayOf(1, 2, 3).inputStream(), 2)
         }
     }
+    @Test fun googleArtworkMatchesItsDisplayTarget() {
+        assertEquals(
+            "https://lh3.googleusercontent.com/cover=w160-h160-l90-rj",
+            artworkUrlForTarget("https://lh3.googleusercontent.com/cover=w1024-h1024-l90-rj", 160),
+        )
+        assertEquals("https://example.com/cover.jpg", artworkUrlForTarget("https://example.com/cover.jpg", 160))
+    }
 }
