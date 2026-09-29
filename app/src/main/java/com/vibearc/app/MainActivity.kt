@@ -138,7 +138,14 @@ private val BodyFont = FontFamily(
 )
 private val DisplayFont = BodyFont
 private const val MaxBackupBytes = 8 * 1024 * 1024
-private const val YouTubeReadOnlyScope = "https://www.googleapis.com/auth/youtube.readonly"
+private const val YouTubeWriteScope = "https://www.googleapis.com/auth/youtube.force-ssl"
+
+private data class YouTubeSyncPreview(
+    val playlist: YouTubePlaylist,
+    val remoteItems: List<YouTubePlaylistItem>,
+    val plan: YouTubePlaylistSyncPlan,
+    val hasLocalPlaylist: Boolean,
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -237,6 +244,8 @@ private fun VibeArcApp(
     var youtubeAccountData by remember { mutableStateOf<YouTubeAccountData?>(null) }
     var youtubeAccountBusy by remember { mutableStateOf(cachedYouTubeState != null) }
     var youtubeSyncBusy by remember { mutableStateOf(false) }
+    var youtubeSyncPreview by remember { mutableStateOf<List<YouTubeSyncPreview>?>(null) }
+    var confirmRemoteRemoval by remember { mutableStateOf(false) }
     var youtubeAccessToken by remember { mutableStateOf<String?>(null) }
     var youtubeSelectedPlaylistIds by remember {
         mutableStateOf(cachedYouTubeState?.selectedPlaylistIds.orEmpty())
@@ -330,7 +339,7 @@ private fun VibeArcApp(
         if (!youtubeAccountBusy) {
             youtubeAccountBusy = true
             val request = AuthorizationRequest.builder()
-                .setRequestedScopes(listOf(Scope(YouTubeReadOnlyScope)))
+                .setRequestedScopes(listOf(Scope(YouTubeWriteScope)))
                 .build()
             authorizationClient.authorize(request)
                 .addOnSuccessListener { authorization ->
@@ -609,6 +618,13 @@ private fun VibeArcApp(
         return diff.remoteOnlyTracks.size
     }
 
+    fun replaceLocalWithYouTubePlaylist(remotePlaylist: YouTubePlaylist, remoteTracks: List<Track>) {
+        val id = "youtube:${remotePlaylist.id}"
+        library = remoteTracks.fold(library) { current, track -> current.upsert(track) }.also(context::saveLibrary)
+        playlists = (playlists.filterNot { it.id == id } +
+            Playlist(id, remotePlaylist.title, remoteTracks.map(Track::uri).distinct())).also(context::savePlaylists)
+    }
+
     val importYouTubePlaylist: (YouTubePlaylist) -> Unit = { remotePlaylist ->
         val accessToken = youtubeAccessToken
         if (accessToken == null) {
@@ -627,7 +643,7 @@ private fun VibeArcApp(
             }
         }
     }
-    val pullSelectedYouTubePlaylists: () -> Unit = {
+    val previewSelectedYouTubePlaylists: () -> Unit = {
         val accessToken = youtubeAccessToken
         val selected = youtubeAccountData?.playlists.orEmpty()
             .filter { it.id in youtubeSelectedPlaylistIds }
@@ -639,19 +655,70 @@ private fun VibeArcApp(
             youtubeSyncBusy = true
             val loaded = withContext(Dispatchers.IO) {
                 selected.mapNotNull { playlist ->
-                    runCatching { YouTubeAccountApi.loadPlaylist(accessToken, playlist) }
-                        .getOrNull()?.let { playlist to it }
+                    runCatching { YouTubeAccountApi.loadPlaylistItems(accessToken, playlist) }
+                        .getOrNull()?.let { items ->
+                            val local = playlists.firstOrNull { it.id == "youtube:${playlist.id}" }
+                            YouTubeSyncPreview(
+                                playlist,
+                                items,
+                                planYouTubePlaylistSync(
+                                    local?.trackUris ?: items.map { it.track.uri },
+                                    items,
+                                ),
+                                local != null,
+                            )
+                        }
                 }
             }
-            val added = loaded.sumOf { (playlist, tracks) -> mergeYouTubePlaylist(playlist, tracks) }
             youtubeSyncBusy = false
             val failures = selected.size - loaded.size
-            val message = buildString {
-                append("Pulled $added new track")
-                if (added != 1) append('s')
-                if (failures > 0) append(" · $failures playlist${if (failures == 1) "" else "s"} failed")
+            if (loaded.isNotEmpty()) youtubeSyncPreview = loaded
+            if (failures > 0) {
+                android.widget.Toast.makeText(
+                    context,
+                    "$failures playlist${if (failures == 1) "" else "s"} could not be compared",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
             }
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun applyYouTubeSync(useLocalAsSource: Boolean) {
+        val accessToken = youtubeAccessToken ?: return
+        val previews = youtubeSyncPreview ?: return
+        uiScope.launch {
+            youtubeSyncBusy = true
+            val failures = withContext(Dispatchers.IO) {
+                previews.sumOf { preview ->
+                    var failed = 0
+                    preview.plan.addVideoIds.forEach { videoId ->
+                        if (runCatching {
+                                YouTubeAccountApi.addVideoToPlaylist(accessToken, preview.playlist.id, videoId)
+                            }.isFailure) failed++
+                    }
+                    if (useLocalAsSource && preview.hasLocalPlaylist) {
+                        preview.plan.removeItemIds.forEach { itemId ->
+                            if (runCatching {
+                                    YouTubeAccountApi.removePlaylistItem(accessToken, itemId)
+                                }.isFailure) failed++
+                        }
+                    }
+                    failed
+                }
+            }
+            if (!useLocalAsSource) {
+                previews.forEach { preview ->
+                    mergeYouTubePlaylist(preview.playlist, preview.remoteItems.map(YouTubePlaylistItem::track))
+                }
+            }
+            youtubeSyncBusy = false
+            youtubeSyncPreview = null
+            confirmRemoteRemoval = false
+            android.widget.Toast.makeText(
+                context,
+                if (failures == 0) "Playlist sync complete" else "Playlist sync finished with $failures failed change${if (failures == 1) "" else "s"}",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
         }
     }
 
@@ -786,7 +853,7 @@ private fun VibeArcApp(
                         context.saveYouTubeAccountState(YouTubeAccountState(account, youtubeSelectedPlaylistIds))
                     }
                 },
-                onPullSelectedYouTubePlaylists = pullSelectedYouTubePlaylists,
+                onPullSelectedYouTubePlaylists = previewSelectedYouTubePlaylists,
                 onImportYouTubePlaylist = importYouTubePlaylist,
                 lastFmUsername = lastFmUsername,
                 lastFmBusy = lastFmBusy,
@@ -820,6 +887,51 @@ private fun VibeArcApp(
             }
         }
     }
+    youtubeSyncPreview?.let { previews ->
+        val additions = previews.sumOf { it.plan.addVideoIds.size }
+        val removals = previews.filter(YouTubeSyncPreview::hasLocalPlaylist).sumOf { it.plan.removeItemIds.size }
+        val unsupported = previews.sumOf { it.plan.unsupportedLocalUris.size }
+        AlertDialog(
+            onDismissRequest = { if (!youtubeSyncBusy) youtubeSyncPreview = null },
+            title = { Text("Review playlist sync") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${previews.size} playlist${if (previews.size == 1) "" else "s"} compared")
+                    Text("Add $additions VibeArc track${if (additions == 1) "" else "s"} to YouTube")
+                    Text("$removals YouTube-only track${if (removals == 1) "" else "s"} conflict with the local copy")
+                    if (unsupported > 0) Text("$unsupported local file${if (unsupported == 1) "" else "s"} cannot be uploaded")
+                    Text("Keep both adds missing tracks in both places. Use YouTube replaces the local playlist. Use VibeArc can remove YouTube-only items after another confirmation.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { applyYouTubeSync(useLocalAsSource = false) }, enabled = !youtubeSyncBusy) {
+                    Text("Keep both")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        previews.forEach { preview ->
+                            replaceLocalWithYouTubePlaylist(preview.playlist, preview.remoteItems.map(YouTubePlaylistItem::track))
+                        }
+                        youtubeSyncPreview = null
+                    }, enabled = !youtubeSyncBusy) { Text("Use YouTube") }
+                    TextButton(onClick = { confirmRemoteRemoval = true }, enabled = !youtubeSyncBusy) { Text("Use VibeArc") }
+                }
+            },
+        )
+    }
+    if (confirmRemoteRemoval) AlertDialog(
+        onDismissRequest = { confirmRemoteRemoval = false },
+        title = { Text("Remove tracks from YouTube?") },
+        text = { Text("This permanently removes YouTube-only items from the selected remote playlists. It does not delete videos or local audio files.") },
+        confirmButton = {
+            TextButton(onClick = { applyYouTubeSync(useLocalAsSource = true) }, enabled = !youtubeSyncBusy) {
+                Text("Remove and sync")
+            }
+        },
+        dismissButton = { TextButton(onClick = { confirmRemoteRemoval = false }) { Text("Cancel") } },
+    )
     }
     }
 }

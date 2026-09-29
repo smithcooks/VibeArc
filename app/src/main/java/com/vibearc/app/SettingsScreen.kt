@@ -55,12 +55,12 @@ internal fun SettingsScreen(
     var lastFmInput by remember(lastFmUsername) { mutableStateOf(lastFmUsername.orEmpty()) }
     var error by remember { mutableStateOf(false) }
     val unavailable: (String,String)->Unit = { title,description -> info=title to description }
-    fun syncInfo() { unavailable("YouTube playlist sync","Your account and playlists can now be read safely. Playlist changes and history sync are not enabled yet.") }
+    fun syncInfo() { unavailable("YouTube Music history","Google does not provide a supported YouTube Data API method for writing listening history, so VibeArc cannot safely enable this switch.") }
     LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=22.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
         item { ReferenceRow("VibeArc","Local listening profile","account",onClick={unavailable("Your profile","Your library and appearance choices are stored on this device.")}) }
         item { SettingsHeading("YouTube Music") }
         item { ReferenceRow("YouTube Music Account",when { youtubeAccountBusy -> "Connecting…"; youtubeAccountData != null -> youtubeAccountData.account.displayName; else -> "Tap to connect Google" },"account",0,6,enabled=!youtubeAccountBusy,onClick=if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Account"})) }
-        item { ReferenceRow("Playlist Sync",when { youtubeAccountData == null -> "Requires a connected account"; youtubeSyncBusy -> "Pulling selected playlists…"; youtubeSelectedPlaylistIds.isEmpty() -> "Select playlists first"; else -> "Pull ${youtubeSelectedPlaylistIds.size} selected · remote writes not enabled" },"playlist",1,6,enabled=!youtubeSyncBusy,onClick=if(youtubeAccountData == null) onConnectYouTube else onPullSelectedYouTubePlaylists) }
+        item { ReferenceRow("Playlist Sync",when { youtubeAccountData == null -> "Requires a connected account"; youtubeSyncBusy -> "Synchronizing selected playlists…"; youtubeSelectedPlaylistIds.isEmpty() -> "Select playlists first"; else -> "Review ${youtubeSelectedPlaylistIds.size} selected before syncing" },"playlist",1,6,enabled=!youtubeSyncBusy,onClick=if(youtubeAccountData == null) onConnectYouTube else onPullSelectedYouTubePlaylists) }
         item { ReferenceRow("Select Playlists to Sync",when { youtubeAccountData == null -> "No account playlists available"; youtubeSelectedPlaylistIds.isEmpty() -> "None selected"; else -> "${youtubeSelectedPlaylistIds.size} selected" },"playlist",2,6,onClick=if(youtubeAccountData == null) onConnectYouTube else ({sheet="Sync Playlists"})) }
         item { ReferenceRow("YouTube Playlists Shown",if(youtubeAccountData == null) "No account connected" else "${youtubeAccountData.playlists.size} account playlists","album",3,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }
         item { ReferenceRow("Make YouTube Playlists Local",if(youtubeAccountData == null) "Connect an account first" else "Choose a playlist to import","playlist",4,6,onClick={if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Playlists"})}) }
@@ -200,7 +200,7 @@ internal fun SettingsScreen(
                         item { ReferenceRow("Disconnect","Remove VibeArc's YouTube access","delete",1,2,onClick={sheet=null;onDisconnectYouTube()}) }
                     }
                     "Sync Playlists" -> {
-                        item { Text("Choose the playlists v0.9 may compare for synchronization. Selecting a playlist does not modify YouTube yet.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        item { Text("Choose playlists to compare. VibeArc always shows the changes and asks again before removing anything from YouTube.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         if (youtubeAccountData?.playlists.isNullOrEmpty()) item {
                             Text("This account has no visible playlists.",color=MaterialTheme.colorScheme.onSurfaceVariant)
                         } else items(youtubeAccountData!!.playlists.size) { index ->

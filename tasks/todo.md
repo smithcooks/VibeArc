@@ -64,6 +64,14 @@
 - [ ] Add bounded foreground sync, cancellation, timeouts, and useful failure messages.
 - [ ] Add scheduled sync only after foreground sync is proven reliable.
 
+#### Safe-write acceptance
+
+- [x] Load playlist-item IDs required for official delete operations.
+- [x] Preview remote additions/removals before applying a two-way sync.
+- [x] Require an explicit second confirmation for remote removals.
+- [x] Never send a remote write from automatic/background sync.
+- [x] Cover sync planning and playlist-item parsing with focused unit tests.
+
 ### Slice 3: Last.fm
 
 - [x] Load the Last.fm API key from local/CI configuration, never source control.

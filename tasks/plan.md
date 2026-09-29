@@ -100,6 +100,24 @@ slice instead of wiring every screen to unfinished services at once.
 8. Add update metadata checking and verified artifacts, then complete release
    signing, AAB generation, security review, notices, and provider compliance.
 
+#### Completion order and acceptance gates
+
+1. **Safe YouTube writes:** request `youtube.force-ssl`, load remote playlist-item
+   IDs, show a per-playlist conflict preview, and require confirmation before
+   any remote removal. Unit-test add/remove planning before enabling writes.
+2. **Reliable sync:** foreground sync is cancellable and bounded; background
+   sync may only reuse that proven operation and must never prompt or delete.
+3. **Compliant offline files:** use Android's system file/folder pickers for
+   user-owned or explicitly licensed sources, with visible progress and retry.
+   YouTube extraction remains excluded.
+4. **Truthful playback:** report observed codec/bitrate/capabilities, add only
+   device-supported EQ/crossfade behavior, and never relabel lossy audio.
+5. **Lyrics/discovery:** consume word timing when a provider supplies it, retain
+   line timing fallback, and build discovery only from connected provider data.
+6. **Release gate:** verified update metadata, notices, audit, tests, then APK.
+   Production OAuth approval, Play verification, Last.fm signing credentials,
+   and a user-owned production keystore remain external prerequisites.
+
 The official YouTube Data API supports playlist CRUD and playlist-item CRUD. It
 does not expose a supported endpoint for writing YouTube Music listening history,
 so history sync stays unavailable unless Google adds one. YouTube media downloads,

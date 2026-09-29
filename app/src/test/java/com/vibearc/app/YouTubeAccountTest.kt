@@ -91,6 +91,7 @@ class YouTubeAccountTest {
             {
               "nextPageToken":"more",
               "items":[{
+                "id":"item-1",
                 "contentDetails":{"videoId":"video-1"},
                 "snippet":{
                   "title":"Night Song",
@@ -116,6 +117,47 @@ class YouTubeAccountTest {
                 nextPageToken = "more",
             ),
             parseYouTubePlaylistTracks(response, "Night Drive"),
+        )
+    }
+
+    @Test
+    fun `playlist item response retains ids needed for safe deletion`() {
+        val response = """
+            {"items":[{
+              "id":"item-remote",
+              "contentDetails":{"videoId":"video-remote"},
+              "snippet":{"title":"Remote song","videoOwnerChannelTitle":"Artist"}
+            }]}
+        """.trimIndent()
+
+        assertEquals(
+            listOf("item-remote"),
+            parseYouTubePlaylistItems(response, "Mix").items.map(YouTubePlaylistItem::id),
+        )
+    }
+
+    @Test
+    fun `two way sync plan adds local videos and names remote removals`() {
+        val remote = listOf(
+            YouTubePlaylistItem("item-shared", Track("Shared", "Artist", "Mix", "https://music.youtube.com/watch?v=shared")),
+            YouTubePlaylistItem("item-remote", Track("Remote", "Artist", "Mix", "https://music.youtube.com/watch?v=remote")),
+        )
+
+        assertEquals(
+            YouTubePlaylistSyncPlan(
+                addVideoIds = listOf("local"),
+                removeItemIds = listOf("item-remote"),
+                remoteOnlyTracks = listOf(remote[1].track),
+                unsupportedLocalUris = listOf("content://music/device-only"),
+            ),
+            planYouTubePlaylistSync(
+                localTrackUris = listOf(
+                    "https://music.youtube.com/watch?v=shared",
+                    "https://www.youtube.com/watch?v=local",
+                    "content://music/device-only",
+                ),
+                remoteItems = remote,
+            ),
         )
     }
 }

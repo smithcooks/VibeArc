@@ -3,6 +3,7 @@ package com.vibearc.app
 import android.content.Context
 import com.grack.nanojson.JsonObject
 import com.grack.nanojson.JsonParser
+import com.grack.nanojson.JsonWriter
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -33,6 +34,36 @@ internal data class YouTubePlaylistTrackPage(
     val tracks: List<Track>,
     val nextPageToken: String?,
 )
+
+internal data class YouTubePlaylistItem(val id: String, val track: Track)
+
+internal data class YouTubePlaylistItemPage(
+    val items: List<YouTubePlaylistItem>,
+    val nextPageToken: String?,
+)
+
+internal data class YouTubePlaylistSyncPlan(
+    val addVideoIds: List<String>,
+    val removeItemIds: List<String>,
+    val remoteOnlyTracks: List<Track>,
+    val unsupportedLocalUris: List<String>,
+)
+
+internal fun planYouTubePlaylistSync(
+    localTrackUris: List<String>,
+    remoteItems: List<YouTubePlaylistItem>,
+): YouTubePlaylistSyncPlan {
+    val localVideoIds = localTrackUris.mapNotNull(::youtubeVideoId).distinct()
+    val remoteByVideoId = remoteItems.mapNotNull { item ->
+        youtubeVideoId(item.track.uri)?.let { it to item }
+    }.toMap()
+    return YouTubePlaylistSyncPlan(
+        addVideoIds = localVideoIds.filterNot(remoteByVideoId::containsKey),
+        removeItemIds = remoteByVideoId.filterKeys { it !in localVideoIds }.values.map(YouTubePlaylistItem::id),
+        remoteOnlyTracks = remoteByVideoId.filterKeys { it !in localVideoIds }.values.map(YouTubePlaylistItem::track),
+        unsupportedLocalUris = localTrackUris.filter { youtubeVideoId(it) == null }.distinct(),
+    )
+}
 
 internal data class YouTubeAccountData(
     val account: YouTubeAccount,
@@ -143,24 +174,33 @@ internal fun parseYouTubePlaylistPage(json: String): YouTubePlaylistPage {
 }
 
 internal fun parseYouTubePlaylistTracks(json: String, playlistTitle: String): YouTubePlaylistTrackPage {
+    val page = parseYouTubePlaylistItems(json, playlistTitle)
+    return YouTubePlaylistTrackPage(page.items.map(YouTubePlaylistItem::track), page.nextPageToken)
+}
+
+internal fun parseYouTubePlaylistItems(json: String, playlistTitle: String): YouTubePlaylistItemPage {
     val root = parseRoot(json)
-    val tracks = root.getArray("items").mapNotNull { value ->
+    val items = root.getArray("items").mapNotNull { value ->
         val item = value as? JsonObject ?: return@mapNotNull null
         val snippet = item.getObject("snippet")
+        val itemId = item.getString("id", "")
         val videoId = item.getObject("contentDetails").getString("videoId", "")
         val title = snippet.getString("title", "")
-        if (videoId.isBlank() || title.isBlank() || title.startsWith('[')) return@mapNotNull null
-        Track(
-            title = title,
-            artist = snippet.getString("videoOwnerChannelTitle", "YouTube Music")
-                .removeSuffix(" - Topic").ifBlank { "YouTube Music" },
-            album = playlistTitle,
-            uri = "https://music.youtube.com/watch?v=$videoId",
-            artworkUri = snippet.thumbnailUrl(),
-            folder = "YouTube Music",
+        if (itemId.isBlank() || videoId.isBlank() || title.isBlank() || title.startsWith('[')) return@mapNotNull null
+        YouTubePlaylistItem(
+            itemId,
+            Track(
+                title = title,
+                artist = snippet.getString("videoOwnerChannelTitle", "YouTube Music")
+                    .removeSuffix(" - Topic").ifBlank { "YouTube Music" },
+                album = playlistTitle,
+                uri = "https://music.youtube.com/watch?v=$videoId",
+                artworkUri = snippet.thumbnailUrl(),
+                folder = "YouTube Music",
+            ),
         )
     }.take(50)
-    return YouTubePlaylistTrackPage(tracks, root.getString("nextPageToken", "").ifBlank { null })
+    return YouTubePlaylistItemPage(items, root.getString("nextPageToken", "").ifBlank { null })
 }
 
 private fun parseRoot(json: String): JsonObject = runCatching { JsonParser.`object`().from(json) }
@@ -201,40 +241,86 @@ internal object YouTubeAccountApi {
     }
 
     fun loadPlaylist(accessToken: String, playlist: YouTubePlaylist): List<Track> {
+        return loadPlaylistItems(accessToken, playlist).map(YouTubePlaylistItem::track)
+            .distinctBy(Track::uri)
+    }
+
+    fun loadPlaylistItems(accessToken: String, playlist: YouTubePlaylist): List<YouTubePlaylistItem> {
         require(accessToken.isNotBlank()) { "Missing authorization" }
         require(playlist.id.isNotBlank()) { "Missing playlist" }
         return buildList {
             var pageToken: String? = null
             repeat(MaxPlaylistPages) {
                 val suffix = pageToken?.let { "&pageToken=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
-                val page = parseYouTubePlaylistTracks(
+                val page = parseYouTubePlaylistItems(
                     get(
                         "$ApiBase/playlistItems?part=snippet,contentDetails&playlistId=${URLEncoder.encode(playlist.id, Charsets.UTF_8.name())}&maxResults=50$suffix",
                         accessToken,
                     ),
                     playlist.title,
                 )
-                addAll(page.tracks)
+                addAll(page.items)
                 pageToken = page.nextPageToken
                 if (pageToken == null) return@buildList
             }
-        }.distinctBy(Track::uri)
+        }.distinctBy(YouTubePlaylistItem::id)
+    }
+
+    fun addVideoToPlaylist(accessToken: String, playlistId: String, videoId: String) {
+        requireApiId(playlistId, "playlist")
+        requireApiId(videoId, "video")
+        val body = JsonWriter.string().`object`()
+            .`object`("snippet")
+            .value("playlistId", playlistId)
+            .`object`("resourceId")
+            .value("kind", "youtube#video")
+            .value("videoId", videoId)
+            .end().end().end().done()
+        request("POST", "$ApiBase/playlistItems?part=snippet", accessToken, body)
+    }
+
+    fun removePlaylistItem(accessToken: String, itemId: String) {
+        requireApiId(itemId, "playlist item")
+        request(
+            "DELETE",
+            "$ApiBase/playlistItems?id=${URLEncoder.encode(itemId, Charsets.UTF_8.name())}",
+            accessToken,
+        )
     }
 
     private fun get(url: String, accessToken: String): String {
+        return request("GET", url, accessToken)
+    }
+
+    private fun request(method: String, url: String, accessToken: String, body: String? = null): String {
+        require(accessToken.isNotBlank()) { "Missing authorization" }
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
-            connection.requestMethod = "GET"
+            connection.requestMethod = method
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000
             connection.readTimeout = 30_000
             connection.setRequestProperty("Authorization", "Bearer $accessToken")
             connection.setRequestProperty("Accept", "application/json")
+            if (body != null) {
+                val bytes = body.toByteArray(UTF_8)
+                require(bytes.size <= 64 * 1024) { "YouTube request is too large" }
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                connection.setFixedLengthStreamingMode(bytes.size)
+                connection.outputStream.use { it.write(bytes) }
+            }
             val code = connection.responseCode
             check(code in 200..299) { "YouTube request failed ($code)" }
-            return connection.inputStream.use { it.readUtf8Limited(MaxResponseBytes) }
+            return if (code == HttpURLConnection.HTTP_NO_CONTENT) "" else {
+                connection.inputStream.use { it.readUtf8Limited(MaxResponseBytes) }
+            }
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun requireApiId(value: String, label: String) {
+        require(value.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "Invalid $label id" }
     }
 }
