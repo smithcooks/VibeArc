@@ -83,7 +83,7 @@
 
 - [ ] Add folder selection, progress, cancellation, retry, cleanup, and storage reporting for local or explicitly licensed direct-download sources.
 - [x] Export legitimately retrieved synchronized lyrics as `.lrc` through the system file picker.
-- [ ] Report real source format/bitrate; do not advertise unavailable lossless tiers.
+- [x] Report the selected stream's available codec, bitrate, sample rate, and channels; do not advertise unavailable lossless tiers.
 - [ ] Keep YouTube media downloading/audio extraction excluded without written approval.
 
 ### Slice 5: playback and discovery

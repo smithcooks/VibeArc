@@ -117,7 +117,7 @@ internal fun PlayerScreen(
         }
     }
     if(audioInfo) AlertDialog(onDismissRequest = { audioInfo = false }, title = { Text("Audio information") },
-        text = { Text("${if(track.uri.startsWith("https:")) "Online stream" else "Local audio"}\nRequested streaming quality: ${if(context.prefersHighestAudioQuality()) "highest available" else "balanced"}.\n\nActual codec and bitrate are not exposed in this build; no lossless quality is claimed.") },
+        text = { Text("${if(track.uri.startsWith("https:")) "Online stream" else "Local audio"}\n${player.currentAudioDetails()?.label() ?: "Format not reported by source"}\nRequested source selection: ${if(context.prefersHighestAudioQuality()) "highest available" else "balanced"}.\n\nValues are reported by the active stream; VibeArc does not claim bit-perfect, lossless, or Hi-Res output.") },
         confirmButton = { TextButton(onClick = { audioInfo = false }) { Text("Done") } })
 }
 
