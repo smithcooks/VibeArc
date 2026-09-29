@@ -62,6 +62,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -124,6 +125,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val Ink = Color(0xFF101010)
 private val Panel = Color(0xFF242424)
@@ -407,6 +409,12 @@ private fun VibeArcApp(
     var library by remember { mutableStateOf(context.loadLibrary()) }
     var playlists by remember { mutableStateOf(context.loadPlaylists()) }
     var recentUris by remember { mutableStateOf(context.loadRecentUris()) }
+    var offlineFolder by remember { mutableStateOf(context.loadOfflineFolder()) }
+    var offlineFiles by remember { mutableStateOf(context.loadOfflineFiles()) }
+    var offlineCopyTrack by remember { mutableStateOf<Track?>(null) }
+    var offlineCopyProgress by remember { mutableStateOf(0f) }
+    var offlineCopyError by remember { mutableStateOf<Track?>(null) }
+    var offlineCancelSignal by remember { mutableStateOf<AtomicBoolean?>(null) }
 
     LaunchedEffect(currentTab, lastFmSnapshot) {
         if (currentTab != Tab.Discover || lastFmRecommendations.isNotEmpty()) return@LaunchedEffect
@@ -519,6 +527,18 @@ private fun VibeArcApp(
         }
     }
 
+    val offlineFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val saved = runCatching { context.contentResolver.takePersistableUriPermission(uri, flags) }.isSuccess
+        if (saved) {
+            context.saveOfflineFolder(uri)
+            offlineFolder = uri
+        } else {
+            android.widget.Toast.makeText(context, "This folder could not be saved", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     val backupWriter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
@@ -608,6 +628,35 @@ private fun VibeArcApp(
         playlists = next.also(context::savePlaylists)
     }
     val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
+    val copyTrackOffline: (Track) -> Unit = { track ->
+        val folder = offlineFolder
+        if (folder == null) {
+            android.widget.Toast.makeText(context, "Choose an offline folder first", android.widget.Toast.LENGTH_LONG).show()
+        } else if (!track.canCopyOffline()) {
+            android.widget.Toast.makeText(context, "Only user-owned local audio can be copied", android.widget.Toast.LENGTH_LONG).show()
+        } else if (offlineCopyTrack == null) {
+            val signal = AtomicBoolean(false)
+            offlineCancelSignal = signal
+            offlineCopyTrack = track
+            offlineCopyProgress = 0f
+            offlineCopyError = null
+            uiScope.launch {
+                val copied = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.copyLocalTrackToFolder(track, folder, signal::get) { progress ->
+                            uiScope.launch { offlineCopyProgress = progress }
+                        }
+                    }
+                }
+                copied.getOrNull()?.let { file ->
+                    offlineFiles = (offlineFiles.filterNot { it.uri == file.uri } + file).also(context::saveOfflineFiles)
+                }
+                if (copied.isFailure && !signal.get()) offlineCopyError = track
+                offlineCopyTrack = null
+                offlineCancelSignal = null
+            }
+        }
+    }
     fun mergeYouTubePlaylist(remotePlaylist: YouTubePlaylist, remoteTracks: List<Track>): Int {
         val id = "youtube:${remotePlaylist.id}"
         val currentUris = playlists.firstOrNull { it.id == id }?.trackUris.orEmpty()
@@ -807,7 +856,25 @@ private fun VibeArcApp(
                 onAddToPlaylist = { id, uri -> updatePlaylists(playlists.addTrackToPlaylist(id, uri)) },
                 onRemoveFromPlaylist = { id, uri -> updatePlaylists(playlists.removeTrackFromPlaylist(id, uri)) },
             )
-            Tab.Downloads -> DownloadsScreen(padding, library, onPlay = playTrack)
+            Tab.Downloads -> DownloadsScreen(
+                padding = padding,
+                tracks = library,
+                offlineFolder = offlineFolder,
+                offlineFiles = offlineFiles,
+                copyingTrack = offlineCopyTrack,
+                copyProgress = offlineCopyProgress,
+                failedTrack = offlineCopyError,
+                onChooseFolder = { offlineFolderPicker.launch(offlineFolder) },
+                onCopy = copyTrackOffline,
+                onCancel = { offlineCancelSignal?.set(true) },
+                onRetry = { offlineCopyError?.let(copyTrackOffline) },
+                onDelete = { file ->
+                    if (context.deleteOfflineFile(file)) {
+                        offlineFiles = offlineFiles.filterNot { it.uri == file.uri }.also(context::saveOfflineFiles)
+                    }
+                },
+                onPlay = playTrack,
+            )
             Tab.Player -> if (activePlayer != null && currentTrack != null) PlayerScreen(
                 padding = padding,
                 player = activePlayer,
@@ -956,8 +1023,20 @@ private val MainTabs = listOf(Tab.Home, Tab.Stats, Tab.Library)
 private fun DownloadsScreen(
     padding: PaddingValues,
     tracks: List<Track>,
+    offlineFolder: Uri?,
+    offlineFiles: List<OfflineFile>,
+    copyingTrack: Track?,
+    copyProgress: Float,
+    failedTrack: Track?,
+    onChooseFolder: () -> Unit,
+    onCopy: (Track) -> Unit,
+    onCancel: () -> Unit,
+    onRetry: () -> Unit,
+    onDelete: (OfflineFile) -> Unit,
     onPlay: (Track, List<Track>) -> Unit,
 ) {
+    val localTracks = tracks.filter(Track::canCopyOffline)
+    val totalBytes = offlineFiles.sumOf(OfflineFile::sizeBytes)
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
         contentPadding = PaddingValues(20.dp),
@@ -968,17 +1047,58 @@ private fun DownloadsScreen(
                 Row(Modifier.fillMaxWidth().padding(22.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Offline music", style = MaterialTheme.typography.titleLarge)
-                        Text("Ready without a connection", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${offlineFiles.size} saved · ${totalBytes / (1024 * 1024)} MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("${tracks.size}", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                    Button(onClick = onChooseFolder) { Text(if (offlineFolder == null) "Choose folder" else "Change folder") }
                 }
             }
         }
-        if (tracks.isEmpty()) {
-            item { EmptyLibraryCard("Nothing downloaded", "Add local audio from Library to listen offline.") }
+        item {
+            Text(
+                "VibeArc can copy audio files you selected from your device. YouTube audio extraction is not available.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        copyingTrack?.let { track ->
+            item {
+                ReferenceSurface {
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Saving ${track.title}", fontWeight = FontWeight.Bold)
+                        LinearProgressIndicator(progress = { copyProgress }, modifier = Modifier.fillMaxWidth())
+                        TextButton(onClick = onCancel) { Text("Cancel") }
+                    }
+                }
+            }
+        }
+        failedTrack?.let { track -> item { Button(onClick = onRetry) { Text("Retry ${track.title}") } } }
+        if (offlineFiles.isNotEmpty()) {
+            item { Text("Saved files", style = MaterialTheme.typography.titleLarge) }
+            items(offlineFiles, key = OfflineFile::uri) { file ->
+                ReferenceSurface {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(file.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${file.sizeBytes / 1024} KB", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { onDelete(file) }) { Icon(Icons.Default.Delete, "Delete saved file") }
+                    }
+                }
+            }
+        }
+        item { Text("Local audio available to copy", style = MaterialTheme.typography.titleLarge) }
+        if (localTracks.isEmpty()) {
+            item { EmptyLibraryCard("No local audio", "Add an audio file from Library first.") }
         } else {
-            items(tracks, key = Track::uri) { track ->
-                TrackRow(track, onPlay = { onPlay(track, tracks) })
+            items(localTracks, key = Track::uri) { track ->
+                ReferenceSurface {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).clickable { onPlay(track, localTracks) }) {
+                            Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(track.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        }
+                        TextButton(onClick = { onCopy(track) }, enabled = offlineFolder != null && copyingTrack == null) { Text("Save") }
+                    }
+                }
             }
         }
     }

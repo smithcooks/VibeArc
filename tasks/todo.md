@@ -81,7 +81,7 @@
 
 ### Slice 4: compliant downloads and quality
 
-- [ ] Add folder selection, progress, cancellation, retry, cleanup, and storage reporting for local or explicitly licensed direct-download sources.
+- [x] Add SAF folder selection, progress, cancellation, retry, cleanup, and storage reporting for user-owned local audio.
 - [x] Export legitimately retrieved synchronized lyrics as `.lrc` through the system file picker.
 - [x] Report the selected stream's available codec, bitrate, sample rate, and channels; do not advertise unavailable lossless tiers.
 - [ ] Keep YouTube media downloading/audio extraction excluded without written approval.
