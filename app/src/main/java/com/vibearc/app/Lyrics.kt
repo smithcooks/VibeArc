@@ -30,6 +30,19 @@ internal fun parseLrc(value: String): List<LyricLine> = value.lineSequence().fla
 internal fun activeLyricIndex(lines: List<LyricLine>, positionMs: Long): Int =
     lines.indexOfLast { it.startMs <= positionMs }
 
+internal fun encodeLrc(lines: List<LyricLine>): String = lines.sortedBy(LyricLine::startMs).joinToString("\n") { line ->
+    val totalSeconds = line.startMs.coerceAtLeast(0L) / 1_000
+    "[%02d:%02d.%03d]%s".format(
+        totalSeconds / 60,
+        totalSeconds % 60,
+        line.startMs.coerceAtLeast(0L) % 1_000,
+        line.text.replace('\n', ' ').replace('\r', ' '),
+    )
+}
+
+internal fun lyricsFileName(title: String): String = title.trim()
+    .replace(Regex("[\\\\/:*?\"<>|]"), "_").take(80).ifBlank { "lyrics" } + ".lrc"
+
 internal fun parseLyricsResponse(value: String): LyricsDocument {
     val root = JsonParser.`object`().from(value)
     val plain = root.getString("plainLyrics", "")
@@ -65,7 +78,7 @@ internal object LyricsProvider {
             connection.connectTimeout = 10_000
             connection.readTimeout = 20_000
             connection.setRequestProperty("Accept", "application/json")
-            connection.setRequestProperty("User-Agent", "VibeArc/0.8.0 (Android music player)")
+            connection.setRequestProperty("User-Agent", "VibeArc/0.9.0 (Android music player)")
             return when (connection.responseCode) {
                 404 -> null
                 in 200..299 -> parseLyricsResponse(

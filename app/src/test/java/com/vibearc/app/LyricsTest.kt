@@ -36,4 +36,13 @@ class LyricsTest {
             parseLyricsResponse(json),
         )
     }
+
+    @Test
+    fun `LRC export preserves millisecond timestamps`() {
+        assertEquals(
+            "[00:01.250]First\n[01:02.003]Second",
+            encodeLrc(listOf(LyricLine(1_250, "First"), LyricLine(62_003, "Second"))),
+        )
+        assertEquals("A_B.lrc", lyricsFileName("A/B"))
+    }
 }

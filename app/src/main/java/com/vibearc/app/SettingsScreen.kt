@@ -131,7 +131,7 @@ internal fun SettingsScreen(
         item { ReferenceRow("Download Quality","Imported files keep their original quality","download",1,6,onClick={sheet="Download Quality"}) }
         item { ReferenceRow("Bit-Perfect Mode","Not supported by the current audio output","equalizer",2,6,onClick={unavailable("Bit-Perfect Mode","The current Android audio path does not guarantee bit-perfect output.")}) }
         item { ReferenceRow("Crossfade","Not available in this build","equalizer",3,6,onClick={unavailable("Crossfade","Playback currently switches directly between tracks. Crossfade is not implemented.")}) }
-        item { ReferenceRow("Download Synced Lyrics","Requires a connected lyrics source","lyrics",4,6,onClick={unavailable("Download Synced Lyrics","No synced lyric files are available to download in this build.")}) }
+        item { ReferenceRow("Download Synced Lyrics","Save matching lyrics as an .lrc file","lyrics",4,6,onClick={unavailable("Download Synced Lyrics","Open Lyrics from Now Playing. When synchronized lyrics are available, tap the download button and choose where to save the .lrc file.")}) }
         item { ReferenceRow("Background Playback","Manage this app's battery settings","clock",5,6,onClick={
             runCatching {context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:${context.packageName}")))}
                 .onFailure {unavailable("Background Playback","Open Android Settings → Apps → VibeArc → Battery.")}

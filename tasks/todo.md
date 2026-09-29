@@ -73,7 +73,7 @@
 ### Slice 4: compliant downloads and quality
 
 - [ ] Add folder selection, progress, cancellation, retry, cleanup, and storage reporting for local or explicitly licensed direct-download sources.
-- [ ] Export legitimately retrieved synchronized lyrics as `.lrc`.
+- [x] Export legitimately retrieved synchronized lyrics as `.lrc` through the system file picker.
 - [ ] Report real source format/bitrate; do not advertise unavailable lossless tiers.
 - [ ] Keep YouTube media downloading/audio extraction excluded without written approval.
 

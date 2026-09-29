@@ -2,6 +2,8 @@ package com.vibearc.app
 
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,6 +36,7 @@ import androidx.media3.common.Player
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -157,6 +160,8 @@ private fun PlayingQueueScreen(player: Player, queue: List<Track>) {
 
 @Composable
 private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy: Boolean) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var expanded by remember { mutableStateOf(false) }
     var request by remember(track.uri) { mutableIntStateOf(0) }
     var loading by remember(track.uri) { mutableStateOf(true) }
@@ -164,6 +169,19 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
     var lyrics by remember(track.uri) { mutableStateOf<LyricsDocument?>(null) }
     var position by remember(track.uri) { mutableLongStateOf(0L) }
     val listState = rememberLazyListState()
+    val saveLyrics = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val lines = lyrics?.syncedLines.orEmpty()
+        if (uri != null && lines.isNotEmpty()) scope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use {
+                        it.write(encodeLrc(lines))
+                    } ?: error("Could not open lyrics file")
+                }.isSuccess
+            }
+            android.widget.Toast.makeText(context, if(saved) "Synced lyrics saved" else "Could not save lyrics", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     LaunchedEffect(track.uri, request) {
         loading = true
         failed = false
@@ -238,7 +256,10 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
                     }
                 }
             }
-            Box(Modifier.align(Alignment.BottomEnd).padding(bottom = 12.dp)) {
+            Row(Modifier.align(Alignment.BottomEnd).padding(bottom = 12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                if(lyrics?.syncedLines?.isNotEmpty() == true) PlayerAction("Save synchronized lyrics", "download") {
+                    saveLyrics.launch(lyricsFileName(track.title))
+                }
                 PlayerAction(if(expanded) "Show playback controls" else "Expand lyrics", "expand") { expanded = !expanded }
             }
         }
