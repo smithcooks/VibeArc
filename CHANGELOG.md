@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0-beta] - Unreleased
+
+### Added
+
+- Authenticated Last.fm sessions through a server-side signer, Now Playing submission,
+  automatic rule-based scrobbling, and per-track exclusions.
+- Online single-track, album, and playlist downloads with cancellation, retry, storage
+  cleanup, codec/quality preferences, and real lossless/Hi-Res source reporting.
+
+### Security
+
+- Keeps the Last.fm shared secret server-side and validates online download hosts,
+  redirects, media types, and file-size limits before writing to phone storage.
+
 ## [0.8.0-demo] - 2026-09-25
 
 ### Changed

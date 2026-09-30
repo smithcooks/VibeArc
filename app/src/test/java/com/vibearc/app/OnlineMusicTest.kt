@@ -26,6 +26,28 @@ class OnlineMusicTest {
     }
 
     @Test
+    fun `format and quality preferences select a real matching source`() {
+        val candidates = listOf(
+            AudioCandidate("https://audio.example/aac-128", 128, AudioFormat.AAC, sampleRate = 44_100),
+            AudioCandidate("https://audio.example/opus-96", 96, AudioFormat.OPUS, sampleRate = 48_000),
+            AudioCandidate("https://audio.example/opus-160", 160, AudioFormat.OPUS, sampleRate = 48_000),
+            AudioCandidate("https://audio.example/flac", 1_200, AudioFormat.FLAC, sampleRate = 96_000),
+        )
+
+        assertEquals(
+            "https://audio.example/opus-96",
+            selectAudioCandidate(candidates, AudioFormat.OPUS, AudioQuality.DATA_SAVER)?.url,
+        )
+        assertEquals(
+            "https://audio.example/opus-160",
+            selectAudioCandidate(candidates, AudioFormat.OPUS, AudioQuality.HIGH)?.url,
+        )
+        assertNull(selectAudioCandidate(candidates, AudioFormat.MP3, AudioQuality.HIGHEST))
+        assertEquals(true, candidates.last().isLossless)
+        assertEquals(true, candidates.last().isHiRes)
+    }
+
+    @Test
     fun `google artwork is requested at high resolution`() {
         assertEquals(
             "https://lh3.googleusercontent.com/cover=w1024-h1024-l90-rj",

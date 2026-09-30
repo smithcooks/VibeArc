@@ -79,7 +79,8 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
     val context = LocalContext.current
     val playlists = remember { context.loadPlaylists() }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
-    val preferHighestQuality = context.prefersHighestAudioQuality()
+    val streamFormat = context.streamAudioFormat()
+    val streamQuality = context.streamAudioQuality()
     val focusManager = LocalFocusManager.current
     val localResults = tracks.filter { track ->
         query.isBlank() || listOf(track.title, track.artist, track.album).any { it.contains(query, true) }
@@ -109,7 +110,7 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
             }
         }
     }
-    LaunchedEffect(onlineResults, preferHighestQuality) {
+    LaunchedEffect(onlineResults, streamFormat, streamQuality) {
         snapshotFlow {
             visibleOnlineTracks(
                 onlineResults,
@@ -127,7 +128,7 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
                         try {
                             resolvedOnlineTracks[track.uri] = withContext(Dispatchers.IO) {
                                 resolutionPermits.withPermit {
-                                    OnlineMusic.resolve(track, preferHighestQuality)
+                                    OnlineMusic.resolve(track, streamFormat, streamQuality)
                                 }
                             }
                         } catch (error: Exception) {

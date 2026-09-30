@@ -20,16 +20,51 @@ import java.net.URL
 import java.util.Locale
 import java.util.TimeZone
 
-internal data class AudioCandidate(val url: String, val bitrate: Int)
+internal enum class AudioFormat(val label: String, val extension: String, val mimeType: String) {
+    ANY("Automatic", "audio", "audio/*"),
+    AAC("AAC", "m4a", "audio/mp4"),
+    OPUS("Opus", "opus", "audio/ogg"),
+    MP3("MP3", "mp3", "audio/mpeg"),
+    FLAC("FLAC", "flac", "audio/flac"),
+}
+
+internal enum class AudioQuality(val label: String, val maxBitrateKbps: Int?) {
+    HIGHEST("Highest available", null),
+    HIGH("High · up to 256 kbps", 256),
+    BALANCED("Balanced · up to 160 kbps", 160),
+    DATA_SAVER("Data saver · up to 96 kbps", 96),
+}
+
+internal data class AudioCandidate(
+    val url: String,
+    val bitrate: Int,
+    val format: AudioFormat = AudioFormat.ANY,
+    val mimeType: String = format.mimeType,
+    val extension: String = format.extension,
+    val codec: String = "",
+    val sampleRate: Int = 0,
+    val contentLength: Long = -1,
+) {
+    val isLossless: Boolean get() = format == AudioFormat.FLAC
+    val isHiRes: Boolean get() = isLossless && sampleRate > 48_000
+}
+
+internal fun selectAudioCandidate(
+    candidates: List<AudioCandidate>,
+    format: AudioFormat = AudioFormat.ANY,
+    quality: AudioQuality = AudioQuality.HIGHEST,
+): AudioCandidate? {
+    val matching = candidates.filter { it.url.isNotBlank() && (format == AudioFormat.ANY || it.format == format) }
+    val withinLimit = quality.maxBitrateKbps?.let { limit -> matching.filter { it.bitrate in 1..limit } }.orEmpty()
+    return (if (quality.maxBitrateKbps == null) matching else withinLimit.ifEmpty { matching })
+        .maxByOrNull(AudioCandidate::bitrate)
+}
 
 internal fun selectAudioUrl(candidates: List<AudioCandidate>, preferHighestQuality: Boolean = true): String? {
-    val playable = candidates.filter { it.url.isNotBlank() }
-    return if (preferHighestQuality) {
-        playable.maxByOrNull(AudioCandidate::bitrate)?.url
-    } else {
-        (playable.filter { it.bitrate <= 160 }.maxByOrNull(AudioCandidate::bitrate)
-            ?: playable.minByOrNull(AudioCandidate::bitrate))?.url
-    }
+    return selectAudioCandidate(
+        candidates,
+        quality = if (preferHighestQuality) AudioQuality.HIGHEST else AudioQuality.BALANCED,
+    )?.url
 }
 
 private val GoogleArtworkSize = Regex("=w\\d+-h\\d+[^?]*$")
@@ -197,20 +232,21 @@ internal object OnlineMusic {
             }
     }
 
-    fun resolve(track: Track, preferHighestQuality: Boolean = true): Track {
+    fun resolve(
+        track: Track,
+        format: AudioFormat = AudioFormat.ANY,
+        quality: AudioQuality = AudioQuality.HIGHEST,
+    ): Track {
         val info = StreamInfo.getInfo(youtube, track.uri)
-        val streamUrl = selectAudioUrl(
-            info.audioStreams.map { stream ->
-                AudioCandidate(stream.content.takeIf { stream.isUrl }.orEmpty(), stream.averageBitrate)
-            },
-            preferHighestQuality,
-        ) ?: error("No playable public audio stream is available for this track.")
+        val streamUrl = selectAudioCandidate(info.audioStreams.map(::audioCandidate), format, quality)?.url
+            ?: error("The selected format is not available for this track.")
         return track.copy(
             title = track.title.ifBlank { info.name },
             artist = track.artist.takeUnless { it == "YouTube Music" }
                 ?: info.uploaderName?.takeIf(String::isNotBlank)
                 ?: "YouTube Music",
             uri = streamUrl,
+            sourceUri = track.catalogUri,
             durationMs = track.durationMs.takeIf { it > 0 } ?: info.duration.coerceAtLeast(0) * 1_000,
             artworkUri = track.artworkUri.ifBlank {
                 info.thumbnails.maxByOrNull { image ->
@@ -219,6 +255,38 @@ internal object OnlineMusic {
             },
         )
     }
+
+    fun resolve(track: Track, preferHighestQuality: Boolean): Track = resolve(
+        track,
+        quality = if (preferHighestQuality) AudioQuality.HIGHEST else AudioQuality.BALANCED,
+    )
+
+    fun audioCandidate(
+        track: Track,
+        format: AudioFormat,
+        quality: AudioQuality,
+    ): AudioCandidate {
+        val info = StreamInfo.getInfo(youtube, track.uri)
+        return selectAudioCandidate(info.audioStreams.map(::audioCandidate), format, quality)
+            ?: error("The selected format is not available for this track.")
+    }
+}
+
+private fun audioCandidate(stream: org.schabi.newpipe.extractor.stream.AudioStream): AudioCandidate {
+    val codec = stream.codec.orEmpty()
+    val formatName = stream.format?.name.orEmpty()
+    val format = when {
+        codec.contains("flac", true) || formatName.contains("flac", true) -> AudioFormat.FLAC
+        codec.contains("opus", true) || formatName.contains("opus", true) -> AudioFormat.OPUS
+        codec.contains("mp3", true) || formatName.contains("mp3", true) -> AudioFormat.MP3
+        codec.contains("aac", true) || codec.contains("mp4a", true) || formatName.contains("m4a", true) -> AudioFormat.AAC
+        else -> AudioFormat.ANY
+    }
+    return AudioCandidate(
+        stream.content.takeIf { stream.isUrl }.orEmpty(), stream.averageBitrate, format,
+        stream.format?.mimeType ?: format.mimeType, stream.format?.suffix ?: format.extension,
+        codec, stream.itagItem?.sampleRate ?: 0, stream.itagItem?.contentLength ?: -1,
+    )
 }
 
 private object ExtractorDownloader : Downloader() {

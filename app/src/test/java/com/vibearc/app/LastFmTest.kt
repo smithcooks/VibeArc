@@ -38,4 +38,16 @@ class LastFmTest {
             parseLastFmSimilarTracks(json),
         )
     }
+
+    @Test
+    fun `official scrobble threshold rejects short and excluded tracks`() {
+        val track = Track("Loser", "Tame Impala", "Currents", "content://song", durationMs = 300_000)
+
+        assertEquals(150_000L, lastFmScrobbleThresholdMs(track.durationMs))
+        assertEquals(true, shouldScrobble(track, 150_000, emptySet()))
+        assertEquals(false, shouldScrobble(track, 149_999, emptySet()))
+        assertEquals(false, shouldScrobble(track, 300_000, setOf(track.uri)))
+        assertNull(lastFmScrobbleThresholdMs(30_000))
+        assertEquals(240_000L, lastFmScrobbleThresholdMs(900_000))
+    }
 }

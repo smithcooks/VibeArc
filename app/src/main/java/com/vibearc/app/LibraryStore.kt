@@ -17,7 +17,10 @@ internal data class Track(
     val durationMs: Long = 0,
     val artworkUri: String = "",
     val folder: String = "Imported",
+    val sourceUri: String = "",
 )
+
+internal val Track.catalogUri: String get() = sourceUri.ifBlank { uri }
 
 internal data class Playlist(
     val id: String,
@@ -113,12 +116,13 @@ internal object LibraryCodec {
             .joinToString("|") { encoder.encodeToString(it.toByteArray(UTF_8)) } +
             (if (track.isFavorite) "|1" else "|0") +
             "|${track.durationMs}|${encoder.encodeToString(track.artworkUri.toByteArray(UTF_8))}" +
-            "|${encoder.encodeToString(track.folder.toByteArray(UTF_8))}"
+            "|${encoder.encodeToString(track.folder.toByteArray(UTF_8))}" +
+            "|${encoder.encodeToString(track.sourceUri.toByteArray(UTF_8))}"
     }
 
     fun decode(value: String): List<Track> = value.lineSequence().mapNotNull { row ->
         val fields = row.split('|')
-        if (fields.size !in setOf(5, 7, 8)) return@mapNotNull null
+        if (fields.size !in setOf(5, 7, 8, 9)) return@mapNotNull null
         runCatching {
             Track(
                 title = String(decoder.decode(fields[0]), UTF_8),
@@ -129,6 +133,7 @@ internal object LibraryCodec {
                 durationMs = fields.getOrNull(5)?.toLong() ?: 0,
                 artworkUri = fields.getOrNull(6)?.let { String(decoder.decode(it), UTF_8) }.orEmpty(),
                 folder = fields.getOrNull(7)?.let { String(decoder.decode(it), UTF_8) } ?: "Imported",
+                sourceUri = fields.getOrNull(8)?.let { String(decoder.decode(it), UTF_8) }.orEmpty(),
             )
         }.getOrNull()
     }.toList()

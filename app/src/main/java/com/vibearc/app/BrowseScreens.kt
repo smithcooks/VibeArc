@@ -337,6 +337,7 @@ internal fun LibraryScreen(
     onPlay:(Track,List<Track>)->Unit, onToggleFavorite:(Track)->Unit, onCreatePlaylist:(String)->Unit,
     onRenamePlaylist:(String,String)->Unit, onDeletePlaylist:(String)->Unit,
     onAddToPlaylist:(String,String)->Unit, onRemoveFromPlaylist:(String,String)->Unit,
+    onDownloadAll:(List<Track>)->Unit,
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var sort by remember { mutableStateOf("Newest first") }
@@ -380,6 +381,7 @@ internal fun LibraryScreen(
                             Box {
                                 IconButton(onClick={menu=p.id}) { Glyph("more") }
                                 DropdownMenu(menu==p.id,{menu=null}) {
+                                    DropdownMenuItem(text={Text("Download")},onClick={menu=null;onDownloadAll(p.trackUris.mapNotNull { uri->tracks.firstOrNull { it.uri==uri } })})
                                     DropdownMenuItem(text={Text("Rename")},onClick={menu=null;rename=p})
                                     DropdownMenuItem(text={Text("Delete")},onClick={menu=null;delete=p})
                                 }
@@ -402,7 +404,10 @@ internal fun LibraryScreen(
                     } else {
                         val visible=if(group!=null) grouped[group].orEmpty() else selected
                         if(visible.isNotEmpty()) item {
-                            TextButton(onClick={onPlay(visible.first(),visible)}) { Icon(Icons.Default.PlayArrow,null); Text("Play all") }
+                            Row {
+                                TextButton(onClick={onPlay(visible.first(),visible)}) { Icon(Icons.Default.PlayArrow,null); Text("Play all") }
+                                TextButton(onClick={onDownloadAll(visible)}) { Glyph("download",Modifier.size(18.dp)); Text("Download all") }
+                            }
                         }
                         if(visible.isEmpty()) item {
                             Column(Modifier.padding(24.dp)) {

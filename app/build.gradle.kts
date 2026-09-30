@@ -16,6 +16,11 @@ val lastFmApiKey = providers.environmentVariable("LASTFM_API_KEY").orNull
     ?: providers.gradleProperty("LASTFM_API_KEY").orNull
     ?: localConfig.getProperty("LASTFM_API_KEY", "")
 val escapedLastFmApiKey = lastFmApiKey.replace("\\", "\\\\").replace("\"", "\\\"")
+fun configValue(name: String): String = (
+    providers.environmentVariable(name).orNull
+        ?: providers.gradleProperty(name).orNull
+        ?: localConfig.getProperty(name, "")
+    ).replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.vibearc.app"
@@ -28,6 +33,8 @@ android {
         versionCode = 9
         versionName = "0.9.0-beta"
         buildConfigField("String", "LASTFM_API_KEY", "\"$escapedLastFmApiKey\"")
+        buildConfigField("String", "LASTFM_SIGNER_URL", "\"${configValue("LASTFM_SIGNER_URL")}\"")
+        buildConfigField("String", "LASTFM_SIGNER_TOKEN", "\"${configValue("LASTFM_SIGNER_TOKEN")}\"")
     }
 
     signingConfigs {

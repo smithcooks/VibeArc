@@ -41,19 +41,26 @@ internal fun SettingsScreen(
     onPullSelectedYouTubePlaylists: () -> Unit,
     onCreateYouTubePlaylist: (String) -> Unit,
     onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
-    lastFmUsername: String?, lastFmBusy: Boolean, lastFmConfigured: Boolean, lastFmError: String?,
-    onConnectLastFm: (String) -> Unit, onRefreshLastFm: () -> Unit, onDisconnectLastFm: () -> Unit,
+    lastFmUsername: String?, lastFmBusy: Boolean, lastFmConfigured: Boolean,
+    lastFmAuthenticated: Boolean, lastFmAuthorizationPending: Boolean, lastFmError: String?,
+    lastFmTracks: List<Track>,
+    onStartLastFmAuth: () -> Unit, onFinishLastFmAuth: () -> Unit,
+    onRefreshLastFm: () -> Unit, onDisconnectLastFm: () -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
 ) {
     val context=LocalContext.current
     var info by remember { mutableStateOf<Pair<String,String>?>(null) }
     var sheet by remember { mutableStateOf<String?>(null) }
-    var highestQuality by remember { mutableStateOf(context.prefersHighestAudioQuality()) }
+    var streamFormat by remember { mutableStateOf(context.streamAudioFormat()) }
+    var streamQuality by remember { mutableStateOf(context.streamAudioQuality()) }
+    var downloadFormat by remember { mutableStateOf(context.downloadAudioFormat()) }
+    var downloadQuality by remember { mutableStateOf(context.downloadAudioQuality()) }
+    var scrobblingEnabled by remember { mutableStateOf(context.lastFmScrobblingEnabled()) }
+    var excludedScrobbleUris by remember { mutableStateOf(context.loadLastFmExcludedUris()) }
     var wavySeekbar by remember { mutableStateOf(context.wavySeekbarEnabled()) }
     var selectedIcon by remember { mutableStateOf(context.selectedLauncherIcon()) }
     var custom by remember { mutableStateOf("#%06X".format(appearance.customAccentArgb and 0xFFFFFF)) }
-    var lastFmInput by remember(lastFmUsername) { mutableStateOf(lastFmUsername.orEmpty()) }
     var youtubePlaylistTitle by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
     val unavailable: (String,String)->Unit = { title,description -> info=title to description }
@@ -132,8 +139,8 @@ internal fun SettingsScreen(
         item { ReferenceRow("Wavy Seekbar","Lightweight wave while music plays","wave",3,5,wavySeekbar,onClick={wavySeekbar=!wavySeekbar;context.getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putBoolean("wavy_seekbar",wavySeekbar).apply()}) }
         item { ReferenceRow("Studio Master Clarity","Original source audio","spark",4,5,onClick={unavailable("Studio Master Clarity","VibeArc plays the source audio. It does not convert lossy audio into studio-master or lossless quality.")}) }
         item { SettingsHeading("Audio & Streaming") }
-        item { ReferenceRow("Streaming Quality",if(highestQuality) "Highest available · YouTube Music" else "Balanced · YouTube Music","quality",0,6,onClick={sheet="Streaming Quality"}) }
-        item { ReferenceRow("Download Quality","Imported files keep their original quality","download",1,6,onClick={sheet="Download Quality"}) }
+        item { ReferenceRow("Streaming Quality","${streamFormat.label} · ${streamQuality.label}","quality",0,6,onClick={sheet="Streaming Quality"}) }
+        item { ReferenceRow("Download Quality","${downloadFormat.label} · ${downloadQuality.label}","download",1,6,onClick={sheet="Download Quality"}) }
         item { ReferenceRow("Bit-Perfect Mode","Not supported by the current audio output","equalizer",2,6,onClick={unavailable("Bit-Perfect Mode","The current Android audio path does not guarantee bit-perfect output.")}) }
         item { ReferenceRow("Crossfade","Not available in this build","equalizer",3,6,onClick={unavailable("Crossfade","Playback currently switches directly between tracks. Crossfade is not implemented.")}) }
         item { ReferenceRow("Download Synced Lyrics","Save matching lyrics as an .lrc file","lyrics",4,6,onClick={unavailable("Download Synced Lyrics","Open Lyrics from Now Playing. When synchronized lyrics are available, tap the download button and choose where to save the .lrc file.")}) }
@@ -144,8 +151,9 @@ internal fun SettingsScreen(
         item { SettingsHeading("Library & Playlist Imports") }
         item { ReferenceRow("Import Playlist from File","CSV, TSV, M3U/M3U8, or TXT","download",onClick=onImportPlaylist) }
         item { SettingsHeading("Scrobbler") }
-        item { ReferenceRow("Last.fm Profile",when { lastFmBusy -> "Loading…"; lastFmUsername != null -> lastFmUsername; !lastFmConfigured -> "API key required for this build"; else -> "Tap to connect a public profile" },"stats",0,2,onClick={sheet="Last.fm"}) }
-        item { ReferenceRow("Scrobbling & Now Playing",if(lastFmUsername == null) "Connect a profile first" else "Secure server signing required","clock",1,2,onClick={unavailable("Last.fm scrobbling","Public Last.fm statistics are connected. Scrobbling and Now Playing stay disabled until VibeArc has a server-side signer; the shared secret will not be embedded in the APK.")}) }
+        item { ReferenceRow("Last.fm Account",when { lastFmBusy -> "Loading…"; lastFmAuthenticated -> lastFmUsername.orEmpty(); !lastFmConfigured -> "Signer configuration required"; lastFmAuthorizationPending -> "Authorization waiting to finish"; else -> "Tap to sign in" },"stats",0,3,onClick={sheet="Last.fm"}) }
+        item { ReferenceRow("Scrobbling & Now Playing",when { !lastFmAuthenticated -> "Sign in to Last.fm first"; scrobblingEnabled -> "Automatic scrobbling is on"; else -> "Scrobbling is off" },"clock",1,3,scrobblingEnabled,enabled=lastFmAuthenticated,onClick={scrobblingEnabled=!scrobblingEnabled;context.saveLastFmScrobblingEnabled(scrobblingEnabled)}) }
+        item { ReferenceRow("Scrobble Exclusions","${excludedScrobbleUris.size} excluded tracks","playlist",2,3,enabled=lastFmAuthenticated,onClick={sheet="Scrobble Exclusions"}) }
         item { SettingsHeading("Backup & Restore") }
         item { ReferenceRow("Backup","Save library and playlists to JSON","backup",0,2,onClick=onBackup) }
         item { ReferenceRow("Restore","Merge a VibeArc JSON backup","restore",1,2,onClick=onRestore) }
@@ -185,17 +193,29 @@ internal fun SettingsScreen(
                 }
                 when(title) {
                     "Last.fm" -> {
-                        item { Text("Connect a public Last.fm profile to show listening statistics and top tracks. This does not submit your playback history.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if (!lastFmConfigured) item { Text("This APK was built without LASTFM_API_KEY. Add it to local.properties or the build environment, then rebuild.",color=MaterialTheme.colorScheme.error) }
-                        item { OutlinedTextField(lastFmInput,{lastFmInput=it.take(64)},label={Text("Last.fm username")},singleLine=true,modifier=Modifier.fillMaxWidth()) }
+                        item { Text("Sign in through Last.fm. Now Playing and completed scrobbles are signed by the VibeArc server; the Last.fm shared secret is never stored in the app.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if (!lastFmConfigured) item { Text("Configure LASTFM_SIGNER_URL and LASTFM_SIGNER_TOKEN for authenticated use.",color=MaterialTheme.colorScheme.error) }
                         lastFmError?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error) } }
                         item {
                             Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                                Button(onClick={onConnectLastFm(lastFmInput);sheet=null},enabled=lastFmConfigured && !lastFmBusy) { Text(if(lastFmUsername == null) "Connect" else "Update") }
+                                if (!lastFmAuthenticated) Button(onClick=onStartLastFmAuth,enabled=lastFmConfigured && !lastFmBusy) { Text("Authorize") }
+                                if (lastFmAuthorizationPending && !lastFmAuthenticated) Button(onClick=onFinishLastFmAuth,enabled=!lastFmBusy) { Text("Finish sign-in") }
                                 if(lastFmUsername != null) OutlinedButton(onClick=onRefreshLastFm,enabled=!lastFmBusy) { Text("Refresh") }
                             }
                         }
-                        if(lastFmUsername != null) item { TextButton(onClick={onDisconnectLastFm();sheet=null}) { Text("Disconnect public profile") } }
+                        if(lastFmAuthenticated) item { TextButton(onClick={onDisconnectLastFm();sheet=null}) { Text("Disconnect Last.fm") } }
+                    }
+                    "Scrobble Exclusions" -> {
+                        item { Text("Last.fm accepts tracks longer than 30 seconds after half the track or four minutes, whichever comes first. Excluded tracks never send Now Playing or scrobbles.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if(lastFmTracks.isEmpty()) item { Text("Your library is empty.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        else items(lastFmTracks.size,key={lastFmTracks[it].catalogUri}) { index ->
+                            val track=lastFmTracks[index]
+                            val excluded=track.catalogUri in excludedScrobbleUris
+                            ReferenceRow(track.title,track.artist,"lyrics",index,lastFmTracks.size,excluded,onClick={
+                                excludedScrobbleUris=if(excluded) excludedScrobbleUris-track.catalogUri else excludedScrobbleUris+track.catalogUri
+                                context.saveLastFmExcludedUris(excludedScrobbleUris)
+                            })
+                        }
                     }
                     "YouTube Account" -> {
                         item { Text(youtubeAccountData?.account?.displayName.orEmpty(),style=MaterialTheme.typography.titleLarge) }
@@ -218,14 +238,34 @@ internal fun SettingsScreen(
                         }
                     }
                     "Streaming Quality" -> {
-                        item { Text("Select your preferred stream. Actual bitrate and format depend on the track and the available source.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        item { QualityChoice("Max Quality","Highest available","Select the highest-bitrate playable audio source.",highestQuality) { highestQuality=true;context.saveHighestAudioQuality(true) } }
-                        item { QualityChoice("Balanced","Default","Use the provider's standard audio selection.",!highestQuality) { highestQuality=false;context.saveHighestAudioQuality(false) } }
-                        item { Text("24-bit / 192 kHz FLAC is not provided by the current YouTube source.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        item { Text("VibeArc selects a real provider source matching this codec and bitrate ceiling. If a requested codec is unavailable, that track is reported unavailable.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        items(AudioFormat.entries.size) { index ->
+                            val choice=AudioFormat.entries[index]
+                            QualityChoice(choice.label,"Codec",if(choice==AudioFormat.ANY) "Use the best available source codec." else "Require ${choice.label} from the source.",streamFormat==choice) {
+                                streamFormat=choice;context.saveStreamAudioPreference(streamFormat,streamQuality)
+                            }
+                        }
+                        items(AudioQuality.entries.size) { index ->
+                            val choice=AudioQuality.entries[index]
+                            QualityChoice(choice.label,"Bitrate",choice.maxBitrateKbps?.let { "Choose the highest real source at or below $it kbps." } ?: "Choose the highest-bitrate real source.",streamQuality==choice) {
+                                streamQuality=choice;context.saveStreamAudioPreference(streamFormat,streamQuality)
+                            }
+                        }
                     }
                     "Download Quality" -> {
-                        item { Text("Local audio keeps its original format and quality. Online downloading is not connected in this build.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        item { QualityChoice("Original file","Unchanged","No conversion or re-encoding.",true) {} }
+                        item { Text("Online downloads save an actual source offered in the selected codec. VibeArc does not relabel or fake lossless audio; unavailable formats fail clearly.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        items(AudioFormat.entries.size) { index ->
+                            val choice=AudioFormat.entries[index]
+                            QualityChoice(choice.label,"Format",if(choice==AudioFormat.ANY) "Keep the best available source format." else "Require ${choice.label} from the source.",downloadFormat==choice) {
+                                downloadFormat=choice;context.saveDownloadAudioPreference(downloadFormat,downloadQuality)
+                            }
+                        }
+                        items(AudioQuality.entries.size) { index ->
+                            val choice=AudioQuality.entries[index]
+                            QualityChoice(choice.label,"Quality",choice.maxBitrateKbps?.let { "Download the highest real source at or below $it kbps." } ?: "Download the highest available real source.",downloadQuality==choice) {
+                                downloadQuality=choice;context.saveDownloadAudioPreference(downloadFormat,downloadQuality)
+                            }
+                        }
                     }
                     "YouTube Playlists" -> {
                         item { Text("Tap a playlist to add its available tracks to your VibeArc library. This does not download audio or modify YouTube.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -280,9 +320,25 @@ private fun QualityChoice(title:String,badge:String,description:String,selected:
 private const val SettingsPreferencesName="vibearc_settings"
 private const val HighestAudioQualityKey="highest_audio_quality"
 internal fun Context.prefersHighestAudioQuality():Boolean =
-    getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getBoolean(HighestAudioQualityKey,true)
+    streamAudioQuality()==AudioQuality.HIGHEST
 internal fun Context.wavySeekbarEnabled():Boolean =
     getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getBoolean("wavy_seekbar",true)
 private fun Context.saveHighestAudioQuality(enabled:Boolean) {
-    getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putBoolean(HighestAudioQualityKey,enabled).apply()
+    saveStreamAudioPreference(streamAudioFormat(),if(enabled) AudioQuality.HIGHEST else AudioQuality.BALANCED)
+}
+
+internal fun Context.streamAudioFormat():AudioFormat = enumPreference("stream_audio_format",AudioFormat.ANY)
+internal fun Context.streamAudioQuality():AudioQuality = enumPreference("stream_audio_quality",if(getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getBoolean(HighestAudioQualityKey,true)) AudioQuality.HIGHEST else AudioQuality.BALANCED)
+internal fun Context.downloadAudioFormat():AudioFormat = enumPreference("download_audio_format",AudioFormat.ANY)
+internal fun Context.downloadAudioQuality():AudioQuality = enumPreference("download_audio_quality",AudioQuality.HIGHEST)
+
+private inline fun <reified T:Enum<T>> Context.enumPreference(key:String,fallback:T):T =
+    runCatching { enumValueOf<T>(getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getString(key,fallback.name)!!) }.getOrDefault(fallback)
+
+internal fun Context.saveStreamAudioPreference(format:AudioFormat,quality:AudioQuality) {
+    getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putString("stream_audio_format",format.name).putString("stream_audio_quality",quality.name).apply()
+}
+
+internal fun Context.saveDownloadAudioPreference(format:AudioFormat,quality:AudioQuality) {
+    getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putString("download_audio_format",format.name).putString("download_audio_quality",quality.name).apply()
 }

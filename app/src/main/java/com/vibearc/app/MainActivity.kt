@@ -258,7 +258,9 @@ private fun VibeArcApp(
     var youtubeSelectedPlaylistIds by remember {
         mutableStateOf(cachedYouTubeState?.selectedPlaylistIds.orEmpty())
     }
-    var lastFmUsername by remember { mutableStateOf(context.loadLastFmUsername()) }
+    var lastFmSession by remember { mutableStateOf(context.loadLastFmSession()) }
+    var lastFmUsername by remember { mutableStateOf(lastFmSession?.username ?: context.loadLastFmUsername()) }
+    var lastFmPendingToken by remember { mutableStateOf(context.loadLastFmPendingToken()) }
     var lastFmSnapshot by remember { mutableStateOf<LastFmSnapshot?>(null) }
     var lastFmRecommendations by remember { mutableStateOf<List<LastFmTrack>>(emptyList()) }
     var lastFmRecommendationsBusy by remember { mutableStateOf(false) }
@@ -275,14 +277,18 @@ private fun VibeArcApp(
 
     LaunchedEffect(lastFmUsername, lastFmRefresh) {
         val username = lastFmUsername ?: return@LaunchedEffect
-        if (BuildConfig.LASTFM_API_KEY.isBlank()) {
-            lastFmError = "This build does not include a Last.fm API key."
+        val signerConfigured = BuildConfig.LASTFM_SIGNER_URL.isNotBlank() && BuildConfig.LASTFM_SIGNER_TOKEN.isNotBlank()
+        if (BuildConfig.LASTFM_API_KEY.isBlank() && !signerConfigured) {
+            lastFmError = "This build does not include Last.fm provider configuration."
             return@LaunchedEffect
         }
         lastFmBusy = true
         lastFmError = null
         val loaded = withContext(Dispatchers.IO) {
-            runCatching { LastFmApi.load(username, BuildConfig.LASTFM_API_KEY) }
+            runCatching {
+                if (BuildConfig.LASTFM_API_KEY.isNotBlank()) LastFmApi.load(username, BuildConfig.LASTFM_API_KEY)
+                else LastFmSignerApi.load(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN, username)
+            }
         }
         lastFmSnapshot = loaded.getOrNull()
         lastFmRecommendations = emptyList()
@@ -290,20 +296,49 @@ private fun VibeArcApp(
         lastFmBusy = false
     }
 
-    val connectLastFm: (String) -> Unit = { value ->
-        val username = validLastFmUsername(value)
-        if (username == null) {
-            android.widget.Toast.makeText(context, "Enter a valid Last.fm username", android.widget.Toast.LENGTH_LONG).show()
-        } else {
-            context.saveLastFmUsername(username)
-            lastFmUsername = username
-            lastFmSnapshot = null
-            lastFmRecommendations = emptyList()
-            lastFmRefresh++
+    val startLastFmAuth: () -> Unit = {
+        if (BuildConfig.LASTFM_SIGNER_URL.isBlank() || BuildConfig.LASTFM_SIGNER_TOKEN.isBlank()) {
+            lastFmError = "Configure LASTFM_SIGNER_URL and LASTFM_SIGNER_TOKEN first."
+        } else uiScope.launch {
+            lastFmBusy = true
+            lastFmError = null
+            val result = withContext(Dispatchers.IO) {
+                runCatching { LastFmSignerApi.beginAuthorization(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN) }
+            }
+            result.getOrNull()?.let { authorization ->
+                context.saveLastFmPendingToken(authorization.token)
+                lastFmPendingToken = authorization.token
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authorization.authorizationUrl))) }
+                    .onFailure { lastFmError = "Could not open Last.fm authorization." }
+            }
+            result.exceptionOrNull()?.let { lastFmError = it.message ?: "Could not start Last.fm authorization." }
+            lastFmBusy = false
+        }
+    }
+    val finishLastFmAuth: () -> Unit = finish@{
+        val token = lastFmPendingToken ?: return@finish
+        uiScope.launch {
+            lastFmBusy = true
+            lastFmError = null
+            val result = withContext(Dispatchers.IO) {
+                runCatching { LastFmSignerApi.completeAuthorization(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN, token) }
+            }
+            result.getOrNull()?.let { session ->
+                context.saveLastFmSession(session)
+                lastFmSession = session
+                lastFmUsername = session.username
+                lastFmPendingToken = null
+                lastFmRefresh++
+            }
+            result.exceptionOrNull()?.let { lastFmError = it.message ?: "Finish authorization in the browser, then try again." }
+            lastFmBusy = false
         }
     }
     val disconnectLastFm: () -> Unit = {
+        context.saveLastFmSession(null)
         context.saveLastFmUsername(null)
+        lastFmSession = null
+        lastFmPendingToken = null
         lastFmUsername = null
         lastFmSnapshot = null
         lastFmRecommendations = emptyList()
@@ -404,7 +439,10 @@ private fun VibeArcApp(
         val seed = lastFmSnapshot?.topTracks?.firstOrNull() ?: return@LaunchedEffect
         lastFmRecommendationsBusy = true
         lastFmRecommendations = withContext(Dispatchers.IO) {
-            runCatching { LastFmApi.similarTracks(seed, BuildConfig.LASTFM_API_KEY) }.getOrDefault(emptyList())
+            runCatching {
+                if (BuildConfig.LASTFM_API_KEY.isNotBlank()) LastFmApi.similarTracks(seed, BuildConfig.LASTFM_API_KEY)
+                else LastFmSignerApi.similarTracks(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN, seed)
+            }.getOrDefault(emptyList())
         }
         lastFmRecommendationsBusy = false
     }
@@ -611,35 +649,53 @@ private fun VibeArcApp(
         playlists = next.also(context::savePlaylists)
     }
     val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
-    val copyTrackOffline: (Track) -> Unit = { track ->
+    fun copyTracksOffline(requested: List<Track>) {
+        val tracks = requested.filter(Track::canCopyOffline)
         val folder = offlineFolder
         if (folder == null) {
             android.widget.Toast.makeText(context, "Choose an offline folder first", android.widget.Toast.LENGTH_LONG).show()
-        } else if (!track.canCopyOffline()) {
-            android.widget.Toast.makeText(context, "Only user-owned local audio can be copied", android.widget.Toast.LENGTH_LONG).show()
+        } else if (tracks.isEmpty()) {
+            android.widget.Toast.makeText(context, "No downloadable tracks were found", android.widget.Toast.LENGTH_LONG).show()
         } else if (offlineCopyTrack == null) {
             val signal = AtomicBoolean(false)
             offlineCancelSignal = signal
-            offlineCopyTrack = track
+            offlineCopyTrack = tracks.first()
             offlineCopyProgress = 0f
             offlineCopyError = null
+            val format = context.downloadAudioFormat()
+            val quality = context.downloadAudioQuality()
             uiScope.launch {
-                val copied = withContext(Dispatchers.IO) {
-                    runCatching {
-                        context.copyLocalTrackToFolder(track, folder, signal::get) { progress ->
-                            uiScope.launch { offlineCopyProgress = progress }
+                var failure: Pair<Track, Throwable>? = null
+                tracks.forEachIndexed { index, track ->
+                    if (failure != null || signal.get()) return@forEachIndexed
+                    offlineCopyTrack = track
+                    val copied = withContext(Dispatchers.IO) {
+                        runCatching {
+                            context.copyTrackToFolder(track, folder, format, quality, signal::get) { progress ->
+                                uiScope.launch { offlineCopyProgress = (index + progress) / tracks.size }
+                            }
                         }
                     }
+                    copied.getOrNull()?.let { file ->
+                        offlineFiles = (offlineFiles.filterNot { it.sourceUri == file.sourceUri } + file)
+                            .also(context::saveOfflineFiles)
+                    }
+                    copied.exceptionOrNull()?.let { failure = track to it }
                 }
-                copied.getOrNull()?.let { file ->
-                    offlineFiles = (offlineFiles.filterNot { it.uri == file.uri } + file).also(context::saveOfflineFiles)
+                if (failure != null && !signal.get()) {
+                    offlineCopyError = failure!!.first
+                    android.widget.Toast.makeText(
+                        context,
+                        failure!!.second.message ?: "Download failed",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
                 }
-                if (copied.isFailure && !signal.get()) offlineCopyError = track
                 offlineCopyTrack = null
                 offlineCancelSignal = null
             }
         }
     }
+    val copyTrackOffline: (Track) -> Unit = { copyTracksOffline(listOf(it)) }
     val addTrackToQueue: (Track) -> Unit = { track ->
         when {
             activePlayer == null -> android.widget.Toast.makeText(context, "Player is not ready", android.widget.Toast.LENGTH_SHORT).show()
@@ -924,6 +980,7 @@ private fun VibeArcApp(
                 },
                 onAddToPlaylist = { id, uri -> updatePlaylists(playlists.addTrackToPlaylist(id, uri)) },
                 onRemoveFromPlaylist = { id, uri -> updatePlaylists(playlists.removeTrackFromPlaylist(id, uri)) },
+                onDownloadAll = ::copyTracksOffline,
             )
             Tab.Downloads -> DownloadsScreen(
                 padding = padding,
@@ -994,9 +1051,13 @@ private fun VibeArcApp(
                 onImportYouTubePlaylist = importYouTubePlaylist,
                 lastFmUsername = lastFmUsername,
                 lastFmBusy = lastFmBusy,
-                lastFmConfigured = BuildConfig.LASTFM_API_KEY.isNotBlank(),
+                lastFmConfigured = BuildConfig.LASTFM_API_KEY.isNotBlank() || (BuildConfig.LASTFM_SIGNER_URL.isNotBlank() && BuildConfig.LASTFM_SIGNER_TOKEN.isNotBlank()),
+                lastFmAuthenticated = lastFmSession != null,
+                lastFmAuthorizationPending = lastFmPendingToken != null,
+                lastFmTracks = library,
                 lastFmError = lastFmError,
-                onConnectLastFm = connectLastFm,
+                onStartLastFmAuth = startLastFmAuth,
+                onFinishLastFmAuth = finishLastFmAuth,
                 onRefreshLastFm = { lastFmRefresh++ },
                 onDisconnectLastFm = disconnectLastFm,
                 onDownloads = { navigate(Tab.Downloads) },
@@ -1119,7 +1180,7 @@ private fun DownloadsScreen(
     onDelete: (OfflineFile) -> Unit,
     onPlay: (Track, List<Track>) -> Unit,
 ) {
-    val localTracks = tracks.filter(Track::canCopyOffline)
+    val downloadableTracks = tracks.filter(Track::canCopyOffline)
     val totalBytes = offlineFiles.sumOf(OfflineFile::sizeBytes)
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
@@ -1139,7 +1200,7 @@ private fun DownloadsScreen(
         }
         item {
             Text(
-                "VibeArc can copy audio files you selected from your device. YouTube audio extraction is not available.",
+                "Save local audio or an available online source in the format and quality selected in Settings.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -1162,21 +1223,21 @@ private fun DownloadsScreen(
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(file.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${file.sizeBytes / 1024} KB", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(listOf("${file.sizeBytes / 1024} KB",file.qualityLabel).filter(String::isNotBlank).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { onDelete(file) }) { Icon(Icons.Default.Delete, "Delete saved file") }
                     }
                 }
             }
         }
-        item { Text("Local audio available to copy", style = MaterialTheme.typography.titleLarge) }
-        if (localTracks.isEmpty()) {
-            item { EmptyLibraryCard("No local audio", "Add an audio file from Library first.") }
+        item { Text("Available to download", style = MaterialTheme.typography.titleLarge) }
+        if (downloadableTracks.isEmpty()) {
+            item { EmptyLibraryCard("No downloadable audio", "Add local audio or import a YouTube Music playlist first.") }
         } else {
-            items(localTracks, key = Track::uri) { track ->
+            items(downloadableTracks, key = Track::uri) { track ->
                 ReferenceSurface {
                     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f).clickable { onPlay(track, localTracks) }) {
+                        Column(Modifier.weight(1f).clickable(enabled=Uri.parse(track.uri).scheme in setOf("content","file")) { onPlay(track, downloadableTracks) }) {
                             Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(track.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                         }
@@ -1428,13 +1489,17 @@ private fun Track.toMediaItem(): MediaItem {
         .setTitle(title)
         .setArtist(artist)
         .setAlbumTitle(album)
-        .setExtras(Bundle().apply { putLong("durationMs", durationMs) })
+        .setExtras(Bundle().apply {
+            putLong("durationMs", durationMs)
+            putString("sourceUri", catalogUri)
+            putString("folder", folder)
+        })
         .apply {
             artworkUri.takeIf(String::isNotBlank)?.let { setArtworkUri(Uri.parse(it)) }
         }
         .build()
     return MediaItem.Builder()
-        .setMediaId(uri)
+        .setMediaId(catalogUri)
         .setUri(Uri.parse(uri))
         .setMediaMetadata(metadata)
         .build()
@@ -1445,9 +1510,11 @@ private val MediaItem.track: Track
         title = mediaMetadata.title?.toString() ?: "Unknown track",
         artist = mediaMetadata.artist?.toString() ?: "On this device",
         album = mediaMetadata.albumTitle?.toString() ?: "Imported",
-        uri = mediaId,
+        uri = localConfiguration?.uri?.toString().orEmpty().ifBlank { mediaId },
         durationMs = mediaMetadata.extras?.getLong("durationMs") ?: 0L,
         artworkUri = mediaMetadata.artworkUri?.toString().orEmpty(),
+        folder = mediaMetadata.extras?.getString("folder").orEmpty().ifBlank { "Imported" },
+        sourceUri = mediaMetadata.extras?.getString("sourceUri").orEmpty().ifBlank { mediaId },
     )
 
 private fun Int.nextRepeatMode(): Int = when (this) {

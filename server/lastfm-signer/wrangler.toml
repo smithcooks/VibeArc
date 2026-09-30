@@ -1,0 +1,7 @@
+name = "vibearc-lastfm-signer"
+main = "worker.js"
+compatibility_date = "2026-09-30"
+compatibility_flags = ["nodejs_compat"]
+
+# Configure these with `wrangler secret put` rather than committing values:
+# LASTFM_API_KEY, LASTFM_SHARED_SECRET, VIBEARC_CLIENT_TOKEN
