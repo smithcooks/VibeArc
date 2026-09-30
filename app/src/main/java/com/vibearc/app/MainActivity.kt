@@ -13,7 +13,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -117,12 +116,6 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
-import com.google.android.gms.auth.api.identity.AuthorizationRequest
-import com.google.android.gms.auth.api.identity.AuthorizationResult
-import com.google.android.gms.auth.api.identity.Identity
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -145,7 +138,6 @@ private val BodyFont = FontFamily(
 )
 private val DisplayFont = BodyFont
 private const val MaxBackupBytes = 8 * 1024 * 1024
-private const val YouTubeWriteScope = "https://www.googleapis.com/auth/youtube.force-ssl"
 
 private data class YouTubeSyncPreview(
     val playlist: YouTubePlaylist,
@@ -257,14 +249,12 @@ private fun VibeArcApp(
     }
     var player by remember { mutableStateOf<Player?>(null) }
     val uiScope = rememberCoroutineScope()
-    val authorizationClient = remember(context) { Identity.getAuthorizationClient(context) }
     val cachedYouTubeState = remember { context.loadYouTubeAccountState() }
     var youtubeAccountData by remember { mutableStateOf<YouTubeAccountData?>(null) }
     var youtubeAccountBusy by remember { mutableStateOf(cachedYouTubeState != null) }
     var youtubeSyncBusy by remember { mutableStateOf(false) }
     var youtubeSyncPreview by remember { mutableStateOf<List<YouTubeSyncPreview>?>(null) }
     var confirmRemoteRemoval by remember { mutableStateOf(false) }
-    var youtubeAccessToken by remember { mutableStateOf<String?>(null) }
     var youtubeSelectedPlaylistIds by remember {
         mutableStateOf(cachedYouTubeState?.selectedPlaylistIds.orEmpty())
     }
@@ -320,13 +310,14 @@ private fun VibeArcApp(
         lastFmError = null
     }
 
-    fun loadYouTubeAccount(accessToken: String?, announce: Boolean) {
-        if (accessToken.isNullOrBlank()) {
+    fun loadYouTubeAccount(announce: Boolean) {
+        if (!YouTubeWebSession.isAuthenticated()) {
             youtubeAccountBusy = false
-            if (announce) android.widget.Toast.makeText(context, "Google did not provide YouTube access", android.widget.Toast.LENGTH_LONG).show()
+            if (announce) android.widget.Toast.makeText(context, "YouTube Music sign-in was not completed", android.widget.Toast.LENGTH_LONG).show()
         } else uiScope.launch {
+            youtubeAccountBusy = true
             val loaded = withContext(Dispatchers.IO) {
-                runCatching { YouTubeAccountApi.load(accessToken) }.getOrNull()
+                runCatching { YouTubeMusicSessionApi.load() }.getOrNull()
             }
             youtubeAccountBusy = false
             if (loaded == null) {
@@ -335,7 +326,6 @@ private fun VibeArcApp(
                 val saved = context.loadYouTubeAccountState()
                 youtubeSelectedPlaylistIds = saved?.selectedPlaylistIds
                     ?.takeIf { saved.account.channelId == loaded.account.channelId }.orEmpty()
-                youtubeAccessToken = accessToken
                 youtubeAccountData = loaded
                 context.saveYouTubeAccountState(YouTubeAccountState(loaded.account, youtubeSelectedPlaylistIds))
                 if (announce) android.widget.Toast.makeText(context, "Connected ${loaded.account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
@@ -343,73 +333,43 @@ private fun VibeArcApp(
         }
     }
 
-    fun acceptYouTubeAuthorization(authorization: AuthorizationResult?, announce: Boolean) {
-        loadYouTubeAccount(authorization?.accessToken, announce)
-    }
-
-    val youtubeAuthorizationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult(),
+    val youtubeLoginLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         if (result.resultCode != Activity.RESULT_OK) {
             youtubeAccountBusy = false
             return@rememberLauncherForActivityResult
         }
-        val authorization = runCatching {
-            authorizationClient.getAuthorizationResultFromIntent(result.data)
-        }.getOrNull()
-        acceptYouTubeAuthorization(authorization, announce = true)
+        loadYouTubeAccount(announce = true)
     }
 
-    fun requestYouTubeAuthorization(allowResolution: Boolean, announce: Boolean) {
+    val connectYouTube: () -> Unit = {
         if (!youtubeAccountBusy) {
             youtubeAccountBusy = true
-            val request = AuthorizationRequest.builder()
-                .setRequestedScopes(listOf(Scope(YouTubeWriteScope)))
-                .build()
-            authorizationClient.authorize(request)
-                .addOnSuccessListener { authorization ->
-                    val resolution = authorization.pendingIntent
-                    if (allowResolution && authorization.hasResolution() && resolution != null) {
-                        youtubeAuthorizationLauncher.launch(
-                            IntentSenderRequest.Builder(resolution.intentSender).build(),
-                        )
-                    } else if (authorization.hasResolution()) {
-                        youtubeAccountBusy = false
-                        youtubeAccountData = null
-                    } else {
-                        acceptYouTubeAuthorization(authorization, announce)
-                    }
-                }
-                .addOnFailureListener {
-                    youtubeAccountBusy = false
-                    if (announce) android.widget.Toast.makeText(context, "Could not connect your Google account", android.widget.Toast.LENGTH_LONG).show()
-                }
+            youtubeLoginLauncher.launch(Intent(context, YouTubeLoginActivity::class.java))
         }
     }
-    val connectYouTube: () -> Unit = { requestYouTubeAuthorization(allowResolution = true, announce = true) }
 
     fun disconnectYouTube(reconnect: Boolean) {
         if (youtubeAccountBusy) return
         youtubeAccountBusy = true
-        GoogleSignIn.getClient(context, GoogleSignInOptions.DEFAULT_SIGN_IN).revokeAccess().addOnCompleteListener { task ->
-            youtubeAccessToken = null
-            youtubeAccountData = null
-            youtubeSelectedPlaylistIds = emptySet()
-            context.clearYouTubeAccountState()
-            youtubeAccountBusy = false
-            when {
-                reconnect && task.isSuccessful -> connectYouTube()
-                reconnect -> android.widget.Toast.makeText(context, "Could not revoke the current account; reconnect manually", android.widget.Toast.LENGTH_LONG).show()
-                task.isSuccessful -> android.widget.Toast.makeText(context, "YouTube account disconnected", android.widget.Toast.LENGTH_SHORT).show()
-                else -> android.widget.Toast.makeText(context, "Local account data removed; Google access could not be revoked", android.widget.Toast.LENGTH_LONG).show()
+        YouTubeWebSession.clear {
+            uiScope.launch {
+                youtubeAccountData = null
+                youtubeSelectedPlaylistIds = emptySet()
+                context.clearYouTubeAccountState()
+                youtubeAccountBusy = false
+                if (reconnect) connectYouTube()
+                else android.widget.Toast.makeText(context, "YouTube Music account disconnected", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    LaunchedEffect(cachedYouTubeState?.account?.channelId) {
-        if (cachedYouTubeState != null) {
+    LaunchedEffect(Unit) {
+        if (YouTubeWebSession.isAuthenticated()) loadYouTubeAccount(announce = false)
+        else {
             youtubeAccountBusy = false
-            requestYouTubeAuthorization(allowResolution = false, announce = false)
+            if (cachedYouTubeState != null) context.clearYouTubeAccountState()
         }
     }
 
@@ -723,12 +683,11 @@ private fun VibeArcApp(
     }
 
     val importYouTubePlaylist: (YouTubePlaylist) -> Unit = { remotePlaylist ->
-        val accessToken = youtubeAccessToken
-        if (accessToken == null) {
+        if (!YouTubeWebSession.isAuthenticated()) {
             android.widget.Toast.makeText(context, "Connect your YouTube account again", android.widget.Toast.LENGTH_LONG).show()
         } else uiScope.launch {
             val importedTracks = withContext(Dispatchers.IO) {
-                runCatching { YouTubeAccountApi.loadPlaylist(accessToken, remotePlaylist) }.getOrNull()
+                runCatching { YouTubeMusicSessionApi.loadPlaylist(remotePlaylist) }.getOrNull()
             }
             when {
                 importedTracks == null -> android.widget.Toast.makeText(context, "Could not import this playlist", android.widget.Toast.LENGTH_LONG).show()
@@ -741,10 +700,9 @@ private fun VibeArcApp(
         }
     }
     val previewSelectedYouTubePlaylists: () -> Unit = {
-        val accessToken = youtubeAccessToken
         val selected = youtubeAccountData?.playlists.orEmpty()
             .filter { it.id in youtubeSelectedPlaylistIds }
-        if (accessToken == null) {
+        if (!YouTubeWebSession.isAuthenticated()) {
             android.widget.Toast.makeText(context, "Connect your YouTube account again", android.widget.Toast.LENGTH_LONG).show()
         } else if (selected.isEmpty()) {
             android.widget.Toast.makeText(context, "Select at least one playlist", android.widget.Toast.LENGTH_SHORT).show()
@@ -752,7 +710,7 @@ private fun VibeArcApp(
             youtubeSyncBusy = true
             val loaded = withContext(Dispatchers.IO) {
                 selected.mapNotNull { playlist ->
-                    runCatching { YouTubeAccountApi.loadPlaylistItems(accessToken, playlist) }
+                    runCatching { YouTubeMusicSessionApi.loadPlaylistItems(playlist) }
                         .getOrNull()?.let { items ->
                             val local = playlists.firstOrNull { it.id == "youtube:${playlist.id}" }
                             YouTubeSyncPreview(
@@ -781,13 +739,12 @@ private fun VibeArcApp(
     }
 
     val createYouTubePlaylist: (String) -> Unit = { title ->
-        val accessToken = youtubeAccessToken
-        if (accessToken == null) {
+        if (!YouTubeWebSession.isAuthenticated()) {
             android.widget.Toast.makeText(context, "Connect your YouTube account again", android.widget.Toast.LENGTH_LONG).show()
         } else if (!youtubeSyncBusy) uiScope.launch {
             youtubeSyncBusy = true
             val createdId = withContext(Dispatchers.IO) {
-                runCatching { YouTubeAccountApi.createPlaylist(accessToken, title) }.getOrNull()
+                runCatching { YouTubeMusicSessionApi.createPlaylist(title) }.getOrNull()
             }
             youtubeSyncBusy = false
             if (createdId == null) {
@@ -804,7 +761,7 @@ private fun VibeArcApp(
     }
 
     fun applyYouTubeSync(useLocalAsSource: Boolean) {
-        val accessToken = youtubeAccessToken ?: return
+        if (!YouTubeWebSession.isAuthenticated()) return
         val previews = youtubeSyncPreview ?: return
         uiScope.launch {
             youtubeSyncBusy = true
@@ -813,13 +770,13 @@ private fun VibeArcApp(
                     var failed = 0
                     preview.plan.addVideoIds.forEach { videoId ->
                         if (runCatching {
-                                YouTubeAccountApi.addVideoToPlaylist(accessToken, preview.playlist.id, videoId)
+                                YouTubeMusicSessionApi.addVideoToPlaylist(preview.playlist.id, videoId)
                             }.isFailure) failed++
                     }
                     if (useLocalAsSource && preview.hasLocalPlaylist) {
                         preview.plan.removeItemIds.forEach { itemId ->
                             if (runCatching {
-                                    YouTubeAccountApi.removePlaylistItem(accessToken, itemId)
+                                    YouTubeMusicSessionApi.removePlaylistItem(preview.playlist.id, itemId)
                                 }.isFailure) failed++
                         }
                     }
@@ -937,12 +894,11 @@ private fun VibeArcApp(
                 onRenamePlaylist = { id, name ->
                     val remoteId = id.takeIf { it.startsWith("youtube:") }?.removePrefix("youtube:")
                     val remote = youtubeAccountData?.playlists?.firstOrNull { it.id == remoteId }
-                    val accessToken = youtubeAccessToken
                     if (remote == null) updatePlaylists(playlists.renamePlaylist(id, name))
-                    else if (accessToken == null) android.widget.Toast.makeText(context,"Reconnect YouTube before renaming",android.widget.Toast.LENGTH_LONG).show()
+                    else if (!YouTubeWebSession.isAuthenticated()) android.widget.Toast.makeText(context,"Reconnect YouTube before renaming",android.widget.Toast.LENGTH_LONG).show()
                     else uiScope.launch {
                         youtubeSyncBusy = true
-                        val changed = withContext(Dispatchers.IO) { runCatching { YouTubeAccountApi.updatePlaylist(accessToken,remote,name) }.isSuccess }
+                        val changed = withContext(Dispatchers.IO) { runCatching { YouTubeMusicSessionApi.renamePlaylist(remote.id,name) }.isSuccess }
                         youtubeSyncBusy = false
                         if (changed) {
                             updatePlaylists(playlists.renamePlaylist(id,name))
@@ -952,12 +908,11 @@ private fun VibeArcApp(
                 },
                 onDeletePlaylist = { id ->
                     val remoteId = id.takeIf { it.startsWith("youtube:") }?.removePrefix("youtube:")
-                    val accessToken = youtubeAccessToken
                     if (remoteId == null) updatePlaylists(playlists.deletePlaylist(id))
-                    else if (accessToken == null) android.widget.Toast.makeText(context,"Reconnect YouTube before deleting",android.widget.Toast.LENGTH_LONG).show()
+                    else if (!YouTubeWebSession.isAuthenticated()) android.widget.Toast.makeText(context,"Reconnect YouTube before deleting",android.widget.Toast.LENGTH_LONG).show()
                     else uiScope.launch {
                         youtubeSyncBusy = true
-                        val deleted = withContext(Dispatchers.IO) { runCatching { YouTubeAccountApi.deletePlaylist(accessToken,remoteId) }.isSuccess }
+                        val deleted = withContext(Dispatchers.IO) { runCatching { YouTubeMusicSessionApi.deletePlaylist(remoteId) }.isSuccess }
                         youtubeSyncBusy = false
                         if (deleted) {
                             updatePlaylists(playlists.deletePlaylist(id))

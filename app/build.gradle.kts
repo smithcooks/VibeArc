@@ -90,11 +90,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-session:1.2.1")
-    implementation("com.google.android.gms:play-services-auth:20.7.0") { isTransitive = false }
-    implementation("com.google.android.gms:play-services-auth-base:18.0.4") { isTransitive = false }
-    implementation("com.google.android.gms:play-services-base:18.0.1") { isTransitive = false }
-    implementation("com.google.android.gms:play-services-basement:18.4.0") { isTransitive = false }
-    implementation("com.google.android.gms:play-services-tasks:18.2.0") { isTransitive = false }
     implementation("com.github.teamnewpipe:NewPipeExtractor:v0.26.5")
     implementation("com.github.TeamNewPipe:nanojson:e9d656ddb49a412a5a0a5d5ef20ca7ef09549996")
 

@@ -5,6 +5,76 @@ import org.junit.Test
 
 class YouTubeAccountTest {
     @Test
+    fun `web session parses cookies without losing encoded values`() {
+        assertEquals(
+            mapOf("SAPISID" to "secure-cookie", "PREF" to "a=b=c"),
+            parseCookieHeader("SAPISID=secure-cookie; PREF=a=b=c; malformed"),
+        )
+    }
+
+    @Test
+    fun `web session creates YouTube SAPISID authorization`() {
+        assertEquals(
+            "SAPISIDHASH 1700000000_0ab538b8675f2292cf0b1778ebb1bc9f673ddcf8",
+            youtubeSessionAuthorization(
+                cookies = mapOf("__Secure-3PAPISID" to "secure-cookie"),
+                timestampSeconds = 1_700_000_000,
+            ),
+        )
+    }
+
+    @Test
+    fun `web login only accepts expected secure hosts`() {
+        assertEquals(true, isTrustedYouTubeLoginUrl("https://accounts.google.com/signin"))
+        assertEquals(true, isTrustedYouTubeLoginUrl("https://music.youtube.com/"))
+        assertEquals(false, isTrustedYouTubeLoginUrl("https://accounts.google.com.evil.test/signin"))
+        assertEquals(false, isTrustedYouTubeLoginUrl("http://music.youtube.com/"))
+        assertEquals(false, isTrustedYouTubeLoginUrl("javascript:alert(1)"))
+    }
+
+    @Test
+    fun `web account response maps active YouTube identity`() {
+        val json = """{"actions":[{"openPopupAction":{"popup":{"multiPageMenuRenderer":{"header":{"activeAccountHeaderRenderer":{"accountName":{"runs":[{"text":"Smith"}]},"channelHandle":{"runs":[{"text":"@smith"}]},"accountPhoto":{"thumbnails":[{"url":"https://img.example/avatar.jpg"}]}}}}}}}]}"""
+
+        assertEquals(
+            YouTubeAccount("@smith", "Smith", "https://img.example/avatar.jpg"),
+            parseYouTubeMusicAccount(json),
+        )
+    }
+
+    @Test
+    fun `web playlist browse response maps library playlists`() {
+        val json = """{"contents":[{"musicTwoRowItemRenderer":{"title":{"runs":[{"text":"Night Drive"}]},"subtitle":{"runs":[{"text":"12 songs"}]},"navigationEndpoint":{"browseEndpoint":{"browseId":"VLPL-night"}},"thumbnailRenderer":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"https://img.example/list.jpg"}]}}}}}]}"""
+
+        assertEquals(
+            listOf(YouTubePlaylist("PL-night", "Night Drive", 12, "https://img.example/list.jpg")),
+            parseYouTubeMusicPlaylists(json),
+        )
+    }
+
+    @Test
+    fun `web playlist response retains set video ids`() {
+        val json = """{"contents":[{"musicResponsiveListItemRenderer":{"playlistItemData":{"playlistSetVideoId":"set-1"},"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Night Song","navigationEndpoint":{"watchEndpoint":{"videoId":"video-1"}}}]}}},{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"The Artist","navigationEndpoint":{"browseEndpoint":{"browseId":"UC-artist"}}}]}}}],"thumbnail":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"https://img.example/song.jpg"}]}}}}}]}"""
+
+        assertEquals(
+            listOf(
+                YouTubePlaylistItem(
+                    "set-1",
+                    Track(
+                        title = "Night Song",
+                        artist = "The Artist",
+                        album = "Night Drive",
+                        uri = "https://music.youtube.com/watch?v=video-1",
+                        artworkUri = "https://img.example/song.jpg",
+                        folder = "YouTube Music",
+                    ),
+                ),
+            ),
+            parseYouTubeMusicPlaylistItems(json, "Night Drive").items,
+        )
+    }
+
+    @Test
     fun `cached account state round trips without credentials`() {
         val state = YouTubeAccountState(
             account = YouTubeAccount("channel-1", "Smith", "https://img.example/avatar.jpg"),

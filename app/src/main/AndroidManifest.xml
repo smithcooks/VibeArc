@@ -18,6 +18,9 @@
         <activity
             android:name=".MainActivity"
             android:exported="false" />
+        <activity
+            android:name=".YouTubeLoginActivity"
+            android:exported="false" />
         <activity-alias
             android:name=".DefaultIconAlias"
             android:enabled="true"
