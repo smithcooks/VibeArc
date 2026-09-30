@@ -77,6 +77,13 @@ class LibraryCodecTest {
     }
 
     @Test
+    fun `liking a catalog track adds it to the library`() {
+        val catalogTrack = Track("Online", "Artist", "Album", "https://music.youtube.com/watch?v=track")
+
+        assertEquals(listOf(catalogTrack.copy(isFavorite = true)), emptyList<Track>().toggleFavorite(catalogTrack))
+    }
+
+    @Test
     fun `playlist round trip preserves names and track uri references`() {
         val playlists = listOf(
             Playlist("road-trip", "Road | Trip\n2026", listOf("content://music/1", "content://music/2")),

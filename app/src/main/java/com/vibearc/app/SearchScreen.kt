@@ -223,6 +223,7 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
             TrackRow(
                 track,
                 enabled = playableTrack != null,
+                playableTrack = playableTrack,
                 onPlay = { playableTrack?.let(onPlay) },
             )
             if (unavailable) Text(

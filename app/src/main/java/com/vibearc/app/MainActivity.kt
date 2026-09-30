@@ -16,8 +16,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
@@ -29,6 +31,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -63,6 +66,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -88,6 +92,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -148,6 +153,17 @@ private data class YouTubeSyncPreview(
     val plan: YouTubePlaylistSyncPlan,
     val hasLocalPlaylist: Boolean,
 )
+
+private data class TrackActionsHost(
+    val playlists: List<Playlist>,
+    val isFavorite: (Track) -> Boolean,
+    val addToQueue: (Track) -> Unit,
+    val toggleFavorite: (Track) -> Unit,
+    val addToPlaylist: (Track, String) -> Unit,
+    val download: (Track) -> Unit,
+)
+
+private val LocalTrackActions = staticCompositionLocalOf<TrackActionsHost?> { null }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -626,7 +642,7 @@ private fun VibeArcApp(
         }
     }
     val toggleFavorite: (Track) -> Unit = { track ->
-        library = library.toggleFavorite(track.uri).also(context::saveLibrary)
+        library = library.toggleFavorite(track).also(context::saveLibrary)
         library.firstOrNull { it.uri == track.uri }?.let { updated ->
             if (currentTrack?.uri == updated.uri) currentTrack = updated
         }
@@ -662,6 +678,31 @@ private fun VibeArcApp(
                 offlineCopyTrack = null
                 offlineCancelSignal = null
             }
+        }
+    }
+    val addTrackToQueue: (Track) -> Unit = { track ->
+        when {
+            activePlayer == null -> android.widget.Toast.makeText(context, "Player is not ready", android.widget.Toast.LENGTH_SHORT).show()
+            !isAllowedMediaUri(track.uri) -> android.widget.Toast.makeText(context, "This song is not ready to queue", android.widget.Toast.LENGTH_SHORT).show()
+            else -> {
+                activePlayer.addMediaItem(track.toMediaItem())
+                if (activePlayer.playbackState == Player.STATE_IDLE) activePlayer.prepare()
+                queueTracks = activePlayer.queueTracks()
+                android.widget.Toast.makeText(context, "Added to queue", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val addTrackToPlaylist: (Track, String) -> Unit = { track, playlistId ->
+        library = library.upsert(track).also(context::saveLibrary)
+        updatePlaylists(playlists.addTrackToPlaylist(playlistId, track.uri))
+        android.widget.Toast.makeText(context, "Added to playlist", android.widget.Toast.LENGTH_SHORT).show()
+    }
+    val downloadFromTrackMenu: (Track) -> Unit = { track ->
+        if (offlineFolder == null) {
+            navigate(Tab.Downloads)
+            android.widget.Toast.makeText(context, "Choose an offline folder first", android.widget.Toast.LENGTH_LONG).show()
+        } else {
+            copyTrackOffline(track)
         }
     }
     fun mergeYouTubePlaylist(remotePlaylist: YouTubePlaylist, remoteTracks: List<Track>): Int {
@@ -801,8 +842,20 @@ private fun VibeArcApp(
         }
     }
 
+    val trackActions = TrackActionsHost(
+        playlists = playlists,
+        isFavorite = { track -> library.any { it.uri == track.uri && it.isFavorite } },
+        addToQueue = addTrackToQueue,
+        toggleFavorite = toggleFavorite,
+        addToPlaylist = addTrackToPlaylist,
+        download = downloadFromTrackMenu,
+    )
+
     VibeArcTheme(appearance, artworkAccentArgb) {
-    CompositionLocalProvider(LocalGlass provides appearance.liquidGlassEnabled) {
+    CompositionLocalProvider(
+        LocalGlass provides appearance.liquidGlassEnabled,
+        LocalTrackActions provides trackActions,
+    ) {
     Scaffold(
         topBar = {
             if (currentTab !in listOf(Tab.Player, Tab.Search, Tab.Library)) ReferenceHeader(
@@ -1276,19 +1329,29 @@ private fun MiniPlayer(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun TrackRow(
     track: Track,
     onPlay: () -> Unit,
     enabled: Boolean = true,
+    playableTrack: Track? = track,
     onFavorite: (() -> Unit)? = null,
     isFavorite: Boolean = false,
     trailingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     trailingDescription: String = "Track action",
     onTrailingAction: (() -> Unit)? = null,
 ) {
+    val actions = LocalTrackActions.current
+    var showActions by remember(track.uri) { mutableStateOf(false) }
+    var showPlaylists by remember(track.uri) { mutableStateOf(false) }
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onPlay),
+        modifier = Modifier.fillMaxWidth().combinedClickable(
+            enabled = enabled || actions != null,
+            onClick = { if (enabled) onPlay() },
+            onLongClick = actions?.let { { showActions = true } },
+            onLongClickLabel = "Song options",
+        ),
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(6.dp),
     ) {
@@ -1327,6 +1390,62 @@ internal fun TrackRow(
             }
         }
     }
+    }
+
+    if (showActions && actions != null) {
+        ModalBottomSheet(onDismissRequest = { showActions = false; showPlaylists = false }) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    if (showPlaylists) "Add to playlist" else track.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                )
+                if (showPlaylists) {
+                    if (actions.playlists.isEmpty()) {
+                        Text("Create a playlist in Library first.", color = MutedText, modifier = Modifier.padding(16.dp))
+                    } else {
+                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            items(actions.playlists, key = Playlist::id) { playlist ->
+                                ReferenceRow(playlist.name, "${playlist.trackUris.size} tracks", "playlist") {
+                                    actions.addToPlaylist(track, playlist.id)
+                                    showActions = false
+                                    showPlaylists = false
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    ReferenceRow("Add to queue", "Play after the current queue", "music", 0, 4, enabled = playableTrack != null) {
+                        playableTrack?.let(actions.addToQueue)
+                        showActions = false
+                    }
+                    ReferenceRow("Add to playlist", "Choose one of your playlists", "playlist", 1, 4) {
+                        showPlaylists = true
+                    }
+                    val liked = actions.isFavorite(track)
+                    ReferenceRow(if (liked) "Unlike song" else "Like song", "Save in your library", if (liked) "heartFilled" else "heart", 2, 4) {
+                        actions.toggleFavorite(track)
+                        showActions = false
+                    }
+                    ReferenceRow(
+                        "Download song",
+                        if (track.canCopyOffline()) "Copy to your selected offline folder" else "Available for user-owned local audio",
+                        "download",
+                        3,
+                        4,
+                    ) {
+                        actions.download(track)
+                        showActions = false
+                    }
+                }
+            }
+        }
     }
 }
 

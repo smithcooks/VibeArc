@@ -198,6 +198,9 @@ internal fun List<Track>.toggleFavorite(uri: String): List<Track> = map { track 
     if (track.uri == uri) track.copy(isFavorite = !track.isFavorite) else track
 }
 
+internal fun List<Track>.toggleFavorite(track: Track): List<Track> =
+    if (any { it.uri == track.uri }) toggleFavorite(track.uri) else this + track.copy(isFavorite = true)
+
 internal fun List<Playlist>.createPlaylist(name: String, id: String): List<Playlist> {
     require(id.isNotBlank()) { "Playlist id cannot be blank" }
     val trimmedName = name.trim()

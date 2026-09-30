@@ -323,20 +323,25 @@ private fun PlayerTimeControls(player: Player, track: Track, isPlaying: Boolean,
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Playback position" },
             thumb = { Box(Modifier.size(18.dp).background(accent, CircleShape)) },
             track = { state ->
-                Canvas(Modifier.fillMaxWidth().height(22.dp)) {
+                Canvas(Modifier.fillMaxWidth().height(30.dp)) {
                     val end = size.width * (state.value / duration.toFloat()).coerceIn(0f, 1f)
                     drawLine(inactive, Offset(0f, center.y), Offset(size.width, center.y), 4.dp.toPx(), StrokeCap.Round)
-                    drawLine(accent, Offset(0f, center.y), Offset(end, center.y), 4.dp.toPx(), StrokeCap.Round)
                     if(wavy && isPlaying && end > 0f) {
-                        // A few points, updated with progress; no perpetual animation or blur.
                         val path = Path()
-                        val points = (end / 3.dp.toPx()).toInt().coerceAtLeast(1)
+                        val wavelength = 22.dp.toPx()
+                        val amplitude = 6.dp.toPx()
+                        val edgeLength = 10.dp.toPx()
+                        val phase = (position % 1_200L) / 1_200f * (Math.PI * 2).toFloat()
+                        val points = (end / 2.dp.toPx()).toInt().coerceAtLeast(1)
                         for(i in 0..points) {
                             val x = end * i / points
-                            val y = center.y - kotlin.math.sin(x / 12.dp.toPx()) * 5.dp.toPx() * kotlin.math.sin(Math.PI * i / points).toFloat()
+                            val edge = minOf(1f, x / edgeLength, (end - x) / edgeLength).coerceAtLeast(0f)
+                            val y = center.y + kotlin.math.sin((x / wavelength * Math.PI * 2).toFloat() + phase) * amplitude * edge
                             if(i == 0) path.moveTo(x,y) else path.lineTo(x,y)
                         }
-                        drawPath(path, accent.copy(alpha = .65f), style = Stroke(1.dp.toPx()))
+                        drawPath(path, accent, style = Stroke(4.dp.toPx(), cap = StrokeCap.Round))
+                    } else {
+                        drawLine(accent, Offset(0f, center.y), Offset(end, center.y), 4.dp.toPx(), StrokeCap.Round)
                     }
                 }
             })
