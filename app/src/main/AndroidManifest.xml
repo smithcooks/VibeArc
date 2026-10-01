@@ -22,7 +22,7 @@
             android:name=".YouTubeLoginActivity"
             android:exported="false" />
         <activity-alias
-            android:name=".DefaultIconAlias"
+            android:name=".MintIconAlias"
             android:enabled="true"
             android:exported="true"
             android:icon="@drawable/vibearc_icon"
@@ -34,11 +34,11 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".PeachIconAlias"
+            android:name=".EmberIconAlias"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_peach"
-            android:roundIcon="@mipmap/ic_launcher_peach"
+            android:icon="@drawable/vibearc_icon_ember"
+            android:roundIcon="@drawable/vibearc_icon_ember"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -46,11 +46,11 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MonoIconAlias"
+            android:name=".AuroraIconAlias"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_mono"
-            android:roundIcon="@mipmap/ic_launcher_mono"
+            android:icon="@drawable/vibearc_icon_aurora"
+            android:roundIcon="@drawable/vibearc_icon_aurora"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
