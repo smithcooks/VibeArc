@@ -77,4 +77,32 @@ class LyricsTest {
         )
         assertEquals("A_B.lrc", lyricsFileName("A/B"))
     }
+
+    @Test
+    fun `KRC parser converts word offsets into absolute timestamps`() {
+        val lines = parseKrc("[1000,1800]<0,400,0>Hello <450,500,0>world")
+
+        assertEquals(
+            listOf(
+                LyricLine(
+                    1_000,
+                    "Hello world",
+                    listOf(LyricWord(1_000, "Hello "), LyricWord(1_450, "world")),
+                ),
+            ),
+            lines,
+        )
+    }
+
+    @Test
+    fun `lyrics offset moves line and word timestamps without going negative`() {
+        val original = LyricsDocument(
+            listOf(LyricLine(500, "Hi", listOf(LyricWord(500, "Hi")))),
+            emptyList(),
+            false,
+        )
+
+        assertEquals(0, original.shifted(-1_000).syncedLines.single().startMs)
+        assertEquals(750, original.shifted(250).syncedLines.single().words.single().startMs)
+    }
 }

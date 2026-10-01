@@ -171,6 +171,12 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
     var failed by remember(track.uri) { mutableStateOf(false) }
     var lyrics by remember(track.uri) { mutableStateOf<LyricsDocument?>(null) }
     var position by remember(track.uri) { mutableLongStateOf(0L) }
+    var editor by remember(track.uri) { mutableStateOf(false) }
+    var searchTitle by remember(track.uri) { mutableStateOf(track.title) }
+    var searchArtist by remember(track.uri) { mutableStateOf(track.artist) }
+    var manualRaw by remember(track.uri) { mutableStateOf("") }
+    var offsetText by remember(track.uri) { mutableStateOf("0") }
+    val overrideStore = remember(context) { LyricsOverrideStore(context) }
     val listState = rememberLazyListState()
     val saveLyrics = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val lines = lyrics?.syncedLines.orEmpty()
@@ -188,8 +194,12 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
     LaunchedEffect(track.uri, request) {
         loading = true
         failed = false
-        val result = withContext(Dispatchers.IO) { runCatching { LyricsProvider.fetch(track) } }
+        val local = withContext(Dispatchers.IO) { overrideStore.load(track) }
+        val result = if(local != null && request == 0) Result.success(local.first) else withContext(Dispatchers.IO) {
+            runCatching { LyricsProvider.fetch(track, searchTitle, searchArtist) }
+        }
         lyrics = result.getOrNull()
+        local?.second?.let { offsetText=it.toString() }
         failed = result.isFailure
         loading = false
     }
@@ -208,9 +218,9 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
             Text(
                 when {
                     loading -> "LYRICS • LOADING"
-                    lyrics?.syncedLines?.any { it.words.isNotEmpty() } == true -> "WORD SYNC • ENHANCED LRC"
-                    lyrics?.syncedLines?.isNotEmpty() == true -> "LINE SYNC • LRCLIB"
-                    lyrics != null -> "LYRICS • LRCLIB"
+                    lyrics?.syncedLines?.any { it.words.isNotEmpty() } == true -> "WORD SYNC • ${lyrics?.source.orEmpty().uppercase()}"
+                    lyrics?.syncedLines?.isNotEmpty() == true -> "LINE SYNC • ${lyrics?.source.orEmpty().uppercase()}"
+                    lyrics != null -> "LYRICS • ${lyrics?.source.orEmpty().uppercase()}"
                     else -> "LYRICS • UNAVAILABLE"
                 },
                 Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -230,7 +240,7 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
                 }
                 lyrics == null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("No lyrics found.", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    Text("LRCLIB does not have lyrics matching this track yet.", color = MutedText)
+                    Text("No matching lyrics were found across KuGou, LRCLIB, or Lyrics.ovh.", color = MutedText)
                 }
                 lyrics?.instrumental == true -> Text("Instrumental", fontSize = 30.sp, fontWeight = FontWeight.Bold)
                 lyrics?.syncedLines?.isEmpty() == true && lyrics?.plainLines?.isEmpty() == true ->
@@ -272,6 +282,11 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
                 }
             }
             Row(Modifier.align(Alignment.BottomEnd).padding(bottom = 12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                PlayerAction("Search or edit lyrics", "more") {
+                    manualRaw=lyrics?.syncedLines?.takeIf(List<LyricLine>::isNotEmpty)?.let(::encodeLrc)
+                        ?: lyrics?.plainLines?.joinToString("\n").orEmpty()
+                    editor=true
+                }
                 if(lyrics?.syncedLines?.isNotEmpty() == true) PlayerAction("Save synchronized lyrics", "download") {
                     saveLyrics.launch(lyricsFileName(track.title))
                 }
@@ -280,6 +295,32 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
         }
         if(!expanded) PlayerTimeControls(player, track, isPlaying, wavy, compact = true)
     }
+    if(editor) AlertDialog(
+        onDismissRequest={editor=false},
+        title={Text("Lyrics search & timing")},
+        text={
+            Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(searchTitle,{searchTitle=it.take(160)},label={Text("Title")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                OutlinedTextField(searchArtist,{searchArtist=it.take(160)},label={Text("Artist")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                OutlinedTextField(offsetText,{offsetText=it.filter { c -> c.isDigit() || c=='-' }.take(7)},label={Text("Timing offset (ms)")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                OutlinedTextField(manualRaw,{manualRaw=it.take(80_000)},label={Text("LRC, enhanced LRC, or plain lyrics")},minLines=5,maxLines=10,modifier=Modifier.fillMaxWidth())
+                Text("Use +milliseconds when lyrics appear early and −milliseconds when they appear late.",style=MaterialTheme.typography.bodySmall,color=MutedText)
+                TextButton(onClick={overrideStore.clear(track);editor=false;request++}) { Text("Remove manual version") }
+            }
+        },
+        confirmButton={
+            Row {
+                TextButton(onClick={editor=false;request++}) { Text("Search providers") }
+                Button(onClick={
+                    val offset=offsetText.toLongOrNull()?.coerceIn(-30_000L,30_000L)?:0L
+                    overrideStore.save(track,manualRaw,offset)
+                    lyrics=overrideStore.load(track)?.first
+                    editor=false
+                },enabled=manualRaw.isNotBlank()) { Text("Save") }
+            }
+        },
+        dismissButton={TextButton(onClick={editor=false}){Text("Cancel")}},
+    )
 }
 
 @Composable

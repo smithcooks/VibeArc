@@ -1,11 +1,17 @@
 package com.vibearc.app
 
+import android.content.Context
 import com.grack.nanojson.JsonParser
 import com.grack.nanojson.JsonObject
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.security.MessageDigest
+import java.util.Base64
+import java.util.zip.InflaterInputStream
 
 internal data class LyricWord(val startMs: Long, val text: String)
 internal data class LyricLine(val startMs: Long, val text: String, val words: List<LyricWord> = emptyList())
@@ -14,10 +20,13 @@ internal data class LyricsDocument(
     val syncedLines: List<LyricLine>,
     val plainLines: List<String>,
     val instrumental: Boolean,
+    val source: String = "LRCLIB",
 )
 
 private val LrcTimestamp = Regex("\\[(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?]")
 private val EnhancedLrcTimestamp = Regex("<(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?>")
+private val KrcLine = Regex("^\\[(\\d+),(\\d+)](.*)$")
+private val KrcWord = Regex("<(\\d+),(\\d+),\\d+>([^<]*)")
 
 private fun MatchResult.timestampMs(): Long {
     val minutes = groupValues[1].toLong()
@@ -46,6 +55,25 @@ internal fun activeLyricIndex(lines: List<LyricLine>, positionMs: Long): Int =
 
 internal fun activeLyricWordIndex(line: LyricLine, positionMs: Long): Int =
     line.words.indexOfLast { it.startMs <= positionMs }
+
+internal fun parseKrc(value: String): List<LyricLine> = value.lineSequence().mapNotNull { row ->
+    val match = KrcLine.matchEntire(row.trim()) ?: return@mapNotNull null
+    val lineStart = match.groupValues[1].toLongOrNull() ?: return@mapNotNull null
+    val words = KrcWord.findAll(match.groupValues[3]).mapNotNull { word ->
+        val offset = word.groupValues[1].toLongOrNull() ?: return@mapNotNull null
+        word.groupValues[3].takeIf(String::isNotBlank)?.let { LyricWord(lineStart + offset, it) }
+    }.toList()
+    words.takeIf(List<LyricWord>::isNotEmpty)?.let { LyricLine(lineStart, words.joinToString("") { it.text }.trim(), words) }
+}.sortedBy(LyricLine::startMs).toList()
+
+internal fun LyricsDocument.shifted(offsetMs: Long): LyricsDocument = copy(
+    syncedLines = syncedLines.map { line ->
+        line.copy(
+            startMs = (line.startMs + offsetMs).coerceAtLeast(0L),
+            words = line.words.map { it.copy(startMs = (it.startMs + offsetMs).coerceAtLeast(0L)) },
+        )
+    },
+)
 
 internal fun encodeLrc(lines: List<LyricLine>): String = lines.sortedBy(LyricLine::startMs).joinToString("\n") { line ->
     val totalSeconds = line.startMs.coerceAtLeast(0L) / 1_000
@@ -109,37 +137,80 @@ internal object LyricsProvider {
     private val cache = LinkedHashMap<String, LyricsDocument>()
 
     @Synchronized
-    fun fetch(track: Track): LyricsDocument? {
-        val key = "${track.title}\n${track.artist}\n${track.album}\n${track.durationMs}"
+    fun fetch(track: Track, title: String = track.title, artist: String = track.artist): LyricsDocument? {
+        val key = "$title\n$artist\n${track.album}\n${track.durationMs}"
         cache[key]?.let { return it }
-        if (track.title.isBlank() || track.artist.isBlank()) return null
+        if (title.isBlank() || artist.isBlank()) return null
+        val queryTrack = track.copy(title = title, artist = artist)
+        fetchKrc(queryTrack)?.let { return remember(key, it) }
         val parameters = buildList {
-            add("track_name" to track.title)
-            add("artist_name" to track.artist)
-            track.album.takeIf { it.isNotBlank() && it != "YouTube Music" }?.let { add("album_name" to it) }
-            (track.durationMs / 1_000).takeIf { it in 1..3_600 }?.let { add("duration" to it.toString()) }
+            add("track_name" to title)
+            add("artist_name" to artist)
+            queryTrack.album.takeIf { it.isNotBlank() && it != "YouTube Music" }?.let { add("album_name" to it) }
+            (queryTrack.durationMs / 1_000).takeIf { it in 1..3_600 }?.let { add("duration" to it.toString()) }
         }
         val exact = request("https://lrclib.net/api/get?${parameters.encoded()}")
         val result = when (exact.first) {
             404 -> {
                 val search = listOf(
-                    "track_name" to lyricsSearchTitle(track.title),
-                    "artist_name" to lyricsSearchArtist(track.artist),
+                    "track_name" to lyricsSearchTitle(title),
+                    "artist_name" to lyricsSearchArtist(artist),
                 )
                 val fallback = request("https://lrclib.net/api/search?${search.encoded()}")
                 when (fallback.first) {
-                    in 200..299 -> fallback.second?.let { parseLyricsSearchResponse(it, track) }
-                    else -> error("Lyrics service returned ${fallback.first}")
+                    in 200..299 -> fallback.second?.let { parseLyricsSearchResponse(it, queryTrack) }
+                    else -> null
                 }
             }
             in 200..299 -> exact.second?.let(::parseLyricsResponse)
-            else -> error("Lyrics service returned ${exact.first}")
+            else -> null
         }
-        return result?.also {
-            cache[key] = it
-            if (cache.size > 8) cache.remove(cache.keys.first())
-        }
+        return result?.let { remember(key, it) } ?: fetchPlainLyrics(queryTrack)?.let { remember(key, it) }
     }
+
+    private fun remember(key: String, document: LyricsDocument): LyricsDocument = document.also {
+        cache[key] = it
+        if (cache.size > 8) cache.remove(cache.keys.first())
+    }
+
+    private fun fetchKrc(track: Track): LyricsDocument? = runCatching {
+        val query = listOf(
+            "ver" to "1", "man" to "yes", "client" to "pc",
+            "keyword" to "${lyricsSearchArtist(track.artist)} - ${lyricsSearchTitle(track.title)}",
+            "duration" to track.durationMs.takeIf { it > 0 }?.toString().orEmpty(), "hash" to "",
+        )
+        val search = request("https://lyrics.kugou.com/search?${query.encoded()}").second ?: return null
+        val wantedTitle = normalizedMetadata(lyricsSearchTitle(track.title))
+        val wantedArtist = normalizedMetadata(lyricsSearchArtist(track.artist))
+        val candidates = JsonParser.`object`().from(search).getArray("candidates")
+            .mapNotNull { it as? JsonObject }
+            .filter {
+                val song = normalizedMetadata(it.getString("song", ""))
+                val singer = normalizedMetadata(it.getString("singer", ""))
+                song.isNotBlank() && singer.isNotBlank() &&
+                    (song.contains(wantedTitle) || wantedTitle.contains(song)) &&
+                    (singer.contains(wantedArtist) || wantedArtist.contains(singer))
+            }
+        val candidate = candidates.minByOrNull {
+            kotlin.math.abs(it.getLong("duration", track.durationMs) - track.durationMs)
+        } ?: return null
+        val download = request("https://lyrics.kugou.com/download?${listOf(
+            "ver" to "1", "client" to "pc", "id" to candidate.getString("id", ""),
+            "accesskey" to candidate.getString("accesskey", ""), "fmt" to "krc", "charset" to "utf8",
+        ).encoded()}").second ?: return null
+        val content = JsonParser.`object`().from(download).getString("content", "").takeIf(String::isNotBlank) ?: return null
+        val lines = decodeKrc(content)?.let(::parseKrc).orEmpty()
+        lines.takeIf(List<LyricLine>::isNotEmpty)?.let { LyricsDocument(it, emptyList(), false, "KuGou KRC") }
+    }.getOrNull()
+
+    private fun fetchPlainLyrics(track: Track): LyricsDocument? = runCatching {
+        fun path(value: String) = URLEncoder.encode(value, UTF_8.name()).replace("+", "%20")
+        val response = request("https://api.lyrics.ovh/v1/${path(track.artist)}/${path(track.title)}")
+        if (response.first !in 200..299) return null
+        val lines = response.second?.let { JsonParser.`object`().from(it).getString("lyrics", "") }
+            ?.lineSequence()?.map(String::trim)?.filter(String::isNotBlank)?.toList().orEmpty()
+        lines.takeIf(List<String>::isNotEmpty)?.let { LyricsDocument(emptyList(), it, false, "Lyrics.ovh") }
+    }.getOrNull()
 
     private fun List<Pair<String, String>>.encoded(): String = joinToString("&") { (name, value) ->
         "$name=${URLEncoder.encode(value, UTF_8.name())}"
@@ -162,4 +233,45 @@ internal object LyricsProvider {
             connection.disconnect()
         }
     }
+}
+
+private val KrcKey = byteArrayOf(
+    0x40, 0x47, 0x61, 0x77, 0x5e, 0x32, 0x74, 0x47, 0x51, 0x36, 0x31, 0x2d,
+    0xce.toByte(), 0xd2.toByte(), 0x6e, 0x69,
+)
+
+internal fun decodeKrc(base64: String): String? = runCatching {
+    val encrypted = Base64.getMimeDecoder().decode(base64)
+    require(encrypted.size > 4 && encrypted.copyOfRange(0, 4).decodeToString() == "krc1")
+    val compressed = ByteArray(encrypted.size - 4) { index ->
+        (encrypted[index + 4].toInt() xor KrcKey[index % KrcKey.size].toInt()).toByte()
+    }
+    InflaterInputStream(ByteArrayInputStream(compressed)).use { input ->
+        ByteArrayOutputStream().use { output -> input.copyTo(output); output.toString(UTF_8.name()) }
+    }
+}.getOrNull()
+
+internal class LyricsOverrideStore(private val context: Context) {
+    private val preferences = context.getSharedPreferences("vibearc_lyrics_overrides", Context.MODE_PRIVATE)
+
+    fun load(track: Track): Pair<LyricsDocument, Long>? {
+        val key = track.lyricsKey()
+        val raw = preferences.getString("lyrics_$key", null) ?: return null
+        val offset = preferences.getLong("offset_$key", 0L)
+        val synced = parseLrc(raw)
+        val document = if (synced.isNotEmpty()) LyricsDocument(synced, emptyList(), false, "Manual")
+        else LyricsDocument(emptyList(), raw.lineSequence().map(String::trim).filter(String::isNotBlank).toList(), false, "Manual")
+        return document.shifted(offset) to offset
+    }
+
+    fun save(track: Track, raw: String, offsetMs: Long) {
+        preferences.edit().putString("lyrics_${track.lyricsKey()}", raw).putLong("offset_${track.lyricsKey()}", offsetMs).apply()
+    }
+
+    fun clear(track: Track) {
+        preferences.edit().remove("lyrics_${track.lyricsKey()}").remove("offset_${track.lyricsKey()}").apply()
+    }
+
+    private fun Track.lyricsKey(): String = MessageDigest.getInstance("SHA-256")
+        .digest(catalogUri.toByteArray(UTF_8)).joinToString("") { "%02x".format(it) }
 }
