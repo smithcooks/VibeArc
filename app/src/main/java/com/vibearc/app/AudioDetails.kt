@@ -20,6 +20,7 @@ internal data class AudioDetails(
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 internal fun Player.currentAudioDetails(): AudioDetails? = currentTracks.groups.asSequence()
     .filter { it.type == C.TRACK_TYPE_AUDIO }
     .flatMap { group -> (0 until group.length).asSequence().filter(group::isTrackSelected).map(group::getTrackFormat) }

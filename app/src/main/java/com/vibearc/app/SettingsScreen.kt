@@ -135,7 +135,7 @@ internal fun SettingsScreen(
         }
         item { SettingsHeading("Experimental") }
         item { ReferenceRow("Liquid Glass","Translucent materials across the app","glass",0,5,appearance.liquidGlassEnabled,onClick={onAppearanceChange(appearance.copy(liquidGlassEnabled=!appearance.liquidGlassEnabled))}) }
-        item { ReferenceRow("Lyrics Animation","Word timing when supplied · line fallback","lyrics",1,5,onClick={unavailable("Lyrics Animation","Open the quotation-mark button in Now Playing. VibeArc animates enhanced-LRC word timestamps when a provider supplies them and otherwise highlights synchronized lines from LRCLIB.")}) }
+        item { ReferenceRow("Lyrics Animation","Word timing when supplied · line fallback","lyrics",1,5,onClick={unavailable("Lyrics Animation","Open the quotation-mark button in Now Playing. VibeArc animates KuGou KRC or enhanced-LRC word timestamps when supplied and otherwise highlights synchronized lines.")}) }
         item { ReferenceRow("Equalizer",if(Build.VERSION.SDK_INT>=28) "Built-in 15-band equalizer" else "Requires Android 9 or later","equalizer",2,5,audioTuning.equalizerEnabled,enabled=Build.VERSION.SDK_INT>=28,onClick={sheet="Equalizer"}) }
         item { ReferenceRow("Wavy Seekbar","Lightweight wave while music plays","wave",3,5,wavySeekbar,onClick={wavySeekbar=!wavySeekbar;context.getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putBoolean("wavy_seekbar",wavySeekbar).apply()}) }
         item { ReferenceRow("Studio Master Clarity","Native clarity EQ and peak limiter","spark",4,5,audioTuning.studioMasterEnabled,enabled=Build.VERSION.SDK_INT>=28,onClick={
@@ -166,7 +166,7 @@ internal fun SettingsScreen(
         item { SettingsHeading("App icon") }
         item { ReferenceRow("Launcher Icon",selectedIcon.label,"album",onClick={sheet="App icon"}) }
         item { SettingsHeading("About") }
-        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library and settings on this device, keeps OAuth tokens only in memory, and includes no analytics or ad SDK. Online features contact YouTube, LRCLIB, Last.fm, and GitHub. Full PRIVACY.md and THIRD_PARTY_NOTICES.md files are included with the source release.")}) }
+        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, KuGou, LRCLIB, Lyrics.ovh, Last.fm, and GitHub. Full notices are included with the source release.")}) }
         item { ReferenceRow("Updates & Support","VibeArc on GitHub","spark",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/Akumukage/VibeArc")))}}) }
         item {
             Spacer(Modifier.height(24.dp))

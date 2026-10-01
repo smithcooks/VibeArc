@@ -1190,20 +1190,7 @@ private fun VibeArcApp(
         },
         dismissButton = { TextButton(onClick = { confirmRemoteRemoval = false }) { Text("Cancel") } },
     )
-    availableUpdate?.let { update ->
-        AlertDialog(
-            onDismissRequest = { availableUpdate = null },
-            title = { Text("VibeArc ${update.version} is available") },
-            text = { Text("Open the verified VibeArc GitHub release page to review and install the update. In-app APK installation stays disabled until production signing is configured.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.pageUrl))) }
-                    availableUpdate = null
-                }) { Text("Open release") }
-            },
-            dismissButton = { TextButton(onClick = { availableUpdate = null }) { Text("Later") } },
-        )
-    }
+    availableUpdate?.let { update -> UpdateDialog(update) { availableUpdate = null } }
     }
     }
 }

@@ -1,12 +1,13 @@
 # Third-party notices
 
 VibeArc uses AndroidX and Media3 components distributed under the Apache
-License 2.0, Google Play services subject to Google's applicable terms, and
-NewPipeExtractor, which is licensed under GPL-3.0-or-later. Distributing a build
+License 2.0 and NewPipeExtractor, which is licensed under GPL-3.0-or-later.
+Distributing a build
 that includes NewPipeExtractor requires a GPL-compatible VibeArc source release
 and the corresponding source obligations to be met.
 
-Network features access YouTube/YouTube Music, LRCLIB, Last.fm, and GitHub.
+Network features access YouTube/YouTube Music, KuGou, LRCLIB, Lyrics.ovh,
+Last.fm, and GitHub.
 Their names, artwork, metadata, lyrics, and other content remain subject to the
 respective service terms and rights holders. VibeArc does not grant rights to
 download or redistribute third-party media.

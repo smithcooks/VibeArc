@@ -12,6 +12,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import java.util.concurrent.Executors
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private lateinit var crossfadePlayer: ExoPlayer

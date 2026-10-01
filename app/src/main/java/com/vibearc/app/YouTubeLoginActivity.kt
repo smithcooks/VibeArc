@@ -19,8 +19,6 @@ internal class YouTubeLoginActivity : ComponentActivity() {
             settings.domStorageEnabled = true
             settings.allowFileAccess = false
             settings.allowContentAccess = false
-            settings.allowFileAccessFromFileURLs = false
-            settings.allowUniversalAccessFromFileURLs = false
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
             settings.setGeolocationEnabled(false)
             settings.safeBrowsingEnabled = true
