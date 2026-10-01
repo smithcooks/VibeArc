@@ -8,6 +8,8 @@ import java.net.URL
 
 private const val MusicOrigin = "https://music.youtube.com"
 
+internal data class YouTubeFeedSection(val title: String, val tracks: List<Track>)
+
 internal fun parseYouTubeMusicAccount(json: String): YouTubeAccount {
     val renderer = jsonObjects(JsonParser.`object`().from(json))
         .firstNotNullOfOrNull { it["activeAccountHeaderRenderer"] as? JsonObject }
@@ -67,6 +69,43 @@ internal fun parseYouTubeMusicPlaylistItems(json: String, playlistTitle: String)
     return YouTubePlaylistItemPage(items, continuation)
 }
 
+internal fun parseYouTubeMusicFeed(json: String): List<YouTubeFeedSection> =
+    jsonObjects(JsonParser.`object`().from(json)).mapNotNull { wrapper ->
+        val shelf = (wrapper["musicCarouselShelfRenderer"] ?: wrapper["musicShelfRenderer"])
+            as? JsonObject ?: return@mapNotNull null
+        val title = jsonObjects(shelf["header"]).map { it.displayText() }
+            .firstOrNull(String::isNotBlank).orEmpty()
+        val sectionTitle = title.ifBlank { "Recommended" }
+        val tracks = jsonObjects(shelf["contents"]).mapNotNull(::feedTrack)
+            .map { it.copy(album = sectionTitle) }
+            .distinctBy(Track::uri)
+            .toList()
+        tracks.takeIf(List<Track>::isNotEmpty)?.let { YouTubeFeedSection(sectionTitle, it) }
+    }.distinctBy(YouTubeFeedSection::title).toList()
+
+internal fun parseYouTubeMusicRadio(json: String): List<Track> =
+    jsonObjects(JsonParser.`object`().from(json)).mapNotNull(::feedTrack).distinctBy(Track::uri).toList()
+
+private fun feedTrack(wrapper: JsonObject): Track? {
+    val renderer = (wrapper["musicTwoRowItemRenderer"] ?: wrapper["musicResponsiveListItemRenderer"]
+        ?: wrapper["playlistPanelVideoRenderer"]) as? JsonObject ?: return null
+    val videoId = renderer.firstNestedString("videoId").takeIf(String::isNotBlank) ?: return null
+    val title = (renderer["title"] as? JsonObject).displayText().ifBlank { renderer.flexTexts().firstOrNull().orEmpty() }
+    if (title.isBlank()) return null
+    val subtitle = (renderer["subtitle"] as? JsonObject).displayText()
+    val texts = renderer.flexTexts()
+    val artist = texts.getOrNull(1).orEmpty().ifBlank { subtitle.substringBefore(" • ").ifBlank { "YouTube Music" } }
+    return Track(
+        title = title,
+        artist = artist,
+        album = "YouTube Music",
+        uri = "$MusicOrigin/watch?v=$videoId",
+        durationMs = (texts + subtitle).firstNotNullOfOrNull(::parseClockMillis) ?: 0,
+        artworkUri = renderer.firstImageUrl(),
+        folder = "YouTube Music",
+    )
+}
+
 private fun parseClockMillis(value: String): Long? {
     if (!value.matches(Regex("[0-9]{1,2}(:[0-9]{2}){1,2}"))) return null
     return value.split(':').fold(0L) { total, part -> total * 60 + part.toLong() } * 1_000
@@ -119,6 +158,19 @@ internal object YouTubeMusicSessionApi {
 
     fun loadPlaylist(playlist: YouTubePlaylist): List<Track> = loadPlaylistItems(playlist)
         .map(YouTubePlaylistItem::track).distinctBy(Track::uri)
+
+    fun loadHomeFeed(): List<YouTubeFeedSection> = parseYouTubeMusicFeed(
+        post("browse", contextBody { value("browseId", "FEmusic_home") }),
+    )
+
+    fun loadRadio(track: Track): List<Track> {
+        val videoId = youtubeVideoId(track.uri) ?: error("This track has no YouTube video id")
+        return parseYouTubeMusicRadio(post("next", contextBody {
+            value("videoId", videoId)
+            value("playlistId", "RDAMVM$videoId")
+            value("isAudioOnly", true)
+        })).filterNot { it.uri == track.uri }
+    }
 
     fun loadPlaylistItems(playlist: YouTubePlaylist): List<YouTubePlaylistItem> {
         requireApiId(playlist.id, "playlist")
@@ -271,3 +323,13 @@ internal object YouTubeMusicSessionApi {
         require(value.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "Invalid $label id" }
     }
 }
+
+private fun youtubeVideoId(value: String): String? = runCatching {
+    val uri = java.net.URI(value)
+    when (uri.host?.lowercase()) {
+        "youtu.be" -> uri.path.trim('/').substringBefore('/').takeIf(String::isNotBlank)
+        "youtube.com", "www.youtube.com", "music.youtube.com" -> uri.rawQuery.orEmpty().split('&')
+            .firstNotNullOfOrNull { part -> part.substringAfter('=', "").takeIf { part.substringBefore('=') == "v" } }
+        else -> null
+    }
+}.getOrNull()?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,64}")) }

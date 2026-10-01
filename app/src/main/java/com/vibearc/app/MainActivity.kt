@@ -153,6 +153,8 @@ private data class TrackActionsHost(
     val toggleFavorite: (Track) -> Unit,
     val addToPlaylist: (Track, String) -> Unit,
     val download: (Track) -> Unit,
+    val startSongRadio: (Track) -> Unit,
+    val startArtistRadio: (Track) -> Unit,
 )
 
 private val LocalTrackActions = staticCompositionLocalOf<TrackActionsHost?> { null }
@@ -263,11 +265,16 @@ private fun VibeArcApp(
     var lastFmPendingToken by remember { mutableStateOf(context.loadLastFmPendingToken()) }
     var lastFmSnapshot by remember { mutableStateOf<LastFmSnapshot?>(null) }
     var lastFmRecommendations by remember { mutableStateOf<List<LastFmTrack>>(emptyList()) }
+    var lastFmPlayable by remember { mutableStateOf<List<Track>>(emptyList()) }
     var lastFmRecommendationsBusy by remember { mutableStateOf(false) }
     var lastFmBusy by remember { mutableStateOf(false) }
     var lastFmError by remember { mutableStateOf<String?>(null) }
     var lastFmRefresh by remember { mutableIntStateOf(0) }
     var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+    var youtubeFeedSections by remember { mutableStateOf<List<YouTubeFeedSection>>(emptyList()) }
+    var youtubeFeedBusy by remember { mutableStateOf(false) }
+    var radioTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var radioBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         availableUpdate = withContext(Dispatchers.IO) {
@@ -408,6 +415,18 @@ private fun VibeArcApp(
         }
     }
 
+    LaunchedEffect(youtubeAccountData?.account?.channelId) {
+        if (youtubeAccountData == null || !YouTubeWebSession.isAuthenticated()) {
+            youtubeFeedSections = emptyList()
+            return@LaunchedEffect
+        }
+        youtubeFeedBusy = true
+        youtubeFeedSections = withContext(Dispatchers.IO) {
+            runCatching { YouTubeMusicSessionApi.loadHomeFeed() }.getOrDefault(emptyList())
+        }
+        youtubeFeedBusy = false
+    }
+
     DisposableEffect(controllerFuture) {
         controllerFuture.addListener(
             { player = controllerFuture.get() },
@@ -434,8 +453,8 @@ private fun VibeArcApp(
     var offlineCopyError by remember { mutableStateOf<Track?>(null) }
     var offlineCancelSignal by remember { mutableStateOf<AtomicBoolean?>(null) }
 
-    LaunchedEffect(currentTab, lastFmSnapshot) {
-        if (currentTab != Tab.Discover || lastFmRecommendations.isNotEmpty()) return@LaunchedEffect
+    LaunchedEffect(lastFmSnapshot) {
+        if (lastFmRecommendations.isNotEmpty()) return@LaunchedEffect
         val seed = lastFmSnapshot?.topTracks?.firstOrNull() ?: return@LaunchedEffect
         lastFmRecommendationsBusy = true
         lastFmRecommendations = withContext(Dispatchers.IO) {
@@ -445,6 +464,14 @@ private fun VibeArcApp(
             }.getOrDefault(emptyList())
         }
         lastFmRecommendationsBusy = false
+    }
+    LaunchedEffect(lastFmRecommendations) {
+        lastFmPlayable = withContext(Dispatchers.IO) {
+            lastFmRecommendations.take(4).mapNotNull { recommendation ->
+                runCatching { OnlineMusic.search("${recommendation.artist} ${recommendation.title}").firstOrNull() }
+                    .getOrNull()
+            }
+        }
     }
     var searchSeed by remember { mutableStateOf("") }
     var currentTrack by remember { mutableStateOf<Track?>(null) }
@@ -649,6 +676,33 @@ private fun VibeArcApp(
         playlists = next.also(context::savePlaylists)
     }
     val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
+    val onlineHomeTracks = youtubeFeedSections.flatMap(YouTubeFeedSection::tracks)
+    val discoveryTracks = remember(onlineHomeTracks, lastFmPlayable, recentTracks, library) {
+        blendDiscoveryTracks(onlineHomeTracks, lastFmPlayable, recentTracks, library)
+    }
+    fun startRadio(track: Track, artistOnly: Boolean) {
+        if (radioBusy) return
+        radioBusy = true
+        uiScope.launch {
+            val loaded = withContext(Dispatchers.IO) {
+                var candidates = if (!artistOnly && YouTubeWebSession.isAuthenticated()) {
+                    runCatching { YouTubeMusicSessionApi.loadRadio(track) }.getOrDefault(emptyList())
+                } else emptyList()
+                if (candidates.isEmpty()) {
+                    val query = if (artistOnly) track.artist else "${track.artist} ${track.title} radio"
+                    candidates = runCatching { OnlineMusic.search(query) }.getOrDefault(emptyList())
+                }
+                candidates.filterNot { it.catalogUri == track.catalogUri }.distinctBy(Track::catalogUri).take(40)
+            }
+            radioBusy = false
+            radioTracks = loaded
+            if (loaded.isEmpty()) {
+                android.widget.Toast.makeText(context, "No radio tracks were found", android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                playTrack(loaded.first(), loaded)
+            }
+        }
+    }
     fun copyTracksOffline(requested: List<Track>) {
         val tracks = requested.filter(Track::canCopyOffline)
         val folder = offlineFolder
@@ -862,6 +916,8 @@ private fun VibeArcApp(
         toggleFavorite = toggleFavorite,
         addToPlaylist = addTrackToPlaylist,
         download = downloadFromTrackMenu,
+        startSongRadio = { startRadio(it, artistOnly = false) },
+        startArtistRadio = { startRadio(it, artistOnly = true) },
     )
 
     VibeArcTheme(appearance, artworkAccentArgb) {
@@ -927,6 +983,8 @@ private fun VibeArcApp(
                 recentTracks = recentTracks,
                 currentTrack = currentTrack,
                 libraryTracks = library,
+                onlineSections = youtubeFeedSections,
+                onlineBusy = youtubeFeedBusy,
                 onPlay = playTrack,
                 onExplore = { searchSeed = ""; navigate(Tab.Search) },
                 onLibrary = { navigate(Tab.Library) },
@@ -1074,15 +1132,17 @@ private fun VibeArcApp(
                 onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
             )
             Tab.Discover -> DiscoverScreen(
-                padding, library, lastFmSnapshot?.topTracks?.firstOrNull(),
-                lastFmRecommendations, lastFmRecommendationsBusy,
-                onPlay = { track -> playTrack(track, library) },
+                padding, discoveryTracks, lastFmSnapshot?.topTracks?.firstOrNull(),
+                lastFmPlayable, lastFmRecommendationsBusy,
+                onPlay = { track -> playTrack(track, discoveryTracks) },
                 onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
             )
-            Tab.Generator -> GeneratorScreen(padding) { query ->
-                searchSeed = query
-                navigate(Tab.Search)
-            }
+            Tab.Generator -> GeneratorScreen(
+                padding, library, recentTracks, discoveryTracks, radioTracks, currentTrack, radioBusy,
+                onPlay = { queue -> playTrack(queue.first(), queue) },
+                onRadio = { currentTrack?.let { startRadio(it, artistOnly = false) } },
+                onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
+            )
         }
     }
     youtubeSyncPreview?.let { previews ->
@@ -1437,24 +1497,32 @@ internal fun TrackRow(
                         }
                     }
                 } else {
-                    ReferenceRow("Add to queue", "Play after the current queue", "music", 0, 4, enabled = playableTrack != null) {
+                    ReferenceRow("Add to queue", "Play after the current queue", "music", 0, 6, enabled = playableTrack != null) {
                         playableTrack?.let(actions.addToQueue)
                         showActions = false
                     }
-                    ReferenceRow("Add to playlist", "Choose one of your playlists", "playlist", 1, 4) {
+                    ReferenceRow("Add to playlist", "Choose one of your playlists", "playlist", 1, 6) {
                         showPlaylists = true
                     }
                     val liked = actions.isFavorite(track)
-                    ReferenceRow(if (liked) "Unlike song" else "Like song", "Save in your library", if (liked) "heartFilled" else "heart", 2, 4) {
+                    ReferenceRow(if (liked) "Unlike song" else "Like song", "Save in your library", if (liked) "heartFilled" else "heart", 2, 6) {
                         actions.toggleFavorite(track)
+                        showActions = false
+                    }
+                    ReferenceRow("Start song radio", "Build a queue around this track", "shuffle", 3, 6, enabled = playableTrack != null) {
+                        playableTrack?.let(actions.startSongRadio)
+                        showActions = false
+                    }
+                    ReferenceRow("Start artist radio", "Play more from related artist searches", "account", 4, 6, enabled = playableTrack != null) {
+                        playableTrack?.let(actions.startArtistRadio)
                         showActions = false
                     }
                     ReferenceRow(
                         "Download song",
                         if (track.canCopyOffline()) "Copy to your selected offline folder" else "Available for user-owned local audio",
                         "download",
-                        3,
-                        4,
+                        5,
+                        6,
                     ) {
                         actions.download(track)
                         showActions = false

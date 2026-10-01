@@ -75,6 +75,21 @@ class YouTubeAccountTest {
     }
 
     @Test
+    fun `personalized feed maps playable carousel tracks`() {
+        val json = """{"contents":[{"musicCarouselShelfRenderer":{"header":{"musicCarouselShelfBasicHeaderRenderer":{"title":{"runs":[{"text":"New releases for you"}]}}},"contents":[{"musicTwoRowItemRenderer":{"title":{"runs":[{"text":"Fresh Song"}]},"subtitle":{"runs":[{"text":"The Artist"}]},"navigationEndpoint":{"watchEndpoint":{"videoId":"fresh-1"}},"thumbnailRenderer":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"https://img.example/fresh.jpg"}]}}}}}]}}]}"""
+
+        assertEquals(
+            listOf(
+                YouTubeFeedSection(
+                    "New releases for you",
+                    listOf(Track("Fresh Song", "The Artist", "New releases for you", "https://music.youtube.com/watch?v=fresh-1", artworkUri = "https://img.example/fresh.jpg", folder = "YouTube Music")),
+                ),
+            ),
+            parseYouTubeMusicFeed(json),
+        )
+    }
+
+    @Test
     fun `cached account state round trips without credentials`() {
         val state = YouTubeAccountState(
             account = YouTubeAccount("channel-1", "Smith", "https://img.example/avatar.jpg"),

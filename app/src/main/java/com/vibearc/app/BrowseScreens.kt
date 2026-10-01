@@ -32,11 +32,15 @@ import java.time.format.DateTimeFormatter
 @Composable
 internal fun HomeScreen(
     padding: PaddingValues, recentTracks: List<Track>, currentTrack: Track?, libraryTracks: List<Track>,
+    onlineSections: List<YouTubeFeedSection>, onlineBusy: Boolean,
     onPlay: (Track, List<Track>) -> Unit, onExplore: () -> Unit,
     onLibrary: () -> Unit, onDiscover: () -> Unit, onSearch: (String) -> Unit,
 ) {
     val now = LocalDateTime.now()
-    val pool = remember(libraryTracks, recentTracks, currentTrack) { homeFeedTracks(libraryTracks, recentTracks, currentTrack) }
+    val onlineTracks = remember(onlineSections) { onlineSections.flatMap(YouTubeFeedSection::tracks) }
+    val pool = remember(libraryTracks, recentTracks, currentTrack, onlineTracks) {
+        blendDiscoveryTracks(onlineTracks, emptyList(), recentTracks + listOfNotNull(currentTrack), libraryTracks)
+    }
     val hero = pool.firstOrNull()
     val artists = remember(pool) { pool.groupBy { it.artist }.filterKeys { it.isNotBlank() } }
     val albums = remember(pool) { pool.filter { it.album.isNotBlank() }.distinctBy { it.artist to it.album } }
@@ -57,7 +61,7 @@ internal fun HomeScreen(
                         Text("✦ MADE FOR YOU", Modifier.padding(horizontal = 12.dp, vertical = 5.dp), fontWeight = FontWeight.Bold)
                     }
                     Text(if(hero == null) "Your next favorite" else "Your daily mix", style = MaterialTheme.typography.headlineMedium)
-                    Text(if(hero == null) "Discover a new sound on YouTube Music" else "A mix from the music on your device", color = Color(0xFFD0D0D0))
+                    Text(if(hero == null) "Discover a new sound on YouTube Music" else if (onlineTracks.isEmpty()) "A mix from the music on your device" else "Personalized from YouTube Music and your listening", color = Color(0xFFD0D0D0))
                     Button(onClick = { if(hero != null) onPlay(hero, pool) else onExplore() }, contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)) {
                         Icon(if(hero == null) Icons.Default.Add else Icons.Default.PlayArrow, null)
                         Spacer(Modifier.width(8.dp)); Text(if(hero == null) "Discover" else "Play", fontWeight = FontWeight.Bold)
@@ -76,6 +80,15 @@ internal fun HomeScreen(
                     HomeShortcut("Discover", "Find your sound", recentTracks.lastOrNull(), Modifier.weight(1f), onExplore)
                 }
             }
+        }
+        if (onlineBusy) item {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 3.dp)
+                Text("Refreshing your recommendations", color = MutedText)
+            }
+        }
+        items(onlineSections.take(5), key = YouTubeFeedSection::title) { section ->
+            MusicShelf(section.title, "From your YouTube Music account", section.tracks, onPlay, onExplore)
         }
         item { MusicShelf("Picked for you", "From your library and listening", pool, onPlay, onExplore) }
         item {
@@ -130,12 +143,8 @@ internal fun HomeScreen(
                 }
             }
         }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                ShelfHeading("New releases", "Explore fresh drops and new albums", { onSearch("new releases") }, "See all")
-                FeedEmpty("Personalized releases aren't connected yet. Explore new music with search.", { onSearch("new releases") })
-            }
-        }
+        val newReleases = onlineSections.firstOrNull { it.title.contains("new", true) || it.title.contains("release", true) }?.tracks.orEmpty()
+        item { MusicShelf("New releases", "Fresh drops selected for you", newReleases, onPlay) { onSearch("new releases") } }
         item { Text("Your music • Your space", Modifier.fillMaxWidth().padding(vertical = 8.dp), color = MutedText, style = MaterialTheme.typography.bodySmall) }
     }
 }
@@ -464,16 +473,14 @@ private fun PlaylistTile(title:String,subtitle:String,track:Track?,index:Int,cou
 @Composable
 internal fun DiscoverScreen(
     padding:PaddingValues, tracks:List<Track>, lastFmSeed:LastFmTrack?,
-    lastFmRecommendations:List<LastFmTrack>, lastFmBusy:Boolean,
+    lastFmRecommendations:List<Track>, lastFmBusy:Boolean,
     onPlay:(Track)->Unit, onSearch:(String)->Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
         if(lastFmSeed != null) {
             item { SectionTitle("Last.fm radio · ${lastFmSeed.artist}") }
             if(lastFmBusy) item { CircularProgressIndicator(Modifier.padding(18.dp).size(24.dp),strokeWidth=3.dp) }
-            items(lastFmRecommendations) { track ->
-                ReferenceRow(track.title,track.artist,"spark",onClick={onSearch("${track.artist} ${track.title}")})
-            }
+            items(lastFmRecommendations,key=Track::uri) { track -> TrackRow(track,{onPlay(track)}) }
             item { SectionTitle("Rediscover your library") }
         } else item { Text("Rediscover your library",color=MutedText,modifier=Modifier.padding(bottom=12.dp)) }
         if(tracks.isEmpty()) item { ReferenceRow("Explore music","Search genres and moods on YouTube Music","discover",onClick={onSearch("")}) }
@@ -483,22 +490,30 @@ internal fun DiscoverScreen(
 }
 
 @Composable
-internal fun GeneratorScreen(padding:PaddingValues,onSearch:(String)->Unit) {
-    val options=listOf(
-        Triple("Top Tracks","Explore popular music","stats"),
-        Triple("Recent Tracks","Find new releases","clock"),
-        Triple("Song Radio","Search for songs to start a mix","music"),
-        Triple("Similar Artists","Discover artists you might enjoy","account"),
-        Triple("By Tag / Genre","Explore genres and moods","discover"),
-        Triple("My Mix","Find music for your mood","shuffle"),
-        Triple("My Recommendation","Explore new sounds","spark"),
-        Triple("My Library","Search your saved music","playlist"),
-    )
+internal fun GeneratorScreen(
+    padding:PaddingValues, library:List<Track>, recent:List<Track>, recommendations:List<Track>,
+    radio:List<Track>, seed:Track?, radioBusy:Boolean, onPlay:(List<Track>)->Unit,
+    onRadio:()->Unit, onSearch:(String)->Unit,
+) {
+    val options=GeneratorChoice.values()
     LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
         item { Text("Choose a starting point to discover music",color=MutedText,modifier=Modifier.padding(bottom=12.dp)) }
         items(options.size) { i ->
-            val (title,subtitle,icon)=options[i]
-            ReferenceRow(title,subtitle,icon,i,options.size,onClick={onSearch(when(i){0->"popular songs";1->"new releases";else->""})})
+            val choice=options[i]
+            val queue=generatedPlaylist(choice,library,recent,recommendations,radio,seed)
+            val canStartRadio=choice==GeneratorChoice.SongRadio && seed!=null
+            val subtitle=when {
+                choice==GeneratorChoice.SongRadio && radioBusy -> "Building radio…"
+                queue.isNotEmpty() -> "${choice.subtitle} · ${queue.size} tracks"
+                else -> choice.subtitle
+            }
+            ReferenceRow(choice.title,subtitle,choice.icon,i,options.size,enabled=queue.isNotEmpty()||canStartRadio,onClick={
+                when {
+                    queue.isNotEmpty() -> onPlay(queue)
+                    canStartRadio -> onRadio()
+                    else -> onSearch("")
+                }
+            })
         }
     }
 }
