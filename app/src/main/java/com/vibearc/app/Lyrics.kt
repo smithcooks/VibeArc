@@ -76,13 +76,20 @@ internal fun LyricsDocument.shifted(offsetMs: Long): LyricsDocument = copy(
 )
 
 internal fun encodeLrc(lines: List<LyricLine>): String = lines.sortedBy(LyricLine::startMs).joinToString("\n") { line ->
-    val totalSeconds = line.startMs.coerceAtLeast(0L) / 1_000
-    "[%02d:%02d.%03d]%s".format(
-        totalSeconds / 60,
-        totalSeconds % 60,
-        line.startMs.coerceAtLeast(0L) % 1_000,
-        line.text.replace('\n', ' ').replace('\r', ' '),
-    )
+    "[${lyricTimestamp(line.startMs)}]${line.text.replace('\n', ' ').replace('\r', ' ')}"
+}
+
+internal fun encodeEnhancedLrc(lines: List<LyricLine>): String = lines.sortedBy(LyricLine::startMs).joinToString("\n") { line ->
+    val text = line.words.takeIf(List<LyricWord>::isNotEmpty)?.joinToString("") { word ->
+        "<${lyricTimestamp(word.startMs)}>${word.text.replace('\n', ' ').replace('\r', ' ')}"
+    } ?: line.text.replace('\n', ' ').replace('\r', ' ')
+    "[${lyricTimestamp(line.startMs)}]$text"
+}
+
+private fun lyricTimestamp(value: Long): String {
+    val milliseconds = value.coerceAtLeast(0L)
+    val totalSeconds = milliseconds / 1_000
+    return "%02d:%02d.%03d".format(totalSeconds / 60, totalSeconds % 60, milliseconds % 1_000)
 }
 
 internal fun lyricsFileName(title: String): String = title.trim()

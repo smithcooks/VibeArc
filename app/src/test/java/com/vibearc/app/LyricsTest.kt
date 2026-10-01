@@ -41,6 +41,13 @@ class LyricsTest {
     }
 
     @Test
+    fun `enhanced LRC editor round trip preserves word timestamps`() {
+        val line = LyricLine(1_000, "Hello world", listOf(LyricWord(1_000, "Hello "), LyricWord(1_500, "world")))
+
+        assertEquals(listOf(line), parseLrc(encodeEnhancedLrc(listOf(line))))
+    }
+
+    @Test
     fun `lyrics response prefers synchronized lines`() {
         val json = """{"instrumental":false,"plainLyrics":"Plain","syncedLyrics":"[00:01.00]Synced"}"""
 

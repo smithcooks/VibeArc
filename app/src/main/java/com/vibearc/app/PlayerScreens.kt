@@ -283,7 +283,7 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
             }
             Row(Modifier.align(Alignment.BottomEnd).padding(bottom = 12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 PlayerAction("Search or edit lyrics", "more") {
-                    manualRaw=lyrics?.syncedLines?.takeIf(List<LyricLine>::isNotEmpty)?.let(::encodeLrc)
+                    manualRaw=lyrics?.syncedLines?.takeIf(List<LyricLine>::isNotEmpty)?.let(::encodeEnhancedLrc)
                         ?: lyrics?.plainLines?.joinToString("\n").orEmpty()
                     editor=true
                 }
