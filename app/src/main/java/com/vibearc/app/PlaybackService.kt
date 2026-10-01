@@ -3,8 +3,10 @@ package com.vibearc.app
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -12,7 +14,10 @@ import java.util.concurrent.Executors
 
 class PlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
+    private lateinit var crossfadePlayer: ExoPlayer
     private var mediaSession: MediaSession? = null
+    private lateinit var audioEffects: AudioEffectsController
+    private lateinit var bitPerfect: BitPerfectController
     private val handler = Handler(Looper.getMainLooper())
     private val lastFmExecutor = Executors.newSingleThreadExecutor()
     private var trackedMediaId = ""
@@ -20,8 +25,11 @@ class PlaybackService : MediaSessionService() {
     private var lastPollMs = 0L
     private var startedAtSeconds = 0L
     private var scrobbled = false
+    private var crossfadeNextIndex = C.INDEX_UNSET
+    private var lastAudioRefreshMs = 0L
     private val playerListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            cancelCrossfade()
             val mediaId = mediaItem?.mediaId?.takeIf(String::isNotBlank) ?: return
             saveRecentUris(loadRecentUris().recordRecentUri(mediaId))
             trackedMediaId = mediaId
@@ -30,6 +38,16 @@ class PlaybackService : MediaSessionService() {
             startedAtSeconds = System.currentTimeMillis() / 1_000
             scrobbled = false
             submitNowPlaying(mediaItem)
+        }
+
+        override fun onAudioSessionIdChanged(audioSessionId: Int) = audioEffects.attach(audioSessionId)
+
+        override fun onTracksChanged(tracks: Tracks) {
+            saveBitPerfectStatus(bitPerfect.configure(player.currentAudioDetails()))
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (!isPlaying) cancelCrossfade()
         }
     }
     private val sleepTimerCheck = object : Runnable {
@@ -50,13 +68,21 @@ class PlaybackService : MediaSessionService() {
                 }
             }
             lastPollMs = now
+            if (now - lastAudioRefreshMs >= 1_000L) {
+                audioEffects.refresh()
+                lastAudioRefreshMs = now
+            }
+            updateCrossfade()
             handler.postDelayed(this, SleepTimerPollMillis)
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        audioEffects = AudioEffectsController(this)
+        bitPerfect = BitPerfectController(this)
         player = ExoPlayer.Builder(this).build().also { it.addListener(playerListener) }
+        crossfadePlayer = ExoPlayer.Builder(this).build()
         mediaSession = MediaSession.Builder(this, player).build()
         lastPollMs = android.os.SystemClock.elapsedRealtime()
         handler.post(sleepTimerCheck)
@@ -67,11 +93,57 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         handler.removeCallbacks(sleepTimerCheck)
         player.removeListener(playerListener)
+        cancelCrossfade()
+        bitPerfect.clear()
+        audioEffects.release()
         lastFmExecutor.shutdownNow()
         mediaSession?.release()
         mediaSession = null
         player.release()
+        crossfadePlayer.release()
         super.onDestroy()
+    }
+
+    private fun updateCrossfade() {
+        val seconds = loadAudioTuning().crossfadeSeconds
+        if (seconds <= 0 || !player.isPlaying || player.repeatMode == Player.REPEAT_MODE_ONE) {
+            cancelCrossfade()
+            return
+        }
+        val duration = player.duration.takeIf { it > 0 } ?: return
+        val remaining = duration - player.currentPosition
+        val fadeMs = seconds * 1_000L
+        if (crossfadeNextIndex == C.INDEX_UNSET) {
+            if (remaining > fadeMs || player.nextMediaItemIndex == C.INDEX_UNSET) return
+            crossfadeNextIndex = player.nextMediaItemIndex
+            crossfadePlayer.setMediaItem(player.getMediaItemAt(crossfadeNextIndex))
+            crossfadePlayer.volume = 0f
+            crossfadePlayer.prepare()
+            crossfadePlayer.play()
+        }
+        if (!crossfadePlayer.isPlaying) return
+        val progress = (crossfadePlayer.currentPosition.toFloat() / fadeMs).coerceIn(0f, 1f)
+        val gains = crossfadeGains(progress)
+        player.volume = gains.outgoing
+        crossfadePlayer.volume = gains.incoming
+        if (progress >= .98f || remaining <= 75L) {
+            val position = crossfadePlayer.currentPosition
+            crossfadePlayer.pause()
+            player.volume = 1f
+            player.seekTo(crossfadeNextIndex, position)
+            player.play()
+            crossfadePlayer.clearMediaItems()
+            crossfadeNextIndex = C.INDEX_UNSET
+        }
+    }
+
+    private fun cancelCrossfade() {
+        if (::crossfadePlayer.isInitialized) {
+            crossfadePlayer.pause()
+            crossfadePlayer.clearMediaItems()
+        }
+        if (::player.isInitialized) player.volume = 1f
+        crossfadeNextIndex = C.INDEX_UNSET
     }
 
     private fun submitNowPlaying(mediaItem: MediaItem) {
@@ -115,7 +187,7 @@ private fun MediaItem.lastFmTrack(playerDurationMs: Long): Track? {
 private const val PlaybackPreferencesName = "vibearc_playback"
 private const val RecentUrisKey = "recent_uris"
 private const val SleepDeadlineKey = "sleep_deadline"
-private const val SleepTimerPollMillis = 1_000L
+private const val SleepTimerPollMillis = 250L
 
 internal fun Context.loadRecentUris(): List<String> = RecentUriCodec.decode(
     getSharedPreferences(PlaybackPreferencesName, Context.MODE_PRIVATE)

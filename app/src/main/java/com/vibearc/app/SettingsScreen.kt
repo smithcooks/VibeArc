@@ -2,7 +2,6 @@ package com.vibearc.app
 
 import android.content.Context
 import android.content.Intent
-import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -59,11 +58,16 @@ internal fun SettingsScreen(
     var scrobblingEnabled by remember { mutableStateOf(context.lastFmScrobblingEnabled()) }
     var excludedScrobbleUris by remember { mutableStateOf(context.loadLastFmExcludedUris()) }
     var wavySeekbar by remember { mutableStateOf(context.wavySeekbarEnabled()) }
+    var audioTuning by remember { mutableStateOf(context.loadAudioTuning()) }
     var selectedIcon by remember { mutableStateOf(context.selectedLauncherIcon()) }
     var custom by remember { mutableStateOf("#%06X".format(appearance.customAccentArgb and 0xFFFFFF)) }
     var youtubePlaylistTitle by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
     val unavailable: (String,String)->Unit = { title,description -> info=title to description }
+    fun updateAudioTuning(value: AudioTuning) {
+        audioTuning=value
+        context.saveAudioTuning(value)
+    }
     fun syncInfo() { unavailable("YouTube Music history","Google does not provide a supported YouTube Data API method for writing listening history, so VibeArc cannot safely enable this switch.") }
     LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=22.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
         item { ReferenceRow("VibeArc","Local listening profile","account",onClick={unavailable("Your profile","Your library and appearance choices are stored on this device.")}) }
@@ -132,17 +136,19 @@ internal fun SettingsScreen(
         item { SettingsHeading("Experimental") }
         item { ReferenceRow("Liquid Glass","Translucent materials across the app","glass",0,5,appearance.liquidGlassEnabled,onClick={onAppearanceChange(appearance.copy(liquidGlassEnabled=!appearance.liquidGlassEnabled))}) }
         item { ReferenceRow("Lyrics Animation","Word timing when supplied · line fallback","lyrics",1,5,onClick={unavailable("Lyrics Animation","Open the quotation-mark button in Now Playing. VibeArc animates enhanced-LRC word timestamps when a provider supplies them and otherwise highlights synchronized lines from LRCLIB.")}) }
-        item { ReferenceRow("Equalizer","Open your device's audio controls","equalizer",2,5,onClick={
-            val intent=Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).putExtra(AudioEffect.EXTRA_PACKAGE_NAME,context.packageName).putExtra(AudioEffect.EXTRA_CONTENT_TYPE,AudioEffect.CONTENT_TYPE_MUSIC)
-            if(runCatching{context.startActivity(intent)}.isFailure) unavailable("Equalizer","This phone does not provide a system equalizer panel. A built-in equalizer is not included yet.")
-        }) }
+        item { ReferenceRow("Equalizer",if(Build.VERSION.SDK_INT>=28) "Built-in 15-band equalizer" else "Requires Android 9 or later","equalizer",2,5,audioTuning.equalizerEnabled,enabled=Build.VERSION.SDK_INT>=28,onClick={sheet="Equalizer"}) }
         item { ReferenceRow("Wavy Seekbar","Lightweight wave while music plays","wave",3,5,wavySeekbar,onClick={wavySeekbar=!wavySeekbar;context.getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putBoolean("wavy_seekbar",wavySeekbar).apply()}) }
-        item { ReferenceRow("Studio Master Clarity","Original source audio","spark",4,5,onClick={unavailable("Studio Master Clarity","VibeArc plays the source audio. It does not convert lossy audio into studio-master or lossless quality.")}) }
+        item { ReferenceRow("Studio Master Clarity","Native clarity EQ and peak limiter","spark",4,5,audioTuning.studioMasterEnabled,enabled=Build.VERSION.SDK_INT>=28,onClick={
+            updateAudioTuning(audioTuning.copy(studioMasterEnabled=!audioTuning.studioMasterEnabled,bitPerfectEnabled=false))
+        }) }
         item { SettingsHeading("Audio & Streaming") }
         item { ReferenceRow("Streaming Quality","${streamFormat.label} · ${streamQuality.label}","quality",0,6,onClick={sheet="Streaming Quality"}) }
         item { ReferenceRow("Download Quality","${downloadFormat.label} · ${downloadQuality.label}","download",1,6,onClick={sheet="Download Quality"}) }
-        item { ReferenceRow("Bit-Perfect Mode","Not supported by the current audio output","equalizer",2,6,onClick={unavailable("Bit-Perfect Mode","The current Android audio path does not guarantee bit-perfect output.")}) }
-        item { ReferenceRow("Crossfade","Not available in this build","equalizer",3,6,onClick={unavailable("Crossfade","Playback currently switches directly between tracks. Crossfade is not implemented.")}) }
+        item { ReferenceRow("Bit-Perfect Mode",if(audioTuning.bitPerfectEnabled) context.bitPerfectStatus() else if(Build.VERSION.SDK_INT>=34) "Verified USB mixer path when available" else "Requires Android 14 and a compatible USB DAC","equalizer",2,6,audioTuning.bitPerfectEnabled,enabled=Build.VERSION.SDK_INT>=34,onClick={
+            val enabled=!audioTuning.bitPerfectEnabled
+            updateAudioTuning(audioTuning.copy(bitPerfectEnabled=enabled,equalizerEnabled=if(enabled) false else audioTuning.equalizerEnabled,studioMasterEnabled=if(enabled) false else audioTuning.studioMasterEnabled,crossfadeSeconds=if(enabled) 0 else audioTuning.crossfadeSeconds))
+        }) }
+        item { ReferenceRow("Crossfade",audioTuning.crossfadeSeconds.takeIf{it>0}?.let{"$it-second overlapping transition"}?:"Off","equalizer",3,6,audioTuning.crossfadeSeconds>0,onClick={sheet="Crossfade"}) }
         item { ReferenceRow("Download Synced Lyrics","Save matching lyrics as an .lrc file","lyrics",4,6,onClick={unavailable("Download Synced Lyrics","Open Lyrics from Now Playing. When synchronized lyrics are available, tap the download button and choose where to save the .lrc file.")}) }
         item { ReferenceRow("Background Playback","Manage this app's battery settings","clock",5,6,onClick={
             runCatching {context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:${context.packageName}")))}
@@ -192,6 +198,41 @@ internal fun SettingsScreen(
                     }
                 }
                 when(title) {
+                    "Equalizer" -> {
+                        item {
+                            ReferenceRow("15-band equalizer","Android native DSP · ±12 dB","equalizer",checked=audioTuning.equalizerEnabled,onClick={
+                                updateAudioTuning(audioTuning.copy(equalizerEnabled=!audioTuning.equalizerEnabled,bitPerfectEnabled=false))
+                            })
+                        }
+                        items(EqualizerFrequencies.size) { index ->
+                            val hz=EqualizerFrequencies[index].toInt()
+                            Column {
+                                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                                    Text(if(hz>=1000) "${hz/1000f} kHz" else "$hz Hz",fontWeight=FontWeight.Bold)
+                                    Text("${"%.1f".format(audioTuning.equalizerGains[index])} dB",color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Slider(
+                                    value=audioTuning.equalizerGains[index],
+                                    onValueChange={ gain ->
+                                        val gains=audioTuning.equalizerGains.copyOf().also { it[index]=gain }
+                                        updateAudioTuning(audioTuning.copy(equalizerGains=gains,equalizerEnabled=true,bitPerfectEnabled=false))
+                                    },
+                                    valueRange=-12f..12f,
+                                    steps=47,
+                                )
+                            }
+                        }
+                        item { TextButton(onClick={updateAudioTuning(audioTuning.copy(equalizerGains=FloatArray(EqualizerFrequencies.size)))}) { Text("Reset flat") } }
+                    }
+                    "Crossfade" -> {
+                        item { Text("Crossfade briefly overlaps two decoders. Keep it off for bit-perfect playback or maximum battery life.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        items(listOf(0,3,5,8,12).size) { index ->
+                            val seconds=listOf(0,3,5,8,12)[index]
+                            QualityChoice(if(seconds==0) "Off" else "$seconds seconds","Transition",if(seconds==0) "Gapless direct track changes." else "Equal-power overlap between consecutive tracks.",audioTuning.crossfadeSeconds==seconds) {
+                                updateAudioTuning(audioTuning.copy(crossfadeSeconds=seconds,bitPerfectEnabled=false))
+                            }
+                        }
+                    }
                     "Last.fm" -> {
                         item { Text("Sign in through Last.fm. Now Playing and completed scrobbles are signed by the VibeArc server; the Last.fm shared secret is never stored in the app.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         if (!lastFmConfigured) item { Text("Configure LASTFM_SIGNER_URL and LASTFM_SIGNER_TOKEN for authenticated use.",color=MaterialTheme.colorScheme.error) }
