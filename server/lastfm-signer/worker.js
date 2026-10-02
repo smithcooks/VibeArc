@@ -11,8 +11,9 @@ function json(value, status = 200) {
 
 function authorized(request, expected) {
   const actual = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
-  if (!actual || !expected || actual.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
+  if (!actual || !expected) return false;
+  const actualBytes = Buffer.from(actual), expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
 }
 
 function signature(parameters, secret) {
@@ -24,7 +25,11 @@ async function lastFm(env, method, parameters = {}, authenticated = false) {
   const signed = { method, api_key: env.LASTFM_API_KEY, ...parameters };
   if (authenticated) signed.api_sig = signature(signed, env.LASTFM_SHARED_SECRET);
   const body = new URLSearchParams({ ...signed, format: "json" });
-  const response = await fetch(API, { method: "POST", body, headers: { "user-agent": "VibeArc-LastFm-Signer/1" } });
+  const write = method === "track.scrobble" || method === "track.updateNowPlaying";
+  const response = await fetch(write ? API : `${API}?${body}`, {
+    method: write ? "POST" : "GET", ...(write ? { body } : {}),
+    headers: { "user-agent": "VibeArc-LastFm-Signer/1" }, signal: AbortSignal.timeout(15_000),
+  });
   const text = await response.text();
   if (!response.ok) throw new Error(`Last.fm request failed (${response.status})`);
   const parsed = JSON.parse(text);
@@ -76,7 +81,12 @@ export default {
         };
         if (!parameters.sk || !parameters.artist || !parameters.track) return json({ error: "Missing track or session" }, 400);
         if (route === "scrobble") parameters.timestamp = String(Math.max(1, Number(input.timestamp) || 0));
-        await lastFm(env, route === "scrobble" ? "track.scrobble" : "track.updateNowPlaying", parameters, true);
+        const { parsed } = await lastFm(env, route === "scrobble" ? "track.scrobble" : "track.updateNowPlaying", parameters, true);
+        const result = route === "scrobble" ? parsed.scrobbles?.scrobble : parsed.nowplaying;
+        const ignored = (Array.isArray(result) ? result[0] : result)?.ignoredMessage;
+        if (!ignored || Number(ignored.code) !== 0 || (route === "scrobble" && Number(parsed.scrobbles?.["@attr"]?.accepted) !== 1)) {
+          return json({ error: ignored?.["#text"] || "Last.fm ignored this submission" }, 422);
+        }
         return json({ ok: true });
       }
       return json({ error: "Unknown route" }, 404);
