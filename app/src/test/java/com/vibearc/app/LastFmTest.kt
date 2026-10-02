@@ -47,7 +47,23 @@ class LastFmTest {
         assertEquals(true, shouldScrobble(track, 150_000, emptySet()))
         assertEquals(false, shouldScrobble(track, 149_999, emptySet()))
         assertEquals(false, shouldScrobble(track, 300_000, setOf(track.uri)))
+        assertEquals(false, shouldScrobble(track, 300_000, emptySet(), enabled = false))
         assertNull(lastFmScrobbleThresholdMs(30_000))
         assertEquals(240_000L, lastFmScrobbleThresholdMs(900_000))
+    }
+
+    @Test
+    fun `profile setup is distinct from authenticated setup and rejects unsafe endpoints`() {
+        val key = "a".repeat(32)
+        assertEquals(true, LastFmConfiguration(key).profileConfigured)
+        assertEquals(false, LastFmConfiguration(key).signerConfigured)
+        assertNull(lastFmConfigurationError(LastFmConfiguration(key, "https://signer.example", "client-token")))
+        for (url in listOf("http://signer.example", "https://user:pass@signer.example", "https://signer.example?token=secret", "https://signer.example/#fragment")) {
+            assertEquals(false, LastFmConfiguration(key, url, "client-token").signerConfigured)
+        }
+        assertEquals(false, LastFmConfiguration(key, "https://signer.example", "bad\r\ntoken").signerConfigured)
+        assertEquals(false, validLastFmAuthorizationUrl("https://evil.example/api/auth/"))
+        assertEquals(false, validLastFmAuthorizationUrl("https://www.last.fm.evil.example/api/auth/"))
+        assertEquals(true, validLastFmAuthorizationUrl("https://www.last.fm/api/auth/?token=test"))
     }
 }

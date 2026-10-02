@@ -5,6 +5,48 @@ import org.junit.Test
 
 class LyricsTest {
     @Test
+    fun `free lyrics search survives failed or empty exact lookup`() {
+        val track = Track("Loser (Official Music Video)", "Tame Impala - Topic", "YouTube Music", "https://example.com/song", durationMs = 232_000)
+        val search = """[{"trackName":"Loser","artistName":"Tame Impala","duration":232.5,"syncedLyrics":"[00:01.00]Matched"}]"""
+        for (failure in listOf("timeout", "empty", "bad json", "http")) {
+            val urls = mutableListOf<String>()
+            val lyrics = fetchLrclibLyrics(track) { url ->
+                urls += url
+                if (url.contains("/search?")) 200 to search else when (failure) {
+                    "timeout" -> throw java.net.SocketTimeoutException()
+                    "empty" -> 200 to """{"plainLyrics":null,"syncedLyrics":null}"""
+                    "bad json" -> 200 to "not json"
+                    else -> 503 to null
+                }
+            }
+            assertEquals("Matched", lyrics?.syncedLines?.single()?.text)
+            assertEquals(2, urls.size)
+            assertEquals(false, urls.first().contains("Official"))
+            assertEquals(false, urls.first().contains("Topic"))
+        }
+    }
+
+    @Test
+    fun `instrumental exact result does not trigger another provider`() {
+        var requests = 0
+        val lyrics = fetchLrclibLyrics(Track("Song", "Artist", "Album", "content://song")) {
+            requests++
+            200 to """{"instrumental":true}"""
+        }
+        assertEquals(true, lyrics?.instrumental)
+        assertEquals(1, requests)
+    }
+
+    @Test
+    fun `empty search candidate cannot hide real lyrics`() {
+        val response = """[
+            {"trackName":"Song","artistName":"Artist","duration":120,"syncedLyrics":null,"plainLyrics":null},
+            {"trackName":"Song","artistName":"Artist","duration":125,"plainLyrics":"Found"}
+        ]"""
+        assertEquals(listOf("Found"), parseLyricsSearchResponse(response, Track("Song", "Artist", "", "content://song", durationMs=120_000))?.plainLines)
+    }
+
+    @Test
     fun `LRC parser reads timestamps and skips metadata`() {
         val lyrics = """
             [ar:Artist]
