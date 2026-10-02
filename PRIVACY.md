@@ -20,5 +20,11 @@ VibeArc does not include advertising or analytics SDKs. Files exported to a
 user-selected shared folder can be read by other apps with access to that
 folder. YouTube listening-history submission is not implemented in this build.
 
-Before publishing VibeArc, replace this notice with publisher contact details,
-the final data-retention policy, and links required by each distribution store.
+Local data remains until you remove it through the app or uninstall/clear app
+storage. Exported audio and JSON backups remain in the chosen folder until you
+delete them. Disconnecting an account removes VibeArc's connected session;
+external services manage their own account data and retention independently.
+
+For VibeArc questions, use https://github.com/smithcooks/VibeArc/issues.
+Do not post account credentials or other private information in public issues.
+This GitHub sideload release does not imply distribution-store privacy approval.

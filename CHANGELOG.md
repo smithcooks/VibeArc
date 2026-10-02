@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.0.0] - 2026-10-02
+
+### Changed
+
+- Removed the beta version label; version code 12 updates both v0.9 and the
+  v1.0.0-beta testing APK without changing the signing certificate.
+- GitHub update checks and support links now use smithcooks/VibeArc.
+- Refreshed the repository README with current downloads, feature status,
+  integration setup, and build instructions.
+
+### Fixed
+
+- Lyrics try LRCLIB first with cleaned YouTube metadata; timeouts, malformed or
+  empty exact responses fall back to search, KuGou KRC, and Lyrics.ovh.
+- Empty lyrics results no longer hide useful matches; provider calls no longer
+  hold a global cache lock during network requests. KRC inflation is size-limited.
+- Last.fm setup can be entered in Settings without rebuilding. Public profile
+  setup is distinct from authenticated sign-in, with HTTPS endpoint validation.
+- Now Playing waits for actual playback; disabled/excluded tracks cannot scrobble.
+  A scrobble is marked complete only after acknowledgement, with bounded retries.
+- The signer uses GET for read/auth methods and POST for writes, rejects unequal
+  UTF-8 bearer tokens safely, and reports ignored submissions instead of success.
+
+### Verification and limitations
+
+- All 94 Android JVM tests and three signer regression tests passed. A deliberate
+  signer-condition mutation was caught by the tests; the current-owner updater
+  regression test also failed before the repository URL fix.
+- LRCLIB returned synchronized lyrics for Kendrick Lamar's "Not Like Us" in
+  a live metadata-only check. No authenticated Last.fm account was tested.
+- Full Gradle testing, release lint, and APK packaging succeeded in an isolated
+  build directory outside Documents, avoiding the sandbox's Java ZIP filesystem
+  path error. Lint reported zero errors, 46 warnings, and one hint.
+- The v1.0.0 APK uses version code 12 and the existing v0.9 signing
+  certificate; APK signature and alignment checks passed. This signed sideload
+  release is not Google Play or Play Protect certification.
+- Live authenticated Last.fm requires your API application and deployed signer;
+  credentials are not bundled. An APK alone cannot configure the external server.
+- Lyrics availability and word timestamps depend on provider matches; every-song
+  lyrics and universal word timing are not guaranteed.
+
 ## [0.9.1-beta] - 2026-10-02
 
 ### Fixed
