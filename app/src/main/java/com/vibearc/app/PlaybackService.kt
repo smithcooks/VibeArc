@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.common.PlaybackException
 import android.net.Uri
 import java.io.IOException
@@ -35,16 +36,43 @@ class PlaybackService : MediaSessionService() {
     private var scrobbled = false
     private var crossfadeNextIndex = C.INDEX_UNSET
     private var lastAudioRefreshMs = 0L
+    private var refreshedMediaId: String? = null
     private val playerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
+            val source = player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+            val mediaId = player.currentMediaItem?.mediaId
+            val causes = generateSequence(error as Throwable) { it.cause }.take(10).toList()
+            val status = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
+            val refresh = shouldRefreshAudioSource(source, status, refreshedMediaId == mediaId)
+            android.util.Log.w("VibeArcPlayback", org.json.JSONObject().apply {
+                put("event", "playback_failed"); put("entryPoint", "player")
+                put("requestId", startedAtSeconds); put("code", error.errorCodeName)
+                put("cause", causes.last().javaClass.simpleName); put("httpStatus", status)
+                put("refresh", refresh)
+            }.toString())
+            if (refresh) {
+                refreshedMediaId = mediaId
+                OnlineMusic.invalidate(source)
+                player.prepare()
+                return
+            }
+            val message = when {
+                causes.any { it is org.schabi.newpipe.extractor.exceptions.ReCaptchaException } ->
+                    "YouTube requested verification. Open YouTube Music and try again later."
+                status != null -> "Audio server rejected this stream (HTTP $status). Try again later."
+                causes.any { it is java.net.SocketTimeoutException || it is java.net.UnknownHostException } ->
+                    "The audio server could not be reached. Check your connection."
+                else -> "Could not load this audio source (${error.errorCodeName}). Try another recording."
+            }
             android.widget.Toast.makeText(this@PlaybackService,
-                "Could not play this song. Check your connection or try another streaming format.",
+                message,
                 android.widget.Toast.LENGTH_LONG).show()
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             cancelCrossfade()
             val mediaId = mediaItem?.mediaId?.takeIf(String::isNotBlank) ?: return
+            if (trackedMediaId != mediaId) refreshedMediaId = null
             saveRecentUris(loadRecentUris().recordRecentUri(mediaId))
             trackedMediaId = mediaId
             listenedMs = 0L
@@ -101,7 +129,8 @@ class PlaybackService : MediaSessionService() {
                 val audio = resolvePlaybackSource(spec.uri.toString()) { track ->
                     OnlineMusic.resolve(track, streamAudioFormat(), streamAudioQuality())
                 }
-                spec.withUri(Uri.parse(audio))
+                // The audio CDN's un-ranged initial response is slower; native seek ranges take priority.
+                spec.withUri(Uri.parse(audio)).withRequestHeaders(playbackRequestHeaders(spec.uri.toString(), spec.httpRequestHeaders))
             } catch (error: Exception) {
                 throw IOException("Could not resolve the audio source", error)
             }

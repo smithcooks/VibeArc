@@ -279,10 +279,10 @@ internal fun SettingsScreen(
                         }
                     }
                     "Streaming Quality" -> {
-                        item { Text("VibeArc selects a real provider source matching this codec and bitrate ceiling. If a requested codec is unavailable, that track is reported unavailable.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        item { Text("VibeArc prefers this codec and bitrate ceiling. If the codec is unavailable, playback uses an available source instead. Audio information shows the actual playing format.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         items(AudioFormat.entries.size) { index ->
                             val choice=AudioFormat.entries[index]
-                            QualityChoice(choice.label,"Codec",if(choice==AudioFormat.ANY) "Use the best available source codec." else "Require ${choice.label} from the source.",streamFormat==choice) {
+                            QualityChoice(choice.label,"Codec",if(choice==AudioFormat.ANY) "Use the best available source codec." else "Prefer ${choice.label}; fall back if unavailable.",streamFormat==choice) {
                                 streamFormat=choice;context.saveStreamAudioPreference(streamFormat,streamQuality)
                             }
                         }

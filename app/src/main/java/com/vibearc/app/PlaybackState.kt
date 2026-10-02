@@ -30,6 +30,14 @@ internal fun resolvePlaybackSource(value: String, resolve: (Track) -> Track): St
     return audio
 }
 
+internal fun playbackRequestHeaders(source: String, headers: Map<String, String>): Map<String, String> =
+    if (isYouTubeWatchUri(source) && headers.keys.none { it.equals("Range", true) }) {
+        headers + ("Range" to "bytes=0-")
+    } else headers
+
+internal fun shouldRefreshAudioSource(source: String, status: Int?, alreadyRetried: Boolean): Boolean =
+    isYouTubeWatchUri(source) && !alreadyRetried && status in listOf(403, 410)
+
 internal fun isAllowedMediaUri(value: String): Boolean = runCatching {
     val uri = java.net.URI(value)
     uri.scheme?.lowercase() in AllowedMediaSchemes &&

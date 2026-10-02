@@ -75,7 +75,7 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
     val resolvedOnlineTracks = remember { mutableStateMapOf<String, Track>() }
     val resolvingOnlineUris = remember { mutableStateListOf<String>() }
     val unavailableOnlineUris = remember { mutableStateListOf<String>() }
-    val resolutionPermits = remember { Semaphore(2) }
+    val resolutionPermits = audioPrefetchPermits
     val context = LocalContext.current
     val playlists = remember { context.loadPlaylists() }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }

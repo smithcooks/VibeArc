@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.1-beta] - 2026-10-02
+
+### Fixed
+
+- Streaming falls back to an available codec when a preferred codec is absent;
+  download-format requirements remain strict and the player reports the actual codec.
+- Visible Home songs pre-resolve with at most two speculative requests at once;
+  taps join in-progress resolution instead of duplicating extraction.
+- Initial YouTube audio requests use an open-ended byte range to avoid slow full responses.
+- Rejected or expired stream URLs get one fresh-source attempt, followed by an error
+  identifying the HTTP/provider/network failure rather than blaming the connection.
+
 ## [0.9.0-beta] - Unreleased
 
 ### Added

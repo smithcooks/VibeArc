@@ -19,6 +19,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
 
 internal enum class AudioFormat(val label: String, val extension: String, val mimeType: String) {
     ANY("Automatic", "audio", "audio/*"),
@@ -66,6 +69,39 @@ internal fun selectAudioUrl(candidates: List<AudioCandidate>, preferHighestQuali
         quality = if (preferHighestQuality) AudioQuality.HIGHEST else AudioQuality.BALANCED,
     )?.url
 }
+
+internal fun selectPlaybackAudioCandidate(candidates: List<AudioCandidate>, format: AudioFormat, quality: AudioQuality): AudioCandidate? =
+    selectAudioCandidate(candidates, format, quality) ?: selectAudioCandidate(candidates, AudioFormat.ANY, quality)
+
+/** A tap joins an already-running prefetch instead of extracting the same song twice. */
+internal class ResolvedAudioCache {
+    private val entries = ConcurrentHashMap<String, Pair<Long, FutureTask<Track>>>()
+
+    fun get(key: String, load: () -> Track): Track {
+        val now = System.nanoTime()
+        val entry = entries.compute(key) { _, cached ->
+            cached?.takeIf { !it.second.isDone || now - it.first < 300_000_000_000L }
+                ?: (now to FutureTask(load))
+        }!!
+        entry.second.run()
+        try {
+            return entry.second.get()
+        } catch (error: ExecutionException) {
+            entries.remove(key, entry)
+            throw error.cause ?: error
+        } finally {
+            // ponytail: soft 60-entry limit; in-flight requests stay until they finish.
+            if (entries.size > 60) entries.entries.firstOrNull { it.key != key && it.value.second.isDone }
+                ?.let { entries.remove(it.key, it.value) }
+        }
+    }
+
+    fun invalidate(source: String) {
+        entries.keys.filter { it.substringBefore('|') == source }.forEach(entries::remove)
+    }
+}
+
+internal val audioPrefetchPermits = kotlinx.coroutines.sync.Semaphore(2)
 
 private val GoogleArtworkSize = Regex("=w\\d+-h\\d+[^?]*$")
 
@@ -164,7 +200,7 @@ private fun JsonObject.musicPageType(): String = getObject("navigationEndpoint")
 
 internal object OnlineMusic {
     private val youtube = ServiceList.YouTube
-    private val resolvedAudio = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Track>>()
+    private val resolvedAudio = ResolvedAudioCache()
 
     init {
         NewPipe.init(ExtractorDownloader)
@@ -240,13 +276,20 @@ internal object OnlineMusic {
     ): Track {
         val source = playbackSourceUri(track)
         val key = "$source|$format|$quality"
-        resolvedAudio[key]?.takeIf { System.currentTimeMillis() - it.first < 5 * 60_000L }?.let { cached ->
-            return track.copy(uri = cached.second.uri, sourceUri = source,
-                durationMs = track.durationMs.takeIf { it > 0 } ?: cached.second.durationMs)
-        }
+        val cached = resolvedAudio.get(key) { resolveUncached(track, source, format, quality) }
+        return track.copy(title = track.title.ifBlank { cached.title },
+            artist = track.artist.takeUnless { it.isBlank() || it == "YouTube Music" } ?: cached.artist,
+            uri = cached.uri, sourceUri = track.catalogUri,
+            durationMs = track.durationMs.takeIf { it > 0 } ?: cached.durationMs,
+            artworkUri = track.artworkUri.ifBlank { cached.artworkUri })
+    }
+
+    fun invalidate(source: String) = resolvedAudio.invalidate(source)
+
+    private fun resolveUncached(track: Track, source: String, format: AudioFormat, quality: AudioQuality): Track {
         val info = StreamInfo.getInfo(youtube, source)
-        val streamUrl = selectAudioCandidate(info.audioStreams.map(::audioCandidate), format, quality)?.url
-            ?: error("The selected format is not available for this track.")
+        val streamUrl = selectPlaybackAudioCandidate(info.audioStreams.map(::audioCandidate), format, quality)?.url
+            ?: error("No playable audio source is available for this track.")
         return track.copy(
             title = track.title.ifBlank { info.name },
             artist = track.artist.takeUnless { it == "YouTube Music" }
@@ -260,10 +303,7 @@ internal object OnlineMusic {
                     image.width.coerceAtLeast(0) * image.height.coerceAtLeast(0)
                 }?.url?.let(::highResolutionArtworkUrl).orEmpty()
             },
-        ).also {
-            if (resolvedAudio.size >= 60) resolvedAudio.clear()
-            resolvedAudio[key] = System.currentTimeMillis() to it
-        }
+        )
     }
 
     fun resolve(track: Track, preferHighestQuality: Boolean): Track = resolve(

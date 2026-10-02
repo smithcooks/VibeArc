@@ -6,6 +6,46 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class OnlineMusicTest {
+    @Test fun `initial YouTube audio requests are ranged and explicit seek ranges are preserved`() {
+        val song = "https://music.youtube.com/watch?v=T6eK-2OQtew"
+        assertEquals(mapOf("Range" to "bytes=0-"), playbackRequestHeaders(song, emptyMap()))
+        val seek = mapOf("range" to "bytes=65536-131071")
+        assertEquals(seek, playbackRequestHeaders(song, seek))
+        assertEquals(emptyMap<String, String>(), playbackRequestHeaders("content://music/1", emptyMap()))
+        assertEquals(true, shouldRefreshAudioSource(song, 403, false))
+        assertEquals(false, shouldRefreshAudioSource(song, 403, true))
+        assertEquals(false, shouldRefreshAudioSource(song, 404, false))
+        assertEquals(false, shouldRefreshAudioSource("https://audio.example/song", 403, false))
+    }
+    @Test fun `playback falls back when preferred codec is unavailable but downloads stay strict`() {
+        val sources = listOf(AudioCandidate("https://audio.example/opus", 160, AudioFormat.OPUS))
+        assertEquals(sources.single(), selectPlaybackAudioCandidate(sources, AudioFormat.FLAC, AudioQuality.HIGHEST))
+        assertNull(selectAudioCandidate(sources, AudioFormat.FLAC))
+    }
+
+    @Test fun `simultaneous prefetch and playback extract the source only once and failed lookups retry`() {
+        val cache = ResolvedAudioCache()
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val started = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val workers = java.util.concurrent.Executors.newFixedThreadPool(2)
+        val track = Track("Song", "Artist", "Album", "https://audio.example/song")
+        try {
+            val first = workers.submit<Track> { cache.get("song") {
+                calls.incrementAndGet(); started.countDown()
+                check(release.await(5, java.util.concurrent.TimeUnit.SECONDS)); track
+            } }
+            check(started.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            val second = workers.submit<Track> { cache.get("song") { calls.incrementAndGet(); track } }
+            release.countDown()
+            assertEquals(track, first.get(5, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(track, second.get(5, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(1, calls.get())
+            cache.invalidate("song")
+            assertThrows(IllegalStateException::class.java) { cache.get("song") { error("failed") } }
+            assertEquals(track, cache.get("song") { track })
+        } finally { release.countDown(); workers.shutdownNow() }
+    }
     @Test
     fun `blank searches are rejected before a network request`() {
         assertThrows(IllegalArgumentException::class.java) { OnlineMusic.search("   ") }

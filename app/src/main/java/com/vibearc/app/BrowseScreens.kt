@@ -26,6 +26,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -42,6 +47,7 @@ internal fun HomeScreen(
         blendDiscoveryTracks(onlineTracks, emptyList(), recentTracks + listOfNotNull(currentTrack), libraryTracks)
     }
     val hero = pool.firstOrNull()
+    PrefetchAudio(hero)
     val artists = remember(pool) { pool.groupBy { it.artist }.filterKeys { it.isNotBlank() } }
     val albums = remember(pool) { pool.filter { it.album.isNotBlank() }.distinctBy { it.artist to it.album } }
     val favorites = remember(libraryTracks) { libraryTracks.filter(Track::isFavorite) }
@@ -182,6 +188,7 @@ private fun MusicShelf(title: String, subtitle: String, tracks: List<Track>, onP
 
 @Composable
 private fun ShelfCard(track: Track, title: String, subtitle: String, onPlay: () -> Unit) {
+    PrefetchAudio(track)
     SongActionTarget(track, onPlay, Modifier.width(148.dp)) {
     Column {
         Box {
@@ -194,6 +201,22 @@ private fun ShelfCard(track: Track, title: String, subtitle: String, onPlay: () 
         Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(subtitle, color = MutedText, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+    }
+}
+
+@Composable
+private fun PrefetchAudio(track: Track?) {
+    val context = LocalContext.current
+    val format = context.streamAudioFormat()
+    val quality = context.streamAudioQuality()
+    LaunchedEffect(track?.catalogUri, format, quality) {
+        if (track == null || !isYouTubeWatchUri(playbackSourceUri(track))) return@LaunchedEffect
+        try {
+            audioPrefetchPermits.withPermit { withContext(Dispatchers.IO) { OnlineMusic.resolve(track, format, quality) } }
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            // A failed speculative lookup is retried on tap, not cached as unavailable.
+        }
     }
 }
 
