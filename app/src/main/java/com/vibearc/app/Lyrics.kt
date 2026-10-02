@@ -4,7 +4,6 @@ import android.content.Context
 import com.grack.nanojson.JsonParser
 import com.grack.nanojson.JsonObject
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -117,21 +116,48 @@ private val MetadataSeparator = Regex("[^\\p{L}\\p{N}]+")
 internal fun lyricsSearchTitle(value: String): String = value.replace(LyricsTitleSuffix, "").trim()
 internal fun lyricsSearchArtist(value: String): String = value.replace(TopicArtistSuffix, "").trim()
 private fun normalizedMetadata(value: String): String = value.lowercase().replace(MetadataSeparator, " ").trim()
+private fun LyricsDocument.hasLyrics(): Boolean = instrumental || syncedLines.isNotEmpty() || plainLines.isNotEmpty()
+
+private fun List<Pair<String, String>>.encoded(): String = joinToString("&") { (name, value) ->
+    "$name=${URLEncoder.encode(value, UTF_8.name())}"
+}
+
+internal fun fetchLrclibLyrics(track: Track, request: (String) -> Pair<Int, String?>): LyricsDocument? {
+    val title = lyricsSearchTitle(track.title)
+    val artist = lyricsSearchArtist(track.artist)
+    if (title.isBlank() || artist.isBlank()) return null
+    val parameters = buildList {
+        add("track_name" to title)
+        add("artist_name" to artist)
+        track.album.takeIf { it.isNotBlank() && it != "YouTube Music" }?.let { add("album_name" to it) }
+        (track.durationMs / 1_000).takeIf { it in 1..3_600 }?.let { add("duration" to it.toString()) }
+    }
+    runCatching {
+        val (code, body) = request("https://lrclib.net/api/get?${parameters.encoded()}")
+        if (code in 200..299) body?.let(::parseLyricsResponse)?.takeIf { it.hasLyrics() } else null
+    }.getOrNull()?.let { return it }
+    return runCatching {
+        val search = listOf("track_name" to title, "artist_name" to artist)
+        val (code, body) = request("https://lrclib.net/api/search?${search.encoded()}")
+        if (code in 200..299) body?.let { parseLyricsSearchResponse(it, track) } else null
+    }.getOrNull()
+}
 
 internal fun parseLyricsSearchResponse(value: String, track: Track): LyricsDocument? {
     val wantedTitle = normalizedMetadata(lyricsSearchTitle(track.title))
     val wantedArtist = normalizedMetadata(lyricsSearchArtist(track.artist))
+    if (wantedTitle.isBlank() || wantedArtist.isBlank()) return null
     return JsonParser.array().from(value).mapNotNull { it as? JsonObject }
         .filter { result ->
             val title = normalizedMetadata(result.getString("trackName", ""))
             val artist = normalizedMetadata(result.getString("artistName", ""))
-            title.isNotBlank() && artist.isNotBlank() &&
+            lyricsDocument(result).hasLyrics() && title.isNotBlank() && artist.isNotBlank() &&
                 (title.contains(wantedTitle) || wantedTitle.contains(title)) &&
                 (artist.contains(wantedArtist) || wantedArtist.contains(artist))
         }
         .maxByOrNull { result ->
             val durationDifference = kotlin.math.abs(
-                result.getLong("duration", 0L) * 1_000 - track.durationMs,
+                ((result["duration"] as? Number)?.toDouble() ?: 0.0) * 1_000 - track.durationMs,
             )
             (if (result.getString("syncedLyrics", "").isNotBlank()) 2 else 0) +
                 (if (track.durationMs > 0 && durationDifference <= 3_000) 1 else 0)
@@ -143,41 +169,20 @@ internal object LyricsProvider {
     private const val MaxResponseBytes = 512 * 1024
     private val cache = LinkedHashMap<String, LyricsDocument>()
 
-    @Synchronized
     fun fetch(track: Track, title: String = track.title, artist: String = track.artist): LyricsDocument? {
         val key = "$title\n$artist\n${track.album}\n${track.durationMs}"
-        cache[key]?.let { return it }
+        synchronized(cache) { cache[key] }?.let { return it }
         if (title.isBlank() || artist.isBlank()) return null
-        val queryTrack = track.copy(title = title, artist = artist)
-        fetchKrc(queryTrack)?.let { return remember(key, it) }
-        val parameters = buildList {
-            add("track_name" to title)
-            add("artist_name" to artist)
-            queryTrack.album.takeIf { it.isNotBlank() && it != "YouTube Music" }?.let { add("album_name" to it) }
-            (queryTrack.durationMs / 1_000).takeIf { it in 1..3_600 }?.let { add("duration" to it.toString()) }
-        }
-        val exact = request("https://lrclib.net/api/get?${parameters.encoded()}")
-        val result = when (exact.first) {
-            404 -> {
-                val search = listOf(
-                    "track_name" to lyricsSearchTitle(title),
-                    "artist_name" to lyricsSearchArtist(artist),
-                )
-                val fallback = request("https://lrclib.net/api/search?${search.encoded()}")
-                when (fallback.first) {
-                    in 200..299 -> fallback.second?.let { parseLyricsSearchResponse(it, queryTrack) }
-                    else -> null
-                }
-            }
-            in 200..299 -> exact.second?.let(::parseLyricsResponse)
-            else -> null
-        }
-        return result?.let { remember(key, it) } ?: fetchPlainLyrics(queryTrack)?.let { remember(key, it) }
+        val queryTrack = track.copy(title = lyricsSearchTitle(title), artist = lyricsSearchArtist(artist))
+        val result = fetchLrclibLyrics(queryTrack, ::request) ?: fetchKrc(queryTrack) ?: fetchPlainLyrics(queryTrack)
+        return result?.let { remember(key, it) }
     }
 
     private fun remember(key: String, document: LyricsDocument): LyricsDocument = document.also {
-        cache[key] = it
-        if (cache.size > 8) cache.remove(cache.keys.first())
+        synchronized(cache) {
+            cache[key] = it
+            if (cache.size > 8) cache.remove(cache.keys.first())
+        }
     }
 
     private fun fetchKrc(track: Track): LyricsDocument? = runCatching {
@@ -219,10 +224,6 @@ internal object LyricsProvider {
         lines.takeIf(List<String>::isNotEmpty)?.let { LyricsDocument(emptyList(), it, false, "Lyrics.ovh") }
     }.getOrNull()
 
-    private fun List<Pair<String, String>>.encoded(): String = joinToString("&") { (name, value) ->
-        "$name=${URLEncoder.encode(value, UTF_8.name())}"
-    }
-
     private fun request(url: String): Pair<Int, String?> {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
@@ -231,7 +232,7 @@ internal object LyricsProvider {
             connection.connectTimeout = 8_000
             connection.readTimeout = 12_000
             connection.setRequestProperty("Accept", "application/json")
-            connection.setRequestProperty("User-Agent", "VibeArc/0.9.0 (Android music player)")
+            connection.setRequestProperty("User-Agent", "VibeArc/${BuildConfig.VERSION_NAME} (Android music player)")
             val code = connection.responseCode
             return code to if (code in 200..299) {
                 connection.inputStream.use { it.readUtf8Limited(MaxResponseBytes) }
@@ -254,7 +255,7 @@ internal fun decodeKrc(base64: String): String? = runCatching {
         (encrypted[index + 4].toInt() xor KrcKey[index % KrcKey.size].toInt()).toByte()
     }
     InflaterInputStream(ByteArrayInputStream(compressed)).use { input ->
-        ByteArrayOutputStream().use { output -> input.copyTo(output); output.toString(UTF_8.name()) }
+        input.readUtf8Limited(512 * 1024)
     }
 }.getOrNull()
 

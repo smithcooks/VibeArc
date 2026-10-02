@@ -114,7 +114,7 @@ internal object VerifiedUpdateInstaller {
     private fun isTrustedDownloadUri(uri: URI): Boolean {
         if (uri.scheme != "https" || uri.userInfo != null || uri.port !in listOf(-1, 443)) return false
         return when (uri.host?.lowercase()) {
-            "github.com" -> uri.path.startsWith("/Akumukage/VibeArc/releases/download/")
+            "github.com" -> uri.path.startsWith("/$UpdateRepository/releases/download/")
             "objects.githubusercontent.com", "release-assets.githubusercontent.com" -> true
             else -> false
         } && !uri.path.contains("..")

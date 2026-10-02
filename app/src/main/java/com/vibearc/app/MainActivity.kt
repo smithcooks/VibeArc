@@ -264,6 +264,7 @@ private fun VibeArcApp(
     var youtubeSelectedPlaylistIds by remember {
         mutableStateOf(cachedYouTubeState?.selectedPlaylistIds.orEmpty())
     }
+    var lastFmConfiguration by remember { mutableStateOf(context.loadLastFmConfiguration()) }
     var lastFmSession by remember { mutableStateOf(context.loadLastFmSession()) }
     var lastFmUsername by remember { mutableStateOf(lastFmSession?.username ?: context.loadLastFmUsername()) }
     var lastFmPendingToken by remember { mutableStateOf(context.loadLastFmPendingToken()) }
@@ -271,7 +272,8 @@ private fun VibeArcApp(
     var lastFmRecommendations by remember { mutableStateOf<List<LastFmTrack>>(emptyList()) }
     var lastFmPlayable by remember { mutableStateOf<List<Track>>(emptyList()) }
     var lastFmRecommendationsBusy by remember { mutableStateOf(false) }
-    var lastFmBusy by remember { mutableStateOf(false) }
+    var lastFmRequests by remember { mutableIntStateOf(0) }
+    val lastFmBusy = lastFmRequests > 0
     var lastFmError by remember { mutableStateOf<String?>(null) }
     var lastFmRefresh by remember { mutableIntStateOf(0) }
     var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
@@ -286,63 +288,68 @@ private fun VibeArcApp(
         }
     }
 
-    LaunchedEffect(lastFmUsername, lastFmRefresh) {
+    LaunchedEffect(lastFmUsername, lastFmRefresh, lastFmConfiguration) {
         val username = lastFmUsername ?: return@LaunchedEffect
-        val signerConfigured = BuildConfig.LASTFM_SIGNER_URL.isNotBlank() && BuildConfig.LASTFM_SIGNER_TOKEN.isNotBlank()
-        if (BuildConfig.LASTFM_API_KEY.isBlank() && !signerConfigured) {
-            lastFmError = "This build does not include Last.fm provider configuration."
+        val config = lastFmConfiguration
+        if (!config.profileConfigured) {
+            lastFmError = "Open Settings → Last.fm to enter your API key or signer configuration."
             return@LaunchedEffect
         }
-        lastFmBusy = true
-        lastFmError = null
-        val loaded = withContext(Dispatchers.IO) {
-            runCatching {
-                if (BuildConfig.LASTFM_API_KEY.isNotBlank()) LastFmApi.load(username, BuildConfig.LASTFM_API_KEY)
-                else LastFmSignerApi.load(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN, username)
+        lastFmRequests++
+        try {
+            lastFmError = null
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (config.apiKey.isNotBlank()) LastFmApi.load(username, config.apiKey)
+                    else LastFmSignerApi.load(config.signerUrl, config.clientToken, username)
+                }
             }
-        }
-        lastFmSnapshot = loaded.getOrNull()
-        lastFmRecommendations = emptyList()
-        lastFmError = loaded.exceptionOrNull()?.let { "Could not load the Last.fm profile." }
-        lastFmBusy = false
+            lastFmSnapshot = loaded.getOrNull()
+            lastFmRecommendations = emptyList()
+            lastFmError = loaded.exceptionOrNull()?.let { it.message?.take(200) ?: "Could not load the Last.fm profile." }
+        } finally { lastFmRequests-- }
     }
 
     val startLastFmAuth: () -> Unit = {
-        if (BuildConfig.LASTFM_SIGNER_URL.isBlank() || BuildConfig.LASTFM_SIGNER_TOKEN.isBlank()) {
-            lastFmError = "Configure LASTFM_SIGNER_URL and LASTFM_SIGNER_TOKEN first."
+        val config = lastFmConfiguration
+        if (!config.signerConfigured) {
+            lastFmError = "Enter your HTTPS signer URL and client token in Last.fm settings first."
         } else uiScope.launch {
-            lastFmBusy = true
-            lastFmError = null
-            val result = withContext(Dispatchers.IO) {
-                runCatching { LastFmSignerApi.beginAuthorization(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN) }
-            }
-            result.getOrNull()?.let { authorization ->
-                context.saveLastFmPendingToken(authorization.token)
-                lastFmPendingToken = authorization.token
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authorization.authorizationUrl))) }
-                    .onFailure { lastFmError = "Could not open Last.fm authorization." }
-            }
-            result.exceptionOrNull()?.let { lastFmError = it.message ?: "Could not start Last.fm authorization." }
-            lastFmBusy = false
+            lastFmRequests++
+            try {
+                lastFmError = null
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { LastFmSignerApi.beginAuthorization(config.signerUrl, config.clientToken) }
+                }
+                result.getOrNull()?.let { authorization ->
+                    context.saveLastFmPendingToken(authorization.token)
+                    lastFmPendingToken = authorization.token
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authorization.authorizationUrl))) }
+                        .onFailure { lastFmError = "Could not open Last.fm authorization." }
+                }
+                result.exceptionOrNull()?.let { lastFmError = it.message ?: "Could not start Last.fm authorization." }
+            } finally { lastFmRequests-- }
         }
     }
     val finishLastFmAuth: () -> Unit = finish@{
         val token = lastFmPendingToken ?: return@finish
+        val config = lastFmConfiguration
         uiScope.launch {
-            lastFmBusy = true
-            lastFmError = null
-            val result = withContext(Dispatchers.IO) {
-                runCatching { LastFmSignerApi.completeAuthorization(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN, token) }
-            }
-            result.getOrNull()?.let { session ->
-                context.saveLastFmSession(session)
-                lastFmSession = session
-                lastFmUsername = session.username
-                lastFmPendingToken = null
-                lastFmRefresh++
-            }
-            result.exceptionOrNull()?.let { lastFmError = it.message ?: "Finish authorization in the browser, then try again." }
-            lastFmBusy = false
+            lastFmRequests++
+            try {
+                lastFmError = null
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { LastFmSignerApi.completeAuthorization(config.signerUrl, config.clientToken, token) }
+                }
+                result.getOrNull()?.let { session ->
+                    context.saveLastFmSession(session)
+                    lastFmSession = session
+                    lastFmUsername = session.username
+                    lastFmPendingToken = null
+                    lastFmRefresh++
+                }
+                result.exceptionOrNull()?.let { lastFmError = it.message ?: "Finish authorization in the browser, then try again." }
+            } finally { lastFmRequests-- }
         }
     }
     val disconnectLastFm: () -> Unit = {
@@ -467,8 +474,8 @@ private fun VibeArcApp(
         lastFmRecommendationsBusy = true
         lastFmRecommendations = withContext(Dispatchers.IO) {
             runCatching {
-                if (BuildConfig.LASTFM_API_KEY.isNotBlank()) LastFmApi.similarTracks(seed, BuildConfig.LASTFM_API_KEY)
-                else LastFmSignerApi.similarTracks(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN, seed)
+                if (lastFmConfiguration.apiKey.isNotBlank()) LastFmApi.similarTracks(seed, lastFmConfiguration.apiKey)
+                else LastFmSignerApi.similarTracks(lastFmConfiguration.signerUrl, lastFmConfiguration.clientToken, seed)
             }.getOrDefault(emptyList())
         }
         lastFmRecommendationsBusy = false
@@ -1121,7 +1128,7 @@ private fun VibeArcApp(
                 onImportYouTubePlaylist = importYouTubePlaylist,
                 lastFmUsername = lastFmUsername,
                 lastFmBusy = lastFmBusy,
-                lastFmConfigured = BuildConfig.LASTFM_API_KEY.isNotBlank() || (BuildConfig.LASTFM_SIGNER_URL.isNotBlank() && BuildConfig.LASTFM_SIGNER_TOKEN.isNotBlank()),
+                lastFmConfiguration = lastFmConfiguration,
                 lastFmAuthenticated = lastFmSession != null,
                 lastFmAuthorizationPending = lastFmPendingToken != null,
                 lastFmTracks = library,
@@ -1130,6 +1137,20 @@ private fun VibeArcApp(
                 onFinishLastFmAuth = finishLastFmAuth,
                 onRefreshLastFm = { lastFmRefresh++ },
                 onDisconnectLastFm = disconnectLastFm,
+                onSaveLastFmSetup = { config, username ->
+                    if (config != lastFmConfiguration || username != lastFmUsername) {
+                        context.saveLastFmSession(null)
+                        lastFmSession = null
+                        lastFmPendingToken = null
+                        lastFmSnapshot = null
+                        lastFmRecommendations = emptyList()
+                    }
+                    context.saveLastFmConfiguration(config)
+                    context.saveLastFmUsername(username)
+                    lastFmConfiguration = config
+                    lastFmUsername = username
+                    lastFmRefresh++
+                },
                 onDownloads = { navigate(Tab.Downloads) },
                 onBackup = { backupWriter.launch("VibeArc-backup.json") },
                 onRestore = { backupReader.launch(arrayOf("application/json", "text/plain")) },

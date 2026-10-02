@@ -6,6 +6,8 @@ import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
 
+internal const val UpdateRepository = "smithcooks/VibeArc"
+
 internal data class AppUpdate(
     val version: String,
     val pageUrl: String,
@@ -29,8 +31,8 @@ internal fun parseAppUpdate(json: String): AppUpdate? = runCatching {
     val pageUrl = root.getString("html_url", "")
     val uri = URI(pageUrl)
     require(version.matches(Regex("\\d+(?:\\.\\d+){1,3}(?:[-+][A-Za-z0-9.-]+)?")))
-    require(uri.scheme == "https" && uri.host == "github.com")
-    require(uri.path.startsWith("/Akumukage/VibeArc/releases/tag/") && !uri.path.contains(".."))
+    require(uri.scheme == "https" && uri.host == "github.com" && uri.userInfo == null && uri.port in listOf(-1, 443))
+    require(uri.path.startsWith("/$UpdateRepository/releases/tag/") && !uri.path.contains(".."))
     val assets = (root["assets"] as? List<*>).orEmpty().mapNotNull { it as? JsonObject }
     fun assetUrl(suffix: String): String = assets.firstNotNullOfOrNull { asset ->
         asset.getString("name", "").takeIf { it.endsWith(suffix, true) }
@@ -48,8 +50,8 @@ internal fun parseAppUpdate(json: String): AppUpdate? = runCatching {
 
 private fun isTrustedUpdateAssetUrl(value: String): Boolean = runCatching {
     val uri = URI(value)
-    uri.scheme == "https" && uri.host == "github.com" &&
-        uri.path.startsWith("/Akumukage/VibeArc/releases/download/") && !uri.path.contains("..")
+    uri.scheme == "https" && uri.host == "github.com" && uri.userInfo == null && uri.port in listOf(-1, 443) &&
+        uri.path.startsWith("/$UpdateRepository/releases/download/") && !uri.path.contains("..")
 }.getOrDefault(false)
 
 internal fun parseSha256(value: String): String? {
@@ -59,7 +61,7 @@ internal fun parseSha256(value: String): String? {
 }
 
 internal object AppUpdateChecker {
-    private const val LatestRelease = "https://api.github.com/repos/Akumukage/VibeArc/releases/latest"
+    private const val LatestRelease = "https://api.github.com/repos/$UpdateRepository/releases/latest"
     private const val MaxResponseBytes = 256 * 1024
 
     fun available(currentVersion: String): AppUpdate? {

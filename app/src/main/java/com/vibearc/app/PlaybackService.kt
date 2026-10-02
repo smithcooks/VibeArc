@@ -34,6 +34,11 @@ class PlaybackService : MediaSessionService() {
     private var lastPollMs = 0L
     private var startedAtSeconds = 0L
     private var scrobbled = false
+    @Volatile private var playbackGeneration = 0L
+    private var scrobbleInFlight = false
+    private var scrobbleAttempts = 0
+    private var scrobbleRetryAtMs = 0L
+    private var nowPlayingSession: String? = null
     private var crossfadeNextIndex = C.INDEX_UNSET
     private var lastAudioRefreshMs = 0L
     private var refreshedMediaId: String? = null
@@ -77,9 +82,13 @@ class PlaybackService : MediaSessionService() {
             trackedMediaId = mediaId
             listenedMs = 0L
             lastPollMs = android.os.SystemClock.elapsedRealtime()
-            startedAtSeconds = System.currentTimeMillis() / 1_000
+            startedAtSeconds = 0L
             scrobbled = false
-            submitNowPlaying(mediaItem)
+            playbackGeneration++
+            scrobbleInFlight = false
+            scrobbleAttempts = 0
+            scrobbleRetryAtMs = 0L
+            nowPlayingSession = null
         }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) = audioEffects.attach(audioSessionId)
@@ -102,10 +111,12 @@ class PlaybackService : MediaSessionService() {
             }
             val now = android.os.SystemClock.elapsedRealtime()
             if (player.isPlaying && player.currentMediaItem?.mediaId == trackedMediaId) {
+                if (startedAtSeconds == 0L) startedAtSeconds = System.currentTimeMillis() / 1_000
+                player.currentMediaItem?.let(::submitNowPlaying)
                 listenedMs += (now - lastPollMs).coerceIn(0L, SleepTimerPollMillis * 2)
                 val track = player.currentMediaItem?.lastFmTrack(player.duration)
-                if (!scrobbled && track != null && shouldScrobble(track, listenedMs, loadLastFmExcludedUris())) {
-                    scrobbled = true
+                if (!scrobbled && !scrobbleInFlight && scrobbleAttempts < 3 && now >= scrobbleRetryAtMs && track != null &&
+                    shouldScrobble(track, listenedMs, loadLastFmExcludedUris(), lastFmScrobblingEnabled())) {
                     submitScrobble(track, startedAtSeconds)
                 }
             }
@@ -202,25 +213,45 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun submitNowPlaying(mediaItem: MediaItem) {
-        val track = mediaItem.lastFmTrack(player.duration) ?: return
-        if (!lastFmScrobblingEnabled() || track.catalogUri in loadLastFmExcludedUris()) return
+        if (!lastFmScrobblingEnabled()) { nowPlayingSession = null; return }
         val session = loadLastFmSession() ?: return
-        if (!lastFmSignerConfigured()) return
+        if (nowPlayingSession == session.sessionKey) return
+        val track = mediaItem.lastFmTrack(player.duration) ?: return
+        if (track.catalogUri in loadLastFmExcludedUris()) return
+        val config = loadLastFmConfiguration()
+        if (!config.signerConfigured) return
+        val generation = playbackGeneration
+        nowPlayingSession = session.sessionKey
         lastFmExecutor.execute {
-            runCatching { LastFmSignerApi.updateNowPlaying(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN, session, track) }
+            if (playbackGeneration != generation || !lastFmScrobblingEnabled() || track.catalogUri in loadLastFmExcludedUris() || loadLastFmSession() != session) return@execute
+            val submitted = runCatching { LastFmSignerApi.updateNowPlaying(config.signerUrl, config.clientToken, session, track) }
+            saveLastFmSubmissionStatus(if (submitted.isSuccess) "Now Playing accepted by Last.fm" else "Now Playing failed. Check your signer and Last.fm session.")
         }
     }
 
     private fun submitScrobble(track: Track, timestamp: Long) {
+        if (!lastFmScrobblingEnabled() || track.catalogUri in loadLastFmExcludedUris()) return
         val session = loadLastFmSession() ?: return
-        if (!lastFmSignerConfigured()) return
+        val config = loadLastFmConfiguration()
+        if (!config.signerConfigured) return
+        val generation = playbackGeneration
+        scrobbleInFlight = true
+        scrobbleAttempts++
         lastFmExecutor.execute {
-            runCatching { LastFmSignerApi.scrobble(BuildConfig.LASTFM_SIGNER_URL, BuildConfig.LASTFM_SIGNER_TOKEN, session, track, timestamp) }
+            val submitted = runCatching {
+                check(lastFmScrobblingEnabled() && track.catalogUri !in loadLastFmExcludedUris() && loadLastFmSession() == session)
+                LastFmSignerApi.scrobble(config.signerUrl, config.clientToken, session, track, timestamp)
+            }
+            saveLastFmSubmissionStatus(if (submitted.isSuccess) "Scrobble accepted by Last.fm" else "Scrobble not accepted. Check your signer and Last.fm session.")
+            handler.post {
+                if (playbackGeneration == generation) {
+                    scrobbleInFlight = false
+                    scrobbled = submitted.isSuccess
+                    scrobbleRetryAtMs = android.os.SystemClock.elapsedRealtime() + 60_000L
+                }
+            }
         }
     }
-
-    private fun lastFmSignerConfigured(): Boolean =
-        BuildConfig.LASTFM_SIGNER_URL.isNotBlank() && BuildConfig.LASTFM_SIGNER_TOKEN.isNotBlank()
 }
 
 private fun MediaItem.lastFmTrack(playerDurationMs: Long): Track? {

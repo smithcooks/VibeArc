@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,11 +41,12 @@ internal fun SettingsScreen(
     onPullSelectedYouTubePlaylists: () -> Unit,
     onCreateYouTubePlaylist: (String) -> Unit,
     onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
-    lastFmUsername: String?, lastFmBusy: Boolean, lastFmConfigured: Boolean,
+    lastFmUsername: String?, lastFmBusy: Boolean, lastFmConfiguration: LastFmConfiguration,
     lastFmAuthenticated: Boolean, lastFmAuthorizationPending: Boolean, lastFmError: String?,
     lastFmTracks: List<Track>,
     onStartLastFmAuth: () -> Unit, onFinishLastFmAuth: () -> Unit,
     onRefreshLastFm: () -> Unit, onDisconnectLastFm: () -> Unit,
+    onSaveLastFmSetup: (LastFmConfiguration, String?) -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
 ) {
@@ -62,6 +64,12 @@ internal fun SettingsScreen(
     var selectedIcon by remember { mutableStateOf(context.selectedLauncherIcon()) }
     var custom by remember { mutableStateOf("#%06X".format(appearance.customAccentArgb and 0xFFFFFF)) }
     var youtubePlaylistTitle by remember { mutableStateOf("") }
+    var lastFmApiKey by remember(lastFmConfiguration) { mutableStateOf(lastFmConfiguration.apiKey) }
+    var lastFmSignerUrl by remember(lastFmConfiguration) { mutableStateOf(lastFmConfiguration.signerUrl) }
+    var lastFmClientToken by remember(lastFmConfiguration) { mutableStateOf(lastFmConfiguration.clientToken) }
+    var lastFmProfileName by remember(lastFmUsername) { mutableStateOf(lastFmUsername.orEmpty()) }
+    val lastFmSetup = LastFmConfiguration(lastFmApiKey.trim(), lastFmSignerUrl.trim().trimEnd('/'), lastFmClientToken.trim())
+    val lastFmSetupError = lastFmConfigurationError(lastFmSetup)
     var error by remember { mutableStateOf(false) }
     val unavailable: (String,String)->Unit = { title,description -> info=title to description }
     fun updateAudioTuning(value: AudioTuning) {
@@ -157,7 +165,7 @@ internal fun SettingsScreen(
         item { SettingsHeading("Library & Playlist Imports") }
         item { ReferenceRow("Import Playlist from File","CSV, TSV, M3U/M3U8, or TXT","download",onClick=onImportPlaylist) }
         item { SettingsHeading("Scrobbler") }
-        item { ReferenceRow("Last.fm Account",when { lastFmBusy -> "Loading…"; lastFmAuthenticated -> lastFmUsername.orEmpty(); !lastFmConfigured -> "Signer configuration required"; lastFmAuthorizationPending -> "Authorization waiting to finish"; else -> "Tap to sign in" },"stats",0,3,onClick={sheet="Last.fm"}) }
+        item { ReferenceRow("Last.fm Account",when { lastFmBusy -> "Loading…"; lastFmAuthenticated -> lastFmUsername.orEmpty(); lastFmAuthorizationPending -> "Authorization waiting to finish"; lastFmUsername != null && lastFmConfiguration.profileConfigured -> "$lastFmUsername · public profile only"; else -> "Tap to set up Last.fm" },"stats",0,3,onClick={sheet="Last.fm"}) }
         item { ReferenceRow("Scrobbling & Now Playing",when { !lastFmAuthenticated -> "Sign in to Last.fm first"; scrobblingEnabled -> "Automatic scrobbling is on"; else -> "Scrobbling is off" },"clock",1,3,scrobblingEnabled,enabled=lastFmAuthenticated,onClick={scrobblingEnabled=!scrobblingEnabled;context.saveLastFmScrobblingEnabled(scrobblingEnabled)}) }
         item { ReferenceRow("Scrobble Exclusions","${excludedScrobbleUris.size} excluded tracks","playlist",2,3,enabled=lastFmAuthenticated,onClick={sheet="Scrobble Exclusions"}) }
         item { SettingsHeading("Backup & Restore") }
@@ -167,19 +175,19 @@ internal fun SettingsScreen(
         item { ReferenceRow("Launcher Icon",selectedIcon.label,"album",onClick={sheet="App icon"}) }
         item { SettingsHeading("About") }
         item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, KuGou, LRCLIB, Lyrics.ovh, Last.fm, and GitHub. Full notices are included with the source release.")}) }
-        item { ReferenceRow("Updates & Support","VibeArc on GitHub","spark",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/Akumukage/VibeArc")))}}) }
+        item { ReferenceRow("Updates & Support","VibeArc on GitHub","spark",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/$UpdateRepository")))}}) }
         item {
             Spacer(Modifier.height(24.dp))
             ReferenceSurface {
                 Column(Modifier.fillMaxWidth().padding(28.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.vibearc_icon),"VibeArc icon",Modifier.size(76.dp).clip(RoundedCornerShape(20.dp)))
                     Text("VibeArc",style=MaterialTheme.typography.displaySmall)
-                    Surface(shape=CircleShape,color=MaterialTheme.colorScheme.primaryContainer) { Text("Version 0.9.0 beta",Modifier.padding(horizontal=18.dp,vertical=6.dp),fontWeight=FontWeight.Bold) }
+                    Surface(shape=CircleShape,color=MaterialTheme.colorScheme.primaryContainer) { Text("Version ${BuildConfig.VERSION_NAME}",Modifier.padding(horizontal=18.dp,vertical=6.dp),fontWeight=FontWeight.Bold) }
                     Text("Your music, your space",color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-        item { Spacer(Modifier.height(8.dp)); ReferenceRow("Source Code","github.com/Akumukage/VibeArc","code",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/Akumukage/VibeArc")))}}) }
+        item { Spacer(Modifier.height(8.dp)); ReferenceRow("Source Code","github.com/$UpdateRepository","code",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/$UpdateRepository")))}}) }
     }
     info?.let { (title,message) ->
         AlertDialog(onDismissRequest={info=null},title={Text(title)},text={Text(message)},confirmButton={TextButton(onClick={info=null}){Text("Got it")}})
@@ -235,16 +243,24 @@ internal fun SettingsScreen(
                     }
                     "Last.fm" -> {
                         item { Text("Sign in through Last.fm. Now Playing and completed scrobbles are signed by the VibeArc server; the Last.fm shared secret is never stored in the app.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if (!lastFmConfigured) item { Text("Configure LASTFM_SIGNER_URL and LASTFM_SIGNER_TOKEN for authenticated use.",color=MaterialTheme.colorScheme.error) }
+                        item { OutlinedTextField(lastFmProfileName,{lastFmProfileName=it.take(64)},label={Text("Last.fm username")},singleLine=true,enabled=!lastFmBusy,modifier=Modifier.fillMaxWidth()) }
+                        item { OutlinedTextField(lastFmApiKey,{lastFmApiKey=it.take(32)},label={Text("Public API key (optional with signer)")},singleLine=true,enabled=!lastFmBusy,modifier=Modifier.fillMaxWidth()) }
+                        item { Text("An API key and username load public statistics. Login and scrobbling also require your deployed signer. Never enter the Last.fm shared secret here.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        item { OutlinedTextField(lastFmSignerUrl,{lastFmSignerUrl=it.take(2048)},label={Text("HTTPS signer URL")},singleLine=true,enabled=!lastFmBusy,modifier=Modifier.fillMaxWidth()) }
+                        item { OutlinedTextField(lastFmClientToken,{lastFmClientToken=it.take(512)},label={Text("Signer client token (not shared secret)")},visualTransformation=PasswordVisualTransformation(),singleLine=true,enabled=!lastFmBusy,modifier=Modifier.fillMaxWidth()) }
+                        lastFmSetupError?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error) } }
+                        item { Button(onClick={onSaveLastFmSetup(lastFmSetup,validLastFmUsername(lastFmProfileName))},enabled=!lastFmBusy && lastFmSetupError==null && (lastFmProfileName.isBlank() || validLastFmUsername(lastFmProfileName)!=null)) { Text("Save setup") } }
+                        if (!lastFmConfiguration.signerConfigured) item { Text("Authenticated sign-in needs a configured signer; public profiles do not enable scrobbling.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         lastFmError?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error) } }
+                        context.lastFmSubmissionStatus()?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.onSurfaceVariant) } }
                         item {
-                            Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                                if (!lastFmAuthenticated) Button(onClick=onStartLastFmAuth,enabled=lastFmConfigured && !lastFmBusy) { Text("Authorize") }
-                                if (lastFmAuthorizationPending && !lastFmAuthenticated) Button(onClick=onFinishLastFmAuth,enabled=!lastFmBusy) { Text("Finish sign-in") }
-                                if(lastFmUsername != null) OutlinedButton(onClick=onRefreshLastFm,enabled=!lastFmBusy) { Text("Refresh") }
+                            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                if (!lastFmAuthenticated) Button(onClick=onStartLastFmAuth,enabled=lastFmConfiguration.signerConfigured && !lastFmBusy) { Text("Authorize") }
+                                if (lastFmAuthorizationPending && !lastFmAuthenticated) Button(onClick=onFinishLastFmAuth,enabled=!lastFmBusy) { Text("Finish sign-in after browser approval") }
+                                if(lastFmUsername != null) OutlinedButton(onClick=onRefreshLastFm,enabled=lastFmConfiguration.profileConfigured && !lastFmBusy) { Text("Refresh profile") }
                             }
                         }
-                        if(lastFmAuthenticated) item { TextButton(onClick={onDisconnectLastFm();sheet=null}) { Text("Disconnect Last.fm") } }
+                        if(lastFmUsername != null || lastFmAuthorizationPending) item { TextButton(onClick={onDisconnectLastFm();sheet=null},enabled=!lastFmBusy) { Text("Disconnect Last.fm") } }
                     }
                     "Scrobble Exclusions" -> {
                         item { Text("Last.fm accepts tracks longer than 30 seconds after half the track or four minutes, whichever comes first. Excluded tracks never send Now Playing or scrobbles.",color=MaterialTheme.colorScheme.onSurfaceVariant) }

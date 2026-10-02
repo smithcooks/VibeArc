@@ -5,6 +5,7 @@ import com.grack.nanojson.JsonObject
 import com.grack.nanojson.JsonParser
 import com.grack.nanojson.JsonWriter
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
@@ -38,11 +39,33 @@ internal data class LastFmSnapshot(
 internal data class LastFmSession(val username: String, val sessionKey: String)
 internal data class LastFmAuthorization(val token: String, val authorizationUrl: String)
 
+internal data class LastFmConfiguration(val apiKey: String = "", val signerUrl: String = "", val clientToken: String = "") {
+    val signerConfigured: Boolean get() = signerUrl.isNotBlank() && clientToken.isNotBlank() && lastFmConfigurationError(this) == null
+    val profileConfigured: Boolean get() = apiKey.matches(Regex("[a-fA-F0-9]{32}")) || signerConfigured
+}
+
+internal fun lastFmConfigurationError(config: LastFmConfiguration): String? = when {
+    config.apiKey.isNotEmpty() && !config.apiKey.matches(Regex("[a-fA-F0-9]{32}")) -> "The API key must contain 32 hexadecimal characters."
+    (config.signerUrl.isBlank()) != (config.clientToken.isBlank()) -> "Enter both the signer URL and client token, or leave both empty."
+    config.signerUrl.isNotEmpty() && !runCatching {
+        val uri = URI(config.signerUrl)
+        uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null
+    }.getOrDefault(false) -> "Use an HTTPS signer URL without credentials, a query, or a fragment."
+    config.clientToken.length > 512 || config.clientToken.any { it.code !in 33..126 } -> "The client token must be printable ASCII without spaces."
+    else -> null
+}
+
+internal fun validLastFmAuthorizationUrl(value: String): Boolean = runCatching {
+    val uri = URI(value)
+    uri.scheme == "https" && uri.host == "www.last.fm" && uri.port in listOf(-1, 443) &&
+        uri.userInfo == null && uri.path == "/api/auth/" && uri.fragment == null
+}.getOrDefault(false)
+
 internal fun lastFmScrobbleThresholdMs(durationMs: Long): Long? =
     durationMs.takeIf { it > 30_000 }?.let { minOf(it / 2, 240_000) }
 
-internal fun shouldScrobble(track: Track, listenedMs: Long, excludedUris: Set<String>): Boolean =
-    track.title.isNotBlank() && track.artist.isNotBlank() && track.catalogUri !in excludedUris &&
+internal fun shouldScrobble(track: Track, listenedMs: Long, excludedUris: Set<String>, enabled: Boolean = true): Boolean =
+    enabled && track.title.isNotBlank() && track.artist.isNotBlank() && track.catalogUri !in excludedUris &&
         lastFmScrobbleThresholdMs(track.durationMs)?.let { listenedMs >= it } == true
 
 internal fun validLastFmUsername(value: String): String? = value.trim().takeIf {
@@ -103,7 +126,7 @@ internal fun parseLastFmSimilarTracks(value: String): List<LastFmTrack> =
         }.take(20)
 
 private fun parseLastFmRoot(value: String): JsonObject = JsonParser.`object`().from(value).also { root ->
-    root["error"]?.let { error("Last.fm request failed ($it)") }
+    root["error"]?.let { error("Last.fm: ${root.getString("message", "Request failed").take(200)} (code $it)") }
 }
 
 private fun JsonObject.longString(name: String): Long = getString(name, "").toLongOrNull()?.coerceAtLeast(0) ?: 0
@@ -160,7 +183,7 @@ internal object LastFmApi {
             connection.connectTimeout = 10_000
             connection.readTimeout = 20_000
             connection.setRequestProperty("Accept", "application/json")
-            connection.setRequestProperty("User-Agent", "VibeArc/0.9.0 (Android music player)")
+            connection.setRequestProperty("User-Agent", "VibeArc/${BuildConfig.VERSION_NAME} (Android music player)")
             val code = connection.responseCode
             check(code in 200..299) { "Last.fm request failed ($code)" }
             return connection.inputStream.use { it.readUtf8Limited(MaxResponseBytes) }
@@ -175,7 +198,7 @@ internal object LastFmSignerApi {
         val root = post(baseUrl, clientToken, "token")
         return LastFmAuthorization(
             root.getString("token", "").requiredLastFm("authorization token"),
-            root.getString("authorizationUrl", "").requiredLastFm("authorization URL"),
+            root.getString("authorizationUrl", "").also { require(validLastFmAuthorizationUrl(it)) { "Signer returned an invalid Last.fm authorization URL" } },
         )
     }
 
@@ -202,7 +225,7 @@ internal object LastFmSignerApi {
     }
 
     fun updateNowPlaying(baseUrl: String, clientToken: String, session: LastFmSession, track: Track) {
-        post(baseUrl, clientToken, "now-playing", *trackParameters(session, track))
+        check(post(baseUrl, clientToken, "now-playing", *trackParameters(session, track))["ok"] == true) { "Last.fm did not accept Now Playing" }
     }
 
     fun scrobble(
@@ -212,7 +235,7 @@ internal object LastFmSignerApi {
         track: Track,
         startedAtSeconds: Long,
     ) {
-        post(baseUrl, clientToken, "scrobble", *trackParameters(session, track), "timestamp" to startedAtSeconds)
+        check(post(baseUrl, clientToken, "scrobble", *trackParameters(session, track), "timestamp" to startedAtSeconds)["ok"] == true) { "Last.fm did not accept the scrobble" }
     }
 
     private fun trackParameters(session: LastFmSession, track: Track): Array<Pair<String, Any>> = arrayOf(
@@ -230,6 +253,7 @@ internal object LastFmSignerApi {
         vararg values: Pair<String, Any>,
     ): JsonObject {
         require(clientToken.isNotBlank()) { "Last.fm signer client token is not configured" }
+        require(LastFmConfiguration(signerUrl = baseUrl, clientToken = clientToken).signerConfigured) { "Invalid Last.fm signer configuration" }
         val base = URL(baseUrl.trimEnd('/'))
         require(base.protocol == "https" && base.host.isNotBlank()) { "Last.fm signer must use HTTPS" }
         val writer = JsonWriter.string().`object`()
@@ -267,6 +291,30 @@ private const val LastFmPendingTokenKey = "pending_token"
 private const val LastFmScrobblingEnabledKey = "scrobbling_enabled"
 private const val LastFmExcludedUrisKey = "excluded_uris"
 
+internal fun Context.loadLastFmConfiguration(): LastFmConfiguration {
+    val preferences = getSharedPreferences(LastFmPreferences, Context.MODE_PRIVATE)
+    return LastFmConfiguration(
+        preferences.getString("api_key", BuildConfig.LASTFM_API_KEY).orEmpty(),
+        preferences.getString("signer_url", BuildConfig.LASTFM_SIGNER_URL).orEmpty(),
+        preferences.getString("client_token", BuildConfig.LASTFM_SIGNER_TOKEN).orEmpty(),
+    )
+}
+
+internal fun Context.saveLastFmConfiguration(config: LastFmConfiguration) {
+    require(lastFmConfigurationError(config) == null)
+    if (loadLastFmConfiguration() != config) saveLastFmSession(null)
+    getSharedPreferences(LastFmPreferences, Context.MODE_PRIVATE).edit()
+        .putString("api_key", config.apiKey).putString("signer_url", config.signerUrl)
+        .putString("client_token", config.clientToken).apply()
+}
+
+internal fun Context.lastFmSubmissionStatus(): String? = getSharedPreferences(LastFmPreferences, Context.MODE_PRIVATE)
+    .getString("submission_status", null)
+
+internal fun Context.saveLastFmSubmissionStatus(message: String) {
+    getSharedPreferences(LastFmPreferences, Context.MODE_PRIVATE).edit().putString("submission_status", message).apply()
+}
+
 internal fun Context.loadLastFmUsername(): String? = validLastFmUsername(
     getSharedPreferences(LastFmPreferences, Context.MODE_PRIVATE)
         .getString(LastFmUsernameKey, "").orEmpty(),
@@ -292,6 +340,7 @@ internal fun Context.saveLastFmSession(session: LastFmSession?) {
             remove(LastFmUsernameKey)
             remove(LastFmSessionKey)
             remove(LastFmPendingTokenKey)
+            remove("submission_status")
         } else {
             putString(LastFmUsernameKey, session.username)
             putString(LastFmSessionKey, session.sessionKey)
