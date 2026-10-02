@@ -1,6 +1,10 @@
 package com.vibearc.app
 
 import android.content.Context
+import com.grack.nanojson.JsonParser
+import com.grack.nanojson.JsonWriter
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
 
@@ -13,13 +17,95 @@ internal data class Track(
     val durationMs: Long = 0,
     val artworkUri: String = "",
     val folder: String = "Imported",
+    val sourceUri: String = "",
 )
+
+internal val Track.catalogUri: String get() = sourceUri.ifBlank { uri }
 
 internal data class Playlist(
     val id: String,
     val name: String,
     val trackUris: List<String> = emptyList(),
 )
+
+internal data class VibeArcBackup(
+    val tracks: List<Track>,
+    val playlists: List<Playlist>,
+)
+
+internal object BackupCodec {
+    private const val Schema = 1
+
+    fun encode(tracks: List<Track>, playlists: List<Playlist>): String = JsonWriter.string()
+        .`object`()
+        .value("schema", Schema)
+        .value("tracks", LibraryCodec.encode(tracks))
+        .value("playlists", PlaylistCodec.encode(playlists))
+        .end()
+        .done()
+
+    fun decode(value: String): VibeArcBackup {
+        val root = runCatching { JsonParser.`object`().from(value) }
+            .getOrElse { throw IllegalArgumentException("Invalid VibeArc backup", it) }
+        require((root["schema"] as? Number)?.toInt() == Schema) { "Unsupported VibeArc backup" }
+        return VibeArcBackup(
+            tracks = LibraryCodec.decode(root.getString("tracks", "")),
+            playlists = PlaylistCodec.decode(root.getString("playlists", "")),
+        )
+    }
+}
+
+internal fun mergeBackup(
+    currentTracks: List<Track>,
+    currentPlaylists: List<Playlist>,
+    backup: VibeArcBackup,
+): VibeArcBackup = VibeArcBackup(
+    tracks = backup.tracks.fold(currentTracks) { tracks, track -> tracks.upsert(track) },
+    playlists = (currentPlaylists + backup.playlists).associateBy(Playlist::id).values.toList(),
+)
+
+internal fun InputStream.readUtf8Limited(maxBytes: Int): String {
+    require(maxBytes > 0)
+    val output = ByteArrayOutputStream(minOf(maxBytes, 8_192))
+    val buffer = ByteArray(8_192)
+    while (output.size() <= maxBytes) {
+        val count = read(buffer, 0, minOf(buffer.size, maxBytes - output.size() + 1))
+        if (count < 0) return output.toString(UTF_8.name())
+        output.write(buffer, 0, count)
+    }
+    throw IllegalArgumentException("Backup is too large")
+}
+
+internal fun parsePlaylistFile(
+    fileName: String,
+    contents: String,
+    library: List<Track>,
+    id: String,
+): Playlist {
+    require(id.isNotBlank()) { "Playlist id cannot be blank" }
+    val extension = fileName.substringAfterLast('.', "").lowercase()
+    val trackUris = contents.lineSequence().mapNotNull { line ->
+        val clean = line.trim()
+        if (clean.isBlank() || clean.startsWith('#')) return@mapNotNull null
+        val candidates = when (extension) {
+            "csv" -> clean.split(',')
+            "tsv" -> clean.split('\t')
+            else -> listOf(clean)
+        }.map { it.trim().removeSurrounding("\"") }
+        candidates.firstNotNullOfOrNull { candidate ->
+            val fileStem = candidate.substringAfterLast('/').substringAfterLast('\\').substringBeforeLast('.')
+            library.firstOrNull { track ->
+                track.uri == candidate || track.title.equals(candidate, ignoreCase = true) ||
+                    track.title.equals(fileStem, ignoreCase = true)
+            }?.uri
+        }
+    }.distinct().toList()
+    return Playlist(
+        id = id,
+        name = fileName.substringBeforeLast('.', fileName).ifBlank { "Imported playlist" },
+        trackUris = trackUris,
+    )
+}
 
 internal object LibraryCodec {
     private val encoder = Base64.getUrlEncoder().withoutPadding()
@@ -30,12 +116,13 @@ internal object LibraryCodec {
             .joinToString("|") { encoder.encodeToString(it.toByteArray(UTF_8)) } +
             (if (track.isFavorite) "|1" else "|0") +
             "|${track.durationMs}|${encoder.encodeToString(track.artworkUri.toByteArray(UTF_8))}" +
-            "|${encoder.encodeToString(track.folder.toByteArray(UTF_8))}"
+            "|${encoder.encodeToString(track.folder.toByteArray(UTF_8))}" +
+            "|${encoder.encodeToString(track.sourceUri.toByteArray(UTF_8))}"
     }
 
     fun decode(value: String): List<Track> = value.lineSequence().mapNotNull { row ->
         val fields = row.split('|')
-        if (fields.size !in setOf(5, 7, 8)) return@mapNotNull null
+        if (fields.size !in setOf(5, 7, 8, 9)) return@mapNotNull null
         runCatching {
             Track(
                 title = String(decoder.decode(fields[0]), UTF_8),
@@ -46,6 +133,7 @@ internal object LibraryCodec {
                 durationMs = fields.getOrNull(5)?.toLong() ?: 0,
                 artworkUri = fields.getOrNull(6)?.let { String(decoder.decode(it), UTF_8) }.orEmpty(),
                 folder = fields.getOrNull(7)?.let { String(decoder.decode(it), UTF_8) } ?: "Imported",
+                sourceUri = fields.getOrNull(8)?.let { String(decoder.decode(it), UTF_8) }.orEmpty(),
             )
         }.getOrNull()
     }.toList()
@@ -114,6 +202,9 @@ internal fun List<Track>.upsert(track: Track): List<Track> {
 internal fun List<Track>.toggleFavorite(uri: String): List<Track> = map { track ->
     if (track.uri == uri) track.copy(isFavorite = !track.isFavorite) else track
 }
+
+internal fun List<Track>.toggleFavorite(track: Track): List<Track> =
+    if (any { it.uri == track.uri }) toggleFavorite(track.uri) else this + track.copy(isFavorite = true)
 
 internal fun List<Playlist>.createPlaylist(name: String, id: String): List<Playlist> {
     require(id.isNotBlank()) { "Playlist id cannot be blank" }

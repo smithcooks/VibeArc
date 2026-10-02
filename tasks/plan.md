@@ -54,23 +54,75 @@ not a stable or policy-compliant route to a Google Play production release.
 - Ship only as an experimental GitHub build until licensing and policy review is
   complete.
 
-### v0.8 — Theme redesign only
+### v0.8 — Liquid experience and personalization
 
-- Replace the complete visual theme while keeping v0.7 playback and provider
-  behavior unchanged.
-- Rework color, typography, shapes, artwork treatment, and screen hierarchy as
-  one dedicated design milestone.
-- Do not add new music-provider or playback features in this version.
+- Finish the supplied Liquid design system across every screen, with a
+  responsive floating navigation stack and an optional low-cost opaque mode.
+- Add persisted AMOLED, dynamic-color, artwork-accent, glass, motion, density,
+  typography, and accent controls without weakening accessibility defaults.
+- Finish the Now Playing experience with immediate resolved playback, a wavy
+  seek bar, queue access, and synced-lyrics UI when timed lyrics are available.
+- Expand playback settings with honest streaming-quality reporting, download
+  quality preferences, equalizer entry points, and JSON backup/restore.
+- Keep account sync and downloads behind compliant provider boundaries: use
+  official OAuth for accounts, never capture credentials, and never persist or
+  download restricted YouTube media.
+- Verify release signing, permissions, startup behavior, and performance on
+  budget-class devices before publishing a v0.8 release.
 
-### v0.9 — Community beta and release decision
+### v0.9 — Connected library beta
 
-- Add contract fixtures, expiring-URL refresh, cancellation, timeouts, and
-  minimal provider health logging.
-- Test slow networks, no network, removed content, and fallback behavior.
-- Publish privacy, copyright, provider-attribution, and GPL notices.
-- Run device testing and community beta feedback.
-- Decide between an experimental open-source distribution and a sanctioned
-  provider suitable for stores.
+Build this as complete vertical slices, with a usable checkpoint after each
+slice instead of wiring every screen to unfinished services at once.
+
+1. Persist only the Google account summary and playlist-sync choices. Reacquire
+   short-lived OAuth tokens through Google Play services; never store raw tokens.
+   Add disconnect and account switching before adding any remote writes.
+2. Add per-playlist sync selection and a read-only sync preview. Add opt-in
+   remote writes only through the official YouTube Data API with the
+   `youtube.force-ssl` scope, destructive-change confirmation, and explicit
+   local/remote conflict handling.
+3. Add foreground sync first. Add scheduled sync only after foreground sync is
+   reliable, cancellable, bounded, and observable.
+4. Add Last.fm public statistics and recommendations when an API key is supplied
+   outside source control. Browser authentication, Now Playing, and scrobbling
+   require a server-side signing strategy; do not embed the Last.fm shared secret
+   in the APK or collect a Last.fm password.
+5. Add Storage Access Framework folder selection, progress, retry, cancellation,
+   and cleanup for user-owned local files or explicitly licensed direct-download
+   sources. YouTube audiovisual downloads, audio extraction, and offline copies
+   remain excluded without YouTube's prior written approval.
+6. Report the real format/bitrate exposed by each playable source. Do not label a
+   lossy source as FLAC, lossless, Hi-Res, bit-perfect, or Studio Master.
+7. Extend lyrics to word timestamps only when a licensed/provider response
+   contains them; keep line-synced LRC as the honest fallback and allow `.lrc`
+   export for lyrics VibeArc legitimately retrieved.
+8. Add update metadata checking and verified artifacts, then complete release
+   signing, AAB generation, security review, notices, and provider compliance.
+
+#### Completion order and acceptance gates
+
+1. **Safe YouTube writes:** request `youtube.force-ssl`, load remote playlist-item
+   IDs, show a per-playlist conflict preview, and require confirmation before
+   any remote removal. Unit-test add/remove planning before enabling writes.
+2. **Reliable sync:** foreground sync is cancellable and bounded; background
+   sync may only reuse that proven operation and must never prompt or delete.
+3. **Compliant offline files:** use Android's system file/folder pickers for
+   user-owned or explicitly licensed sources, with visible progress and retry.
+   YouTube extraction remains excluded.
+4. **Truthful playback:** report observed codec/bitrate/capabilities, add only
+   device-supported EQ/crossfade behavior, and never relabel lossy audio.
+5. **Lyrics/discovery:** consume word timing when a provider supplies it, retain
+   line timing fallback, and build discovery only from connected provider data.
+6. **Release gate:** verified update metadata, notices, audit, tests, then APK.
+   Production OAuth approval, Play verification, Last.fm signing credentials,
+   and a user-owned production keystore remain external prerequisites.
+
+The official YouTube Data API supports playlist CRUD and playlist-item CRUD. It
+does not expose a supported endpoint for writing YouTube Music listening history,
+so history sync stays unavailable unless Google adds one. YouTube media downloads,
+isolated/background audio, and the current unofficial playback stack are not a
+Play Store production path.
 
 ### v1.0 — Conditional production release
 

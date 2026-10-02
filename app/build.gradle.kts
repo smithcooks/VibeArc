@@ -1,28 +1,72 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val releaseSigning = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
+}
+val localConfig = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
+}
+val lastFmApiKey = providers.environmentVariable("LASTFM_API_KEY").orNull
+    ?: providers.gradleProperty("LASTFM_API_KEY").orNull
+    ?: localConfig.getProperty("LASTFM_API_KEY", "")
+val escapedLastFmApiKey = lastFmApiKey.replace("\\", "\\\\").replace("\"", "\\\"")
+fun configValue(name: String): String = (
+    providers.environmentVariable(name).orNull
+        ?: providers.gradleProperty(name).orNull
+        ?: localConfig.getProperty(name, "")
+    ).replace("\\", "\\\\").replace("\"", "\\\"")
+
 android {
     namespace = "com.vibearc.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.vibearc.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 7
-        versionName = "0.7.0-demo"
+        targetSdk = 36
+        versionCode = 12
+        versionName = "1.0.0"
+        buildConfigField("String", "LASTFM_API_KEY", "\"$escapedLastFmApiKey\"")
+        buildConfigField("String", "LASTFM_SIGNER_URL", "\"${configValue("LASTFM_SIGNER_URL")}\"")
+        buildConfigField("String", "LASTFM_SIGNER_TOKEN", "\"${configValue("LASTFM_SIGNER_TOKEN")}\"")
+    }
+
+    signingConfigs {
+        providers.gradleProperty("testKeystore").orNull?.let { path ->
+            getByName("debug").storeFile = rootProject.file(path)
+        }
+        if (releaseSigning.isNotEmpty()) create("release") {
+            storeFile = rootProject.file(releaseSigning.getProperty("storeFile"))
+            storePassword = releaseSigning.getProperty("storePassword")
+            keyAlias = releaseSigning.getProperty("keyAlias")
+            keyPassword = releaseSigning.getProperty("keyPassword")
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+        }
+        create("performance") {
+            initWith(getByName("release"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            // The Windows sandbox denies ZipFS access in the optional resource shrinker.
+            // Keep code optimization; retaining unused resources only affects APK size.
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
         }
     }
 
@@ -38,6 +82,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

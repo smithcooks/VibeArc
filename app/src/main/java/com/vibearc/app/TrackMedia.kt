@@ -8,37 +8,43 @@ import android.provider.OpenableColumns
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 
 @Composable
-internal fun TrackArtwork(track: Track, contentDescription: String?, modifier: Modifier = Modifier) {
-    var artwork by remember(track.artworkUri) {
-        mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
+internal fun TrackArtwork(
+    track: Track,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    onAccent: (Color) -> Unit = {},
+    sizePx: Int = 160,
+) {
+    val accentCallback by rememberUpdatedState(onAccent)
+    var artwork by remember(track.artworkUri, sizePx) {
+        mutableStateOf(
+            track.artworkUri.takeIf(String::isNotBlank)
+                ?.let { ArtworkCache.peek(it, sizePx) }
+                ?.bitmap?.asImageBitmap(),
+        )
     }
-    LaunchedEffect(track.artworkUri) {
-        artwork = track.artworkUri.takeIf(String::isNotBlank)?.let { artworkUri ->
-            withContext(Dispatchers.IO) { loadArtwork(artworkUri)?.asImageBitmap() }
+    LaunchedEffect(track.artworkUri, sizePx) {
+        val loaded = track.artworkUri.takeIf(String::isNotBlank)?.let {
+            ArtworkCache.load(it, sizePx)
         }
+        artwork = loaded?.bitmap?.asImageBitmap()
+        loaded?.let { accentCallback(it.accent) }
     }
     val loadedArtwork = artwork
     if (loadedArtwork == null) {
@@ -46,15 +52,7 @@ internal fun TrackArtwork(track: Track, contentDescription: String?, modifier: M
             modifier = modifier.background(
                 Brush.linearGradient(listOf(Color(0xFF4A3426), Color(0xFF181513))),
             ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
-                contentDescription = contentDescription,
-                modifier = Modifier.fillMaxSize().padding(8.dp),
-                contentScale = ContentScale.Fit,
-            )
-        }
+        )
     } else {
         Image(
             bitmap = loadedArtwork,
@@ -65,22 +63,20 @@ internal fun TrackArtwork(track: Track, contentDescription: String?, modifier: M
     }
 }
 
-private fun loadArtwork(value: String) = runCatching {
-    val uri = Uri.parse(value)
-    if (uri.scheme == "http" || uri.scheme == "https") {
-        val connection = URL(value).openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 10_000
-            connection.setRequestProperty("User-Agent", "VibeArc/0.7")
-            connection.inputStream.use(BitmapFactory::decodeStream)
-        } finally {
-            connection.disconnect()
-        }
-    } else {
-        BitmapFactory.decodeFile(uri.path)
-    }
-}.getOrNull()
+internal fun android.graphics.Bitmap.averageAccent(): Color {
+    val sample = android.graphics.Bitmap.createScaledBitmap(this, 12, 12, true)
+    val pixels = IntArray(144).also { sample.getPixels(it, 0, 12, 0, 0, 12, 12) }
+    val colorful = pixels.filter { pixel ->
+        val max = maxOf(android.graphics.Color.red(pixel), android.graphics.Color.green(pixel), android.graphics.Color.blue(pixel))
+        val min = minOf(android.graphics.Color.red(pixel), android.graphics.Color.green(pixel), android.graphics.Color.blue(pixel))
+        max - min > 24 && max > 70
+    }.ifEmpty { pixels.toList() }
+    val red = colorful.sumOf(android.graphics.Color::red) / colorful.size
+    val green = colorful.sumOf(android.graphics.Color::green) / colorful.size
+    val blue = colorful.sumOf(android.graphics.Color::blue) / colorful.size
+    if (sample !== this) sample.recycle()
+    return Color(red, green, blue)
+}
 
 internal fun Context.trackFrom(uri: Uri): Track {
     val fileName = contentResolver.query(

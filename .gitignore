@@ -1,7 +1,12 @@
 *.iml
 .gradle/
 .kotlin/
+.android/
 .idea/
 build/
 local.properties
 app/build/
+*.jks
+*.keystore
+keystore.properties
+release/
