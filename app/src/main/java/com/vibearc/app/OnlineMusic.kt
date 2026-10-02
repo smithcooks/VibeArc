@@ -164,6 +164,7 @@ private fun JsonObject.musicPageType(): String = getObject("navigationEndpoint")
 
 internal object OnlineMusic {
     private val youtube = ServiceList.YouTube
+    private val resolvedAudio = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Track>>()
 
     init {
         NewPipe.init(ExtractorDownloader)
@@ -237,7 +238,13 @@ internal object OnlineMusic {
         format: AudioFormat = AudioFormat.ANY,
         quality: AudioQuality = AudioQuality.HIGHEST,
     ): Track {
-        val info = StreamInfo.getInfo(youtube, track.uri)
+        val source = playbackSourceUri(track)
+        val key = "$source|$format|$quality"
+        resolvedAudio[key]?.takeIf { System.currentTimeMillis() - it.first < 5 * 60_000L }?.let { cached ->
+            return track.copy(uri = cached.second.uri, sourceUri = source,
+                durationMs = track.durationMs.takeIf { it > 0 } ?: cached.second.durationMs)
+        }
+        val info = StreamInfo.getInfo(youtube, source)
         val streamUrl = selectAudioCandidate(info.audioStreams.map(::audioCandidate), format, quality)?.url
             ?: error("The selected format is not available for this track.")
         return track.copy(
@@ -253,7 +260,10 @@ internal object OnlineMusic {
                     image.width.coerceAtLeast(0) * image.height.coerceAtLeast(0)
                 }?.url?.let(::highResolutionArtworkUrl).orEmpty()
             },
-        )
+        ).also {
+            if (resolvedAudio.size >= 60) resolvedAudio.clear()
+            resolvedAudio[key] = System.currentTimeMillis() to it
+        }
     }
 
     fun resolve(track: Track, preferHighestQuality: Boolean): Track = resolve(
@@ -266,7 +276,7 @@ internal object OnlineMusic {
         format: AudioFormat,
         quality: AudioQuality,
     ): AudioCandidate {
-        val info = StreamInfo.getInfo(youtube, track.uri)
+        val info = StreamInfo.getInfo(youtube, playbackSourceUri(track))
         return selectAudioCandidate(info.audioStreams.map(::audioCandidate), format, quality)
             ?: error("The selected format is not available for this track.")
     }

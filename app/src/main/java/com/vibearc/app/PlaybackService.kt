@@ -8,6 +8,13 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.common.PlaybackException
+import android.net.Uri
+import java.io.IOException
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import java.util.concurrent.Executors
@@ -29,6 +36,12 @@ class PlaybackService : MediaSessionService() {
     private var crossfadeNextIndex = C.INDEX_UNSET
     private var lastAudioRefreshMs = 0L
     private val playerListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            android.widget.Toast.makeText(this@PlaybackService,
+                "Could not play this song. Check your connection or try another streaming format.",
+                android.widget.Toast.LENGTH_LONG).show()
+        }
+
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             cancelCrossfade()
             val mediaId = mediaItem?.mediaId?.takeIf(String::isNotBlank) ?: return
@@ -82,8 +95,20 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         audioEffects = AudioEffectsController(this)
         bitPerfect = BitPerfectController(this)
-        player = ExoPlayer.Builder(this).build().also { it.addListener(playerListener) }
-        crossfadePlayer = ExoPlayer.Builder(this).build()
+        val http = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+        val sources = ResolvingDataSource.Factory(DefaultDataSource.Factory(this, http)) { spec ->
+            try {
+                val audio = resolvePlaybackSource(spec.uri.toString()) { track ->
+                    OnlineMusic.resolve(track, streamAudioFormat(), streamAudioQuality())
+                }
+                spec.withUri(Uri.parse(audio))
+            } catch (error: Exception) {
+                throw IOException("Could not resolve the audio source", error)
+            }
+        }
+        val mediaSources = DefaultMediaSourceFactory(sources)
+        player = ExoPlayer.Builder(this).setMediaSourceFactory(mediaSources).build().also { it.addListener(playerListener) }
+        crossfadePlayer = ExoPlayer.Builder(this).setMediaSourceFactory(mediaSources).build()
         mediaSession = MediaSession.Builder(this, player).build()
         lastPollMs = android.os.SystemClock.elapsedRealtime()
         handler.post(sleepTimerCheck)

@@ -53,7 +53,8 @@ internal fun HomeScreen(
             Text(when(now.hour) { in 0..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening" }, style = MaterialTheme.typography.headlineMedium)
             Text(now.format(DateTimeFormatter.ofPattern("EEEE, MMMM d")), color = MutedText)
             Spacer(Modifier.height(12.dp))
-            Box(Modifier.fillMaxWidth().heightIn(min = 208.dp).clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surface)) {
+            SongActionTarget(hero, { if (hero != null) onPlay(hero, pool) else onExplore() },
+                Modifier.fillMaxWidth().heightIn(min = 208.dp).clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surface)) {
                 if(hero != null) TrackArtwork(hero, null, Modifier.matchParentSize(), sizePx = 768)
                 Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .4f), Color(0xF21D1D1D)))))
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -181,7 +182,8 @@ private fun MusicShelf(title: String, subtitle: String, tracks: List<Track>, onP
 
 @Composable
 private fun ShelfCard(track: Track, title: String, subtitle: String, onPlay: () -> Unit) {
-    Column(Modifier.width(148.dp).clickable(onClick = onPlay)) {
+    SongActionTarget(track, onPlay, Modifier.width(148.dp)) {
+    Column {
         Box {
             TrackArtwork(track, null, Modifier.size(148.dp).clip(RoundedCornerShape(20.dp)), sizePx = 384)
             Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
@@ -191,6 +193,7 @@ private fun ShelfCard(track: Track, title: String, subtitle: String, onPlay: () 
         Spacer(Modifier.height(8.dp))
         Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(subtitle, color = MutedText, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
     }
 }
 
@@ -207,7 +210,7 @@ private fun FeedEmpty(message: String, onExplore: () -> Unit) {
 
 @Composable
 private fun ArtistSpotlight(track: Track, onPlay: () -> Unit, onArtist: () -> Unit) {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surface)) {
+    SongActionTarget(track, onPlay, Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surface)) {
         TrackArtwork(track, null, Modifier.matchParentSize(), sizePx = 768)
         Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(Color(0xD9222222), Color(0xFC222222)))))
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {

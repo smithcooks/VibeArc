@@ -10,6 +10,26 @@ internal fun homeFeedTracks(library: List<Track>, recent: List<Track>, current: 
 
 private val AllowedMediaSchemes = setOf("https", "content", "file", "android.resource")
 
+internal fun isYouTubeWatchUri(value: String): Boolean = runCatching {
+    val uri = java.net.URI(value)
+    uri.scheme == "https" && when (uri.host?.lowercase()) {
+        "youtu.be" -> uri.path.trim('/').isNotBlank()
+        "youtube.com", "www.youtube.com", "music.youtube.com", "m.youtube.com" ->
+            uri.path == "/watch" && uri.rawQuery.orEmpty().split('&').any { it.startsWith("v=") && it.length > 2 }
+        else -> false
+    }
+}.getOrDefault(false)
+
+internal fun playbackSourceUri(track: Track): String =
+    if (track.uri.startsWith("https://") && isYouTubeWatchUri(track.catalogUri)) track.catalogUri else track.uri
+
+internal fun resolvePlaybackSource(value: String, resolve: (Track) -> Track): String {
+    if (!isYouTubeWatchUri(value)) return value
+    val audio = resolve(Track("", "YouTube Music", "", value)).uri
+    check(isAllowedMediaUri(audio) && !isYouTubeWatchUri(audio)) { "No playable audio source was returned" }
+    return audio
+}
+
 internal fun isAllowedMediaUri(value: String): Boolean = runCatching {
     val uri = java.net.URI(value)
     uri.scheme?.lowercase() in AllowedMediaSchemes &&
@@ -19,8 +39,10 @@ internal fun isAllowedMediaUri(value: String): Boolean = runCatching {
 internal fun playbackQueue(tracks: List<Track>, startTrack: Track): List<Track> {
     require(isAllowedMediaUri(startTrack.uri)) { "Unsupported media URI" }
     val queue = tracks.ifEmpty { listOf(startTrack) }
-    val playable = queue.filter { isAllowedMediaUri(it.uri) }
-    return if (playable.any { it.uri == startTrack.uri }) playable else listOf(startTrack) + playable
+    val playable = queue.filter { isAllowedMediaUri(it.uri) }.distinctBy(Track::catalogUri)
+    return if (playable.any { it.catalogUri == startTrack.catalogUri }) {
+        playable.map { if (it.catalogUri == startTrack.catalogUri) startTrack else it }
+    } else listOf(startTrack) + playable
 }
 
 internal fun List<String>.recordRecentUri(uri: String): List<String> {

@@ -59,8 +59,8 @@ import kotlinx.coroutines.withContext
 internal fun visibleOnlineTracks(results: List<Track>, visibleKeys: Set<*>): List<Track> =
     results.filter { track -> "online:${track.uri}" in visibleKeys }
 
-internal fun playableOnlineTrack(track: Track, resolvedTracks: Map<String, Track>): Track? =
-    resolvedTracks[track.uri]
+internal fun playableOnlineTrack(track: Track, resolvedTracks: Map<String, Track>): Track =
+    resolvedTracks[track.uri] ?: track
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -223,9 +223,8 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
             val unavailable = track.uri in unavailableOnlineUris
             TrackRow(
                 track,
-                enabled = playableTrack != null,
                 playableTrack = playableTrack,
-                onPlay = { playableTrack?.let(onPlay) },
+                onPlay = { onPlay(playableTrack) },
             )
             if (unavailable) Text(
                 "Unavailable on this connection",

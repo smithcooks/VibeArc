@@ -1,6 +1,5 @@
 package com.vibearc.app
 
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
@@ -162,6 +161,7 @@ private val LocalTrackActions = staticCompositionLocalOf<TrackActionsHost?> { nu
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ArtworkCache.initialize(cacheDir)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -252,8 +252,12 @@ private fun VibeArcApp(
     var player by remember { mutableStateOf<Player?>(null) }
     val uiScope = rememberCoroutineScope()
     val cachedYouTubeState = remember { context.loadYouTubeAccountState() }
-    var youtubeAccountData by remember { mutableStateOf<YouTubeAccountData?>(null) }
-    var youtubeAccountBusy by remember { mutableStateOf(cachedYouTubeState != null) }
+    val cachedYouTubeBrowse = remember { context.loadYouTubeBrowseSnapshot() }
+    var youtubeAccountData by remember { mutableStateOf(cachedYouTubeBrowse?.data) }
+    var youtubeAccountBusy by remember { mutableStateOf(false) }
+    var showYouTubeLogin by remember { mutableStateOf(false) }
+    var youtubeRefresh by remember { mutableIntStateOf(0) }
+    var youtubeAccountJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var youtubeSyncBusy by remember { mutableStateOf(false) }
     var youtubeSyncPreview by remember { mutableStateOf<List<YouTubeSyncPreview>?>(null) }
     var confirmRemoteRemoval by remember { mutableStateOf(false) }
@@ -271,7 +275,7 @@ private fun VibeArcApp(
     var lastFmError by remember { mutableStateOf<String?>(null) }
     var lastFmRefresh by remember { mutableIntStateOf(0) }
     var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
-    var youtubeFeedSections by remember { mutableStateOf<List<YouTubeFeedSection>>(emptyList()) }
+    var youtubeFeedSections by remember { mutableStateOf(cachedYouTubeBrowse?.sections.orEmpty()) }
     var youtubeFeedBusy by remember { mutableStateOf(false) }
     var radioTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var radioBusy by remember { mutableStateOf(false) }
@@ -353,6 +357,7 @@ private fun VibeArcApp(
     }
 
     fun loadYouTubeAccount(announce: Boolean) {
+        youtubeAccountJob?.cancel()
         if (!YouTubeWebSession.isAuthenticated()) {
             youtubeAccountBusy = false
             if (announce) android.widget.Toast.makeText(context, "YouTube Music sign-in was not completed", android.widget.Toast.LENGTH_LONG).show()
@@ -368,41 +373,36 @@ private fun VibeArcApp(
                 val saved = context.loadYouTubeAccountState()
                 youtubeSelectedPlaylistIds = saved?.selectedPlaylistIds
                     ?.takeIf { saved.account.channelId == loaded.account.channelId }.orEmpty()
+                val previousAccount = youtubeAccountData?.account?.channelId
+                if (previousAccount != null && previousAccount != loaded.account.channelId) {
+                    youtubeFeedSections = emptyList()
+                    youtubeRefresh++
+                }
                 youtubeAccountData = loaded
                 context.saveYouTubeAccountState(YouTubeAccountState(loaded.account, youtubeSelectedPlaylistIds))
                 if (announce) android.widget.Toast.makeText(context, "Connected ${loaded.account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    val youtubeLoginLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) {
-            youtubeAccountBusy = false
-            return@rememberLauncherForActivityResult
-        }
-        loadYouTubeAccount(announce = true)
+        }.also { youtubeAccountJob = it }
     }
 
     val connectYouTube: () -> Unit = {
-        if (!youtubeAccountBusy) {
-            youtubeAccountBusy = true
-            youtubeLoginLauncher.launch(Intent(context, YouTubeLoginActivity::class.java))
-        }
+        showYouTubeLogin = true
     }
 
     fun disconnectYouTube(reconnect: Boolean) {
-        if (youtubeAccountBusy) return
+        youtubeAccountJob?.cancel()
         youtubeAccountBusy = true
         YouTubeWebSession.clear {
             uiScope.launch {
                 youtubeAccountData = null
+                youtubeFeedSections = emptyList()
+                youtubeRefresh++
                 youtubeSelectedPlaylistIds = emptySet()
                 context.clearYouTubeAccountState()
                 youtubeAccountBusy = false
                 if (reconnect) connectYouTube()
                 else android.widget.Toast.makeText(context, "YouTube Music account disconnected", android.widget.Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.IO) { YouTubeMusicSessionApi.clearConfig() }
             }
         }
     }
@@ -411,20 +411,28 @@ private fun VibeArcApp(
         if (YouTubeWebSession.isAuthenticated()) loadYouTubeAccount(announce = false)
         else {
             youtubeAccountBusy = false
-            if (cachedYouTubeState != null) context.clearYouTubeAccountState()
         }
     }
 
-    LaunchedEffect(youtubeAccountData?.account?.channelId) {
-        if (youtubeAccountData == null || !YouTubeWebSession.isAuthenticated()) {
-            youtubeFeedSections = emptyList()
-            return@LaunchedEffect
-        }
+    LaunchedEffect(youtubeRefresh) {
+        if (!YouTubeWebSession.isAuthenticated()) return@LaunchedEffect
         youtubeFeedBusy = true
-        youtubeFeedSections = withContext(Dispatchers.IO) {
-            runCatching { YouTubeMusicSessionApi.loadHomeFeed() }.getOrDefault(emptyList())
+        try {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching { YouTubeMusicSessionApi.loadHomeFeed() }.getOrNull()
+            }
+            if (!loaded.isNullOrEmpty()) youtubeFeedSections = loaded
+        } finally {
+            youtubeFeedBusy = false
         }
-        youtubeFeedBusy = false
+    }
+
+    LaunchedEffect(youtubeAccountData, youtubeFeedSections) {
+        youtubeAccountData?.let { data ->
+            val snapshot = YouTubeBrowseSnapshot(data, youtubeFeedSections)
+            val encoded = withContext(Dispatchers.IO) { YouTubeBrowseCacheCodec.encode(snapshot) }
+            context.saveYouTubeBrowseSnapshot(encoded)
+        }
     }
 
     DisposableEffect(controllerFuture) {
@@ -660,10 +668,14 @@ private fun VibeArcApp(
 
     val playTrack: (Track, List<Track>) -> Unit = { track, source ->
         if (activePlayer != null && isAllowedMediaUri(track.uri)) {
+            val saved = if (isYouTubeWatchUri(track.catalogUri)) track.copy(uri = track.catalogUri, sourceUri = "") else track
+            library = library.upsert(saved).also(context::saveLibrary)
             currentTrack = track
             activePlayer.loadQueue(source, track)
             queueTracks = activePlayer.queueTracks()
             openPlayer()
+        } else if (activePlayer == null) {
+            android.widget.Toast.makeText(context, "Player is connecting. Tap play again in a moment.", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     val toggleFavorite: (Track) -> Unit = { track ->
@@ -1190,6 +1202,17 @@ private fun VibeArcApp(
         },
         dismissButton = { TextButton(onClick = { confirmRemoteRemoval = false }) { Text("Cancel") } },
     )
+    if (showYouTubeLogin) YouTubeLoginSheet(
+        onDismiss = { showYouTubeLogin = false },
+        onConnected = {
+            showYouTubeLogin = false
+            uiScope.launch {
+                withContext(Dispatchers.IO) { YouTubeMusicSessionApi.clearConfig() }
+                loadYouTubeAccount(announce = true)
+                youtubeRefresh++
+            }
+        },
+    )
     availableUpdate?.let { update -> UpdateDialog(update) { availableUpdate = null } }
     }
     }
@@ -1407,7 +1430,6 @@ internal fun TrackRow(
 ) {
     val actions = LocalTrackActions.current
     var showActions by remember(track.uri) { mutableStateOf(false) }
-    var showPlaylists by remember(track.uri) { mutableStateOf(false) }
     Surface(
         modifier = Modifier.fillMaxWidth().combinedClickable(
             enabled = enabled || actions != null,
@@ -1455,8 +1477,27 @@ internal fun TrackRow(
     }
     }
 
-    if (showActions && actions != null) {
-        ModalBottomSheet(onDismissRequest = { showActions = false; showPlaylists = false }) {
+    if (showActions) SongOptionsSheet(track, playableTrack) { showActions = false }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun SongActionTarget(track: Track?, onClick: () -> Unit, modifier: Modifier = Modifier,
+    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
+    val actions = LocalTrackActions.current
+    var showActions by remember(track?.catalogUri) { mutableStateOf(false) }
+    Box(modifier.combinedClickable(onClick = onClick,
+        onLongClick = if (track != null && actions != null) ({ showActions = true }) else null,
+        onLongClickLabel = "Song options"), content = content)
+    if (showActions && track != null) SongOptionsSheet(track, track) { showActions = false }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SongOptionsSheet(track: Track, playableTrack: Track?, onDismiss: () -> Unit) {
+    val actions = LocalTrackActions.current ?: return
+    var showPlaylists by remember(track.catalogUri) { mutableStateOf(false) }
+        ModalBottomSheet(onDismissRequest = onDismiss) {
             Column(
                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1477,8 +1518,7 @@ internal fun TrackRow(
                             items(actions.playlists, key = Playlist::id) { playlist ->
                                 ReferenceRow(playlist.name, "${playlist.trackUris.size} tracks", "playlist") {
                                     actions.addToPlaylist(track, playlist.id)
-                                    showActions = false
-                                    showPlaylists = false
+                                    onDismiss()
                                 }
                             }
                         }
@@ -1486,7 +1526,7 @@ internal fun TrackRow(
                 } else {
                     ReferenceRow("Add to queue", "Play after the current queue", "music", 0, 6, enabled = playableTrack != null) {
                         playableTrack?.let(actions.addToQueue)
-                        showActions = false
+                        onDismiss()
                     }
                     ReferenceRow("Add to playlist", "Choose one of your playlists", "playlist", 1, 6) {
                         showPlaylists = true
@@ -1494,30 +1534,29 @@ internal fun TrackRow(
                     val liked = actions.isFavorite(track)
                     ReferenceRow(if (liked) "Unlike song" else "Like song", "Save in your library", if (liked) "heartFilled" else "heart", 2, 6) {
                         actions.toggleFavorite(track)
-                        showActions = false
+                        onDismiss()
                     }
                     ReferenceRow("Start song radio", "Build a queue around this track", "shuffle", 3, 6, enabled = playableTrack != null) {
                         playableTrack?.let(actions.startSongRadio)
-                        showActions = false
+                        onDismiss()
                     }
                     ReferenceRow("Start artist radio", "Play more from related artist searches", "account", 4, 6, enabled = playableTrack != null) {
                         playableTrack?.let(actions.startArtistRadio)
-                        showActions = false
+                        onDismiss()
                     }
                     ReferenceRow(
                         "Download song",
-                        if (track.canCopyOffline()) "Copy to your selected offline folder" else "Available for user-owned local audio",
+                        if (track.uri.startsWith("https://")) "Save audio to your selected offline folder" else "Copy to your selected offline folder",
                         "download",
                         5,
                         6,
                     ) {
                         actions.download(track)
-                        showActions = false
+                        onDismiss()
                     }
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -1527,13 +1566,18 @@ internal fun SectionTitle(text: String) {
 
 private fun Player.loadQueue(tracks: List<Track>, startTrack: Track, playNow: Boolean = true) {
     val queue = playbackQueue(tracks, startTrack)
-    val startIndex = queue.indexOfFirst { it.uri == startTrack.uri }
+    val startIndex = queue.indexOfFirst { it.catalogUri == startTrack.catalogUri }
     setMediaItems(queue.map(Track::toMediaItem), startIndex, 0L)
     prepare()
     if (playNow) play()
 }
 
-private fun Player.toggle() = if (isPlaying) pause() else play()
+private fun Player.toggle() {
+    if (isPlaying) pause() else {
+        if (playbackState == Player.STATE_IDLE) prepare()
+        play()
+    }
+}
 
 private fun Player.queueTracks(): List<Track> =
     (0 until mediaItemCount).map { index -> getMediaItemAt(index).track }
@@ -1555,7 +1599,7 @@ private fun Track.toMediaItem(): MediaItem {
         .build()
     return MediaItem.Builder()
         .setMediaId(catalogUri)
-        .setUri(Uri.parse(uri))
+        .setUri(Uri.parse(playbackSourceUri(this)))
         .setMediaMetadata(metadata)
         .build()
 }

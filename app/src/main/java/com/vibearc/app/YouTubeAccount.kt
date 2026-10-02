@@ -78,6 +78,50 @@ internal data class YouTubeAccountState(
     val selectedPlaylistIds: Set<String> = emptySet(),
 )
 
+internal data class YouTubeBrowseSnapshot(val data: YouTubeAccountData, val sections: List<YouTubeFeedSection>)
+
+internal object YouTubeBrowseCacheCodec {
+    fun encode(snapshot: YouTubeBrowseSnapshot): String {
+        val account = snapshot.data.account
+        val writer = JsonWriter.string().`object`().value("schema", 1)
+            .`object`("account").value("id", account.channelId).value("name", account.displayName)
+            .value("artwork", account.artworkUrl).end().array("playlists")
+        snapshot.data.playlists.take(500).forEach { playlist ->
+            writer.`object`().value("id", playlist.id).value("title", playlist.title)
+                .value("count", playlist.itemCount).value("artwork", playlist.artworkUrl)
+                .value("description", playlist.description).value("privacy", playlist.privacyStatus).array("tags")
+            playlist.tags.forEach { writer.value(it) }
+            writer.end().end()
+        }
+        writer.end().array("sections")
+        snapshot.sections.take(10).forEach { section ->
+            val tracks = section.tracks.take(60).map { track ->
+                if (isYouTubeWatchUri(track.catalogUri)) track.copy(uri = track.catalogUri, sourceUri = "") else track
+            }
+            writer.`object`().value("title", section.title).value("tracks", LibraryCodec.encode(tracks)).end()
+        }
+        return writer.end().end().done()
+    }
+
+    fun decode(value: String): YouTubeBrowseSnapshot? = runCatching {
+        require(value.length <= 4 * 1024 * 1024)
+        val root = JsonParser.`object`().from(value)
+        require(root.getInt("schema", 0) == 1)
+        val account = root.getObject("account")
+        val identity = YouTubeAccount(account.getString("id"), account.getString("name"), account.getString("artwork", ""))
+        require(identity.channelId.isNotBlank() && identity.displayName.isNotBlank())
+        val playlists = root.getArray("playlists").mapNotNull { it as? JsonObject }.take(500).map { item ->
+            YouTubePlaylist(item.getString("id"), item.getString("title"), item.getInt("count", 0),
+                item.getString("artwork", ""), item.getString("description", ""), item.getString("privacy", "private"),
+                item.getArray("tags").mapNotNull { it as? String })
+        }
+        val sections = root.getArray("sections").mapNotNull { it as? JsonObject }.take(10).map { item ->
+            YouTubeFeedSection(item.getString("title"), LibraryCodec.decode(item.getString("tracks", "")))
+        }
+        YouTubeBrowseSnapshot(YouTubeAccountData(identity, playlists), sections)
+    }.getOrNull()
+}
+
 internal data class YouTubePlaylistDiff(
     val remoteOnlyTracks: List<Track>,
     val localOnlyVideoIds: List<String>,
@@ -144,6 +188,15 @@ internal fun Context.saveYouTubeAccountState(state: YouTubeAccountState) {
 
 internal fun Context.clearYouTubeAccountState() {
     getSharedPreferences(YouTubeAccountPreferences, Context.MODE_PRIVATE).edit().clear().apply()
+}
+
+internal fun Context.loadYouTubeBrowseSnapshot(): YouTubeBrowseSnapshot? = YouTubeBrowseCacheCodec.decode(
+    getSharedPreferences(YouTubeAccountPreferences, Context.MODE_PRIVATE).getString("browse_cache", "").orEmpty(),
+)
+
+internal fun Context.saveYouTubeBrowseSnapshot(encoded: String) {
+    getSharedPreferences(YouTubeAccountPreferences, Context.MODE_PRIVATE).edit()
+        .putString("browse_cache", encoded).apply()
 }
 
 internal fun parseYouTubeAccount(json: String): YouTubeAccount {

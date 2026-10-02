@@ -17,6 +17,16 @@
 - In-app GitHub update download with checksum, package, version, and signer verification
   before handing the APK to Android's package installer.
 
+### Fixed
+
+- Resolves YouTube catalog links in the shared playback service for Home, playlists,
+  radio, and queue transitions; search selections no longer wait for prefetch.
+- Restores cached YouTube Home shelves and account playlists before refreshing online,
+  retains them on connection failures, and reuses downloaded artwork across restarts.
+- Opens YouTube Music sign-in in an in-app sheet without waiting for account loading.
+- Adds Home song-card long-press actions using the existing queue, playlist, like,
+  radio, and download menu; avoids duplicate queue entries after stream prefetch.
+
 ### Security
 
 - Keeps the Last.fm shared secret server-side and validates online download hosts,

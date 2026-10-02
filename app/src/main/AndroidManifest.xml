@@ -20,9 +20,6 @@
         <activity
             android:name=".MainActivity"
             android:exported="false" />
-        <activity
-            android:name=".YouTubeLoginActivity"
-            android:exported="false" />
         <activity-alias
             android:name=".MintIconAlias"
             android:enabled="true"

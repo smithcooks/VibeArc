@@ -56,7 +56,7 @@ class OnlineMusicTest {
     }
 
     @Test
-    fun `only visible online results become playable from pre-resolved streams`() {
+    fun `visible search results prefetch but catalog tracks remain tappable immediately`() {
         val results = (1..20).map { number ->
             Track("Track $number", "Artist", "YouTube Music", "https://music.youtube.com/watch?v=$number")
         }
@@ -67,7 +67,7 @@ class OnlineMusicTest {
         val resolved = results[1].copy(uri = "https://audio.example/track-2")
 
         assertEquals(listOf(results[1], results[2]), visible)
-        assertNull(playableOnlineTrack(results[1], emptyMap()))
+        assertEquals(results[1], playableOnlineTrack(results[1], emptyMap()))
         assertEquals(resolved, playableOnlineTrack(results[1], mapOf(results[1].uri to resolved)))
     }
 

@@ -144,7 +144,10 @@ private fun jsonObjects(value: Any?): Sequence<JsonObject> = sequence {
 internal object YouTubeMusicSessionApi {
     private const val MaxResponseBytes = 4 * 1024 * 1024
     private const val MaxPages = 20
-    private var cachedConfig: WebConfig? = null
+    @Volatile private var cachedConfig: WebConfig? = null
+
+    @Synchronized
+    fun clearConfig() { cachedConfig = null }
 
     private data class WebConfig(val apiKey: String, val clientVersion: String, val visitorData: String)
 
@@ -275,6 +278,7 @@ internal object YouTubeMusicSessionApi {
         }
     }
 
+    @Synchronized
     private fun config(): WebConfig = cachedConfig ?: run {
         val html = request(MusicOrigin, null) { connection ->
             YouTubeWebSession.cookieHeader()?.let { connection.setRequestProperty("Cookie", it) }
