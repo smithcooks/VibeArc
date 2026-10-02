@@ -24,12 +24,12 @@ fun configValue(name: String): String = (
 
 android {
     namespace = "com.vibearc.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.vibearc.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 9
         versionName = "0.9.0-beta"
         buildConfigField("String", "LASTFM_API_KEY", "\"$escapedLastFmApiKey\"")
