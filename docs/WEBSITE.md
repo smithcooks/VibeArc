@@ -64,3 +64,6 @@ GitHub Pages uses `main` → `/docs`, with `.nojekyll`.
 Live URL: https://smithcooks.github.io/VibeArc/
 Also compatible with static hosting: no build command; publish directory `docs`.
 Rollback by reverting the website commits; APK assets remain independent.
+Versioned stylesheet/script URLs prevent returning browsers from mixing the
+new HTML with the previous design's cached assets. Bump both asset revisions
+when either changes; the website contract guards this deployment boundary.
