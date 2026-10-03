@@ -28,10 +28,12 @@ assert.match(css, /:focus-visible/);
 assert.match(js, /showModal\(/);
 assert.match(js, /addEventListener\('close'/);
 assert.doesNotMatch(js, /innerHTML|setInterval|requestAnimationFrame|fetch\(/);
+assert.match(html, /styles\.css\?v=real-screens-20261003/);
+assert.match(html, /script\.js\?v=real-screens-20261003/);
 assert.match(html, /href="https:\/\/buymeachai\.ezee\.li\/Smith_cooks" target="_blank" rel="noopener noreferrer"/);
 for (const [, attribute, value] of html.matchAll(/\b(src|href)="([^"]+)"/g)) {
   if (!value.startsWith('https:') && !value.startsWith('#')) {
-    assert.ok(existsSync(root + value), `Missing local ${attribute}: ${value}`);
+    assert.ok(existsSync(root + value.split('?')[0]), `Missing local ${attribute}: ${value}`);
   }
 }
 function luminance(hex) {
