@@ -17,6 +17,8 @@ A personal Android player for your library, online discoveries, and the songs yo
 &nbsp; · &nbsp;
 [What's new](CHANGELOG.md)
 &nbsp; · &nbsp;
+[**Visit the website**](https://smithcooks.github.io/VibeArc/)
+&nbsp; · &nbsp;
 [Report a bug](https://github.com/smithcooks/VibeArc/issues)
 
 </div>
