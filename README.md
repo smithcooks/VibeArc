@@ -1,123 +1,139 @@
 <div align="center">
 
-<img src="app/src/main/res/drawable-nodpi/vibearc_icon.png" width="104" alt="VibeArc app icon">
+<img src="docs/icon.png" alt="VibeArc logo" width="120" height="120">
 
 # VibeArc
 
-### Good music. No noise.
+**Your music, your space.**
 
-A personal Android player for your library, online discoveries, and the songs you keep coming back to.
+A native Android music player with liquid glass, artwork-driven colors, synchronized lyrics, and optional YouTube Music & Last.fm connections.
 
-[![Release](https://img.shields.io/badge/v1.0.0-Download-A7D8C7?style=for-the-badge)](https://github.com/smithcooks/VibeArc/releases/tag/v1.0.0)
-[![Android](https://img.shields.io/badge/Android-8.0%2B-242424?style=for-the-badge&logo=android&logoColor=A7D8C7)](#install)
-[![Kotlin](https://img.shields.io/badge/Kotlin-Compose-242424?style=for-the-badge&logo=kotlin&logoColor=C4B5FD)](#build)
-[![License](https://img.shields.io/badge/License-GPL_v3-242424?style=for-the-badge)](LICENSE)
+<p align="center">
+  <a href="https://github.com/smithcooks/VibeArc/stargazers"><img src="https://img.shields.io/github/stars/smithcooks/VibeArc?style=for-the-badge&color=A7D8C7&labelColor=242424" alt="GitHub stars"></a>
+  <a href="https://github.com/smithcooks/VibeArc/forks"><img src="https://img.shields.io/github/forks/smithcooks/VibeArc?style=for-the-badge&color=F4BACB&labelColor=242424" alt="GitHub forks"></a>
+  <a href="#connected-features"><img src="https://img.shields.io/badge/Client-YouTube%20Music-FF0000?style=for-the-badge&logo=youtubemusic&logoColor=white&labelColor=242424" alt="YouTube Music client"></a>
+  <a href="#connected-features"><img src="https://img.shields.io/badge/Scrobbler-Last.fm-D51007?style=for-the-badge&logo=lastdotfm&logoColor=white&labelColor=242424" alt="Last.fm scrobbler — configuration required"></a>
+  <a href="#getting-started"><img src="https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white&labelColor=242424" alt="Platform Android"></a>
+</p>
 
-[**↓ Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk)
-&nbsp; · &nbsp;
-[What's new](CHANGELOG.md)
-&nbsp; · &nbsp;
-[**Visit the website**](https://smithcooks.github.io/VibeArc/)
-&nbsp; · &nbsp;
-[Report a bug](https://github.com/smithcooks/VibeArc/issues)
+<p align="center">
+  <a href="https://github.com/smithcooks/VibeArc/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-A7D8C7?style=for-the-badge&labelColor=242424" alt="Release v1.0.0"></a>
+  <a href="#tech-stack--architecture"><img src="https://img.shields.io/badge/UI-Kotlin%20%2B%20Compose-C4B5FD?style=for-the-badge&logo=kotlin&logoColor=white&labelColor=242424" alt="Kotlin and Jetpack Compose"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-F4BACB?style=for-the-badge&labelColor=242424" alt="GPL v3 license"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk"><img src="https://img.shields.io/badge/Download-Android%20APK-3548D5?style=for-the-badge&logo=android&logoColor=white" alt="Download the Android APK"></a>
+  <a href="https://smithcooks.github.io/VibeArc/"><img src="https://img.shields.io/badge/Website-Explore%20VibeArc-242424?style=for-the-badge&logo=githubpages&logoColor=A7D8C7" alt="Visit the VibeArc website"></a>
+  <a href="https://github.com/smithcooks/VibeArc/issues"><img src="https://img.shields.io/badge/Feedback-Report%20an%20issue-242424?style=for-the-badge&logo=github&logoColor=F4BACB" alt="Report an issue"></a>
+</p>
+
+<p align="center">
+  <a href="https://buymeachai.ezee.li/Smith_cooks"><img src="https://buymeachai.ezee.li/assets/images/buymeachai-button.png" alt="Buy Me A Chai" width="200" height="49"></a>
+  &nbsp;
+  <a href="https://github.com/sponsors/smithcooks"><img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="GitHub Sponsor" height="34"></a>
+</p>
+
+<sub>Support is optional. GitHub Sponsors is not active yet; its button currently opens Smith’s GitHub profile.</sub>
 
 </div>
+
+<br>
+
+<div align="center">
+  <a href="docs/screenshots/home.jpg"><img src="docs/screenshots/home.jpg" width="31%" alt="VibeArc Home with daily mix and floating mini-player"></a>
+  <a href="docs/screenshots/player.jpg"><img src="docs/screenshots/player.jpg" width="31%" alt="VibeArc Now Playing with artwork and playback controls"></a>
+  <a href="docs/screenshots/search.jpg"><img src="docs/screenshots/search.jpg" width="31%" alt="VibeArc music search results"></a>
+  <br><br>
+  <a href="docs/screenshots/library.jpg"><img src="docs/screenshots/library.jpg" width="31%" alt="VibeArc library and liked tracks"></a>
+  <a href="docs/screenshots/discovery.jpg"><img src="docs/screenshots/discovery.jpg" width="31%" alt="VibeArc artist spotlight and recommendations"></a>
+  <a href="docs/screenshots/appearance.jpg"><img src="docs/screenshots/appearance.jpg" width="31%" alt="VibeArc accent choices and liquid glass settings"></a>
+  <br><br>
+  <a href="docs/screenshots/accounts.jpg"><img src="docs/screenshots/accounts.jpg" width="31%" alt="VibeArc connected account and playlist settings"></a>
+  <a href="docs/screenshots/about.jpg"><img src="docs/screenshots/about.jpg" width="31%" alt="VibeArc About screen showing version 0.9.0 beta"></a>
+  <p><sub>Screenshots captured from VibeArc v0.9 beta. Unaltered app UI; the current download is v1.0.0. Click a screenshot to view it in full.</sub></p>
+</div>
+
+<br>
+
+## <img src="https://api.iconify.design/lucide:sparkles.svg?color=%23A7D8C7" width="20" height="20" alt=""> Overview
+
+**VibeArc** brings your collection and online discoveries into a native Android player. Large artwork, a floating mini-player, and a palette that follows your music keep listening at the center.
+
+Built with **Kotlin, Jetpack Compose, Material 3, and Media3**, it gives you a personal library, queue, lyrics, and appearance controls without hiding them behind busy menus.
 
 ---
 
-## Music first. Everything else second.
+## <img src="https://api.iconify.design/lucide:layers.svg?color=%23A7D8C7" width="20" height="20" alt=""> Key Features
 
-A dark, artwork-driven interface. A native player built with Kotlin, Compose,
-and Media3. Keep your local collection close, discover compatible online tracks,
-and move between your queue, lyrics, playlists, and Now Playing without losing your place.
+| Icon | Feature | Highlight |
+| :---: | :--- | :--- |
+| <img src="https://api.iconify.design/lucide:play-circle.svg?color=%23FF0000" width="20" height="20" alt=""> | **YouTube Music client** | Search tracks, artists, albums, and playlists; connect an account and import playlists through an experimental integration. |
+| <img src="https://api.iconify.design/lucide:music.svg?color=%23A7D8C7" width="20" height="20" alt=""> | **Your library & queue** | Browse tracks, artists, albums, and folders. Long-press to like, queue, save to a playlist, or download. |
+| <img src="https://api.iconify.design/lucide:radio.svg?color=%23D51007" width="20" height="20" alt=""> | **Last.fm connection** | Profiles, statistics, and radio with configuration; authenticated Now Playing and scrobbling require your deployed signer. |
+| <img src="https://api.iconify.design/lucide:mic.svg?color=%23F4BACB" width="20" height="20" alt=""> | **Synchronized lyrics** | Line highlighting, timed words when supplied, manual matching/editing, timing offsets, and `.lrc` export. |
+| <img src="https://api.iconify.design/lucide:arrow-down-to-line.svg?color=%23A7D8C7" width="20" height="20" alt=""> | **Offline downloads** | Save authorized, compatible sources to a selected folder. Format preferences select available sources, not automatic conversion. |
+| <img src="https://api.iconify.design/lucide:compass.svg?color=%2362C7D7" width="20" height="20" alt=""> | **Discovery & radio** | Browse mixes, artist spotlights, recommendations, and radio from available provider and listening data. |
+| <img src="https://api.iconify.design/lucide:palette.svg?color=%23A7D8C7" width="20" height="20" alt=""> | **Make it yours** | Artwork-driven accents, wallpaper colors, AMOLED mode, optional liquid glass, custom fonts, and three launcher icons. |
+| <img src="https://api.iconify.design/lucide:headphones.svg?color=%23F4BACB" width="20" height="20" alt=""> | **Playback controls** | Background playback, lock-screen controls, shuffle, repeat, sleep timer, audio tuning, and crossfade where supported. |
+| <img src="https://api.iconify.design/lucide:archive.svg?color=%23A7D8C7" width="20" height="20" alt=""> | **Backup & restore** | Export and restore local data through JSON backups; account credentials are excluded. |
 
-| Listen your way | Make it yours |
-| :--- | :--- |
-| Background playback, lock-screen controls, shuffle, repeat, and sleep timer. | AMOLED black, wallpaper colors, artwork-driven colors, and custom accents. |
-| Long-press songs to like, queue, add to a playlist, or download. | Optional liquid glass, wavy seek bar, and three launcher icons. |
-| Local tracks, artists, albums, folders, and persistent playlists. | Synchronized lyrics, manual matching/editing, and timing offsets. |
-| Selected-folder downloads and JSON backup/restore. | Built-in audio tuning and crossfade, subject to device support. |
+---
 
-## Connected, when you want it
+<a id="connected-features"></a>
 
-**YouTube Music** — Search public music results, play compatible sources, connect
-an account through the in-app WebView session, browse playlists, and import local
-copies. Supported playlist synchronization is reviewed and confirmed manually.
-Playback prefers your selected source codec and falls back when it is absent;
-downloads require the chosen format to exist.
+## <img src="https://api.iconify.design/lucide:plug.svg?color=%23A7D8C7" width="20" height="20" alt=""> Connected Features
 
-This integration is unofficial and experimental, not official Google OAuth.
-Account cookies stay in the device's WebView session. Provider changes,
-verification challenges, regional restrictions, and unavailable recordings can
-interrupt access. Automatic background sync and YouTube playback-history
-submission are not implemented. VibeArc is not affiliated with Google.
+**YouTube Music** uses an unofficial, experimental in-app WebView session, not official Google OAuth. Cookies stay in the device’s WebView session. Supported playlist synchronization is manually reviewed and confirmed. Automatic background sync and YouTube playback-history submission are **not implemented**. Provider changes, regional restrictions, and verification challenges can interrupt access.
 
-**Last.fm** — Public profiles, statistics, and radio need an API key or configured
-signer. Authenticated login, Now Playing, and scrobbling need a deployed HTTPS
-signer and browser authorization. Enter your configuration in Settings → Last.fm;
-follow the [signer setup guide](server/lastfm-signer/SETUP.md).
+**Last.fm** public features need an API key or configured signer. Authenticated login, Now Playing, and scrobbling need a **deployed HTTPS signer** and browser authorization. Set these up in **Settings → Last.fm** using the [signer setup guide](server/lastfm-signer/SETUP.md). No shared secret, hosted signer, or configured account is bundled. Live authenticated submissions still need testing with your configured account.
 
-No shared secret, hosted signer, or preconfigured account is bundled.
-Automated signer tests pass; live authenticated submissions still need testing
-with your configured account.
-
-**Lyrics** — LRCLIB first, then KuGou KRC and Lyrics.ovh. Highlight the current
-line, or individual words when timestamps are supplied. Manual search, editing,
-offsets, and `.lrc` export help with imperfect matches. Lyrics and word timing
-are not available for every recording.
-
-## Your player, your palette
-
-Go opaque or enable liquid glass. Choose an accent, use your wallpaper's colors,
-or let the playing album shape the palette. Keep effects light on budget phones.
-
-<div align="center">
-<img src="app/src/main/res/drawable-nodpi/vibearc_icon.png" width="68" alt="Mint launcher icon">
-&nbsp;&nbsp;&nbsp;
-<img src="app/src/main/res/drawable-nodpi/vibearc_icon_ember.png" width="68" alt="Ember launcher icon">
-&nbsp;&nbsp;&nbsp;
-<img src="app/src/main/res/drawable-nodpi/vibearc_icon_aurora.png" width="68" alt="Aurora launcher icon">
-
-Mint · Ember · Aurora
-</div>
-
-## Install
-
-1. Download [VibeArc-v1.0.0.apk](https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk)
-   from the [release page](https://github.com/smithcooks/VibeArc/releases/tag/v1.0.0).
-2. Allow APK installation for the browser or file manager you used, then install.
-3. Add your audio or explore online music. Configure Last.fm separately if wanted.
-
-Android **8.0+ (API 26)**. Version code **12** and the existing release certificate
-allow updates over v0.9 and v1.0.0-beta—do not uninstall or clear data first.
-Export a JSON backup before updating.
-
-An [APK SHA-256 checksum](https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk.sha256)
-is included. Sideloading warnings may appear; this is not a Google Play listing
-or Play Protect certification.
+**Lyrics** use LRCLIB, KuGou KRC, and Lyrics.ovh. Availability varies by recording; word highlighting needs word timestamps. Manual matching and offsets help when automatic results are imperfect.
 
 <details>
-<summary><strong>Quality, downloads, and device limitations</strong></summary>
+<summary><strong>Downloads, audio quality, and device limitations</strong></summary>
 
-- Save only music you own or have permission to download; respect provider terms.
-- AAC, Opus, MP3, and FLAC preferences select existing sources. The app does not
-  convert unavailable formats or invent lossless audio.
-- The 15-band equalizer uses DynamicsProcessing on supported Android 9+ devices.
-  Effects and advanced output modes depend on Android and hardware.
-- Studio Master is an audio-tuning preset, not studio-quality certification.
-  A lossless source does not guarantee bit-perfect or Hi-Res device output.
-- Feed, recommendation, and radio results depend on available provider data and
-  account setup, not a promise of complete personalization.
-- The APK is release-signed and labeled v1.0.0. Unofficial online integrations
-  remain experimental.
+- Download only music you own or have permission to save, and respect provider terms.
+- AAC, Opus, MP3, and FLAC preferences select existing sources. Missing formats are not converted, and lossy audio is not made lossless.
+- The 15-band equalizer uses DynamicsProcessing on supported Android 9+ devices. Audio effects depend on Android and your hardware.
+- Studio Master is a tuning preset, not a quality certification. Lossless sources do not guarantee bit-perfect or Hi-Res device output.
+- Discovery results depend on provider data and account setup, not guaranteed complete personalization.
 
 </details>
 
-## Build
+---
 
-Requirements: **JDK 21**, Android SDK platform **36**, Build Tools **36.0.0**.
-The wrapper uses Gradle **8.14.3**. Configure the SDK through Android Studio or
-an untracked `local.properties`.
+<a id="tech-stack--architecture"></a>
+
+## <img src="https://api.iconify.design/lucide:cpu.svg?color=%23A7D8C7" width="20" height="20" alt=""> Tech Stack & Architecture
+
+- **Language & UI:** Kotlin · Jetpack Compose · Material 3
+- **Audio engine:** AndroidX Media3 / ExoPlayer
+- **Online sources:** Experimental YouTube Music client · NewPipeExtractor
+- **Lyrics:** LRCLIB · KuGou KRC · Lyrics.ovh
+- **Authenticated Last.fm:** Cloudflare Worker in `server/lastfm-signer/`
+- **Project layout:** Android app in `app/`, launch website in `docs/`, checks in `tools/`, implementation notes in `tasks/`
+
+---
+
+<a id="getting-started"></a>
+
+## <img src="https://api.iconify.design/lucide:rocket.svg?color=%23A7D8C7" width="20" height="20" alt=""> Getting Started
+
+1. Download [**VibeArc-v1.0.0.apk**](https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk) from the [official release](https://github.com/smithcooks/VibeArc/releases/tag/v1.0.0).
+2. Allow installation for the browser or file manager you used, then install on **Android 8.0+ (API 26)**.
+3. Add local music or explore compatible online sources. Configure Last.fm separately if you want it.
+4. Choose your accent, build your queue, and press play.
+
+Export a JSON backup before updating. Version code **12** and the existing release certificate support updates over v0.9 and v1.0.0-beta; do not uninstall or clear data first. Check the [APK SHA-256 checksum](https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk.sha256). Sideloading warnings may appear; VibeArc is not a Google Play listing or Play Protect certification.
+
+**Android is available now. Windows and Linux are coming soon.**
+
+---
+
+## <img src="https://api.iconify.design/lucide:terminal.svg?color=%23A7D8C7" width="20" height="20" alt=""> Building from Source
+
+Requirements: **JDK 21**, Android SDK **36**, Build Tools **36.0.0**, and the included Gradle **8.14.3** wrapper. Configure the SDK in Android Studio or an untracked `local.properties`.
 
 ```powershell
 git clone https://github.com/smithcooks/VibeArc.git
@@ -127,47 +143,32 @@ cd VibeArc
 node --test server/lastfm-signer/worker.test.mjs
 ```
 
-Release signing uses your own untracked `keystore.properties` and keystore.
-Private keys and credentials are not distributed. Node.js is needed only for
-signer tests/tooling, not to build the Android app.
-
-<details>
-<summary><strong>Inside the project</strong></summary>
-
-| Area | Stack / location |
-| :--- | :--- |
-| Android | Kotlin · Compose · Material 3 · `app/` |
-| Playback | Media3 / ExoPlayer |
-| Online sources | Experimental YouTube Music client · NewPipeExtractor |
-| Lyrics | LRCLIB · KuGou KRC · Lyrics.ovh |
-| Authenticated Last.fm | Cloudflare Worker · `server/lastfm-signer/` |
-| Tests | JVM unit tests · Node's built-in test runner |
-| Notes | `docs/` · `tasks/` · [changelog](CHANGELOG.md) |
-
-</details>
-
-## Privacy & open source
-
-No advertising or analytics SDKs. Library and preferences stay locally;
-online services receive requests for connected features. Android cloud backup
-is disabled, and JSON backups exclude account credentials.
-Read the [privacy notice](PRIVACY.md) before connecting accounts.
-
-VibeArc is inspired by LastWave's design and is an independent project.
-See the [GNU GPL v3 license](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md)
-for component licenses and attribution.
-
-## Help make it better
-
-Report your Android version, phone model, reproduction steps, and whether a
-problem affects local or online tracks. Include a public song link when useful.
-**Never post account cookies, API secrets, or session tokens.**
-Focused pull requests and device-testing feedback are welcome.
-
-<div align="center">
+On macOS/Linux, use `./gradlew` instead of `.\gradlew.bat`. Release builds require your own untracked `keystore.properties` and keystore. Signing keys and credentials are not distributed. Node.js is needed for signer tests/tooling, not to build the app.
 
 ---
 
-**Built for listeners who want their player to feel personal.**
+## <img src="https://api.iconify.design/lucide:message-circle.svg?color=%2362C7D7" width="20" height="20" alt=""> Community & Support
 
+- **Website:** [Explore VibeArc](https://smithcooks.github.io/VibeArc/)
+- **Updates:** [Releases](https://github.com/smithcooks/VibeArc/releases) · [Changelog](CHANGELOG.md)
+- **Feedback:** [Report a bug or suggest an improvement](https://github.com/smithcooks/VibeArc/issues)
+- **Support Smith:** [Buy Me a Chai](https://buymeachai.ezee.li/Smith_cooks) · [GitHub Sponsors](https://github.com/sponsors/smithcooks) (not active yet)
+
+Include your phone model, Android version, reproduction steps, and a public song link if relevant. **Never share account cookies, session tokens, or API secrets.** Focused pull requests and device-testing feedback are welcome.
+
+---
+
+## <img src="https://api.iconify.design/lucide:shield-check.svg?color=%23F4BACB" width="20" height="20" alt=""> Privacy, License & Attribution
+
+No advertising or analytics SDKs. Library and preferences stay locally; connected services receive requests for their features. Android cloud backup is disabled. Read the [privacy notice](PRIVACY.md), [GPL v3 license](LICENSE), and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+VibeArc’s UI and this README’s layout are inspired by [LastWave](https://github.com/Clash-Projects/LastWave-Native). VibeArc is an independent project, with its own screenshots, branding, and feature documentation.
+
+> [!NOTE]
+> VibeArc is not affiliated with or endorsed by Google, YouTube Music, Last.fm, or any other music service. Online integrations remain experimental. Use content only with the appropriate permission and follow provider terms. Album artwork in the screenshots belongs to its respective owners.
+
+---
+
+<div align="center">
+  <p><b>VibeArc</b> is built with ❤️ by <a href="https://github.com/smithcooks">Smith</a>.</p>
 </div>
