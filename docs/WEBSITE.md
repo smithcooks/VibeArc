@@ -14,6 +14,8 @@ package distributions, testimonials, plugin support, or playback guarantees.
 The Android application and its release artifacts are unchanged. The optional
 Buy Me a Chai support button uses the user-provided URL and external image. CSP
 permits only that additional image host; the text fallback survives image failure.
+The support button also appears beside the logo in the initial header, with a
+compact mobile layout so it is visible before scrolling.
 
 Eight user-provided JPEG captures are copied unchanged into `screenshots/`.
 They show v0.9 beta, explicitly labeled on the website, rather than pretending
