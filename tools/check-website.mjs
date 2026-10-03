@@ -28,8 +28,11 @@ assert.match(css, /:focus-visible/);
 assert.match(js, /showModal\(/);
 assert.match(js, /addEventListener\('close'/);
 assert.doesNotMatch(js, /innerHTML|setInterval|requestAnimationFrame|fetch\(/);
-assert.match(html, /styles\.css\?v=real-screens-20261003/);
-assert.match(html, /script\.js\?v=real-screens-20261003/);
+assert.match(html, /styles\.css\?v=header-chai-20261003/);
+assert.match(html, /script\.js\?v=header-chai-20261003/);
+const header = html.match(/<header\b[\s\S]*?<\/header>/)[0];
+assert.match(header, /class="header-chai"[^>]*href="https:\/\/buymeachai\.ezee\.li\/Smith_cooks"/);
+assert.match(header, /alt="Buy Me A Chai"/);
 assert.match(html, /href="https:\/\/buymeachai\.ezee\.li\/Smith_cooks" target="_blank" rel="noopener noreferrer"/);
 for (const [, attribute, value] of html.matchAll(/\b(src|href)="([^"]+)"/g)) {
   if (!value.startsWith('https:') && !value.startsWith('#')) {
