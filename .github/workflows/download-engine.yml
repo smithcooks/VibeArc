@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   native:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -128,6 +129,82 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vibearc-download-engine-${{ github.run_id }}
+          path: engine-artifact/
+          if-no-files-found: error
+          retention-days: 14
+
+  android-bindings:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - name: Reuse verified native build without recompiling libraries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: vibearc-download-engine-37185387374
+          run-id: 37185387374
+          github-token: ${{ github.token }}
+          path: engine-artifact
+
+      - name: Verify pinned input and restore source
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' e91236eb968bef5482d6c22e6f218e4ae7b5aa48e5f5c2b7888815e1c10252aa engine-artifact/SHA256SUMS | sha256sum --check
+          (cd engine-artifact && sha256sum --check SHA256SUMS)
+          grep -Fx 'commit=37ecd39a9ef8ac4b0d6f0cfb114e928f71e7ff09' engine-artifact/PROVENANCE.txt
+          grep -Fx 'run=37185387374' engine-artifact/PROVENANCE.txt
+          mkdir engine-source
+          tar -xzf engine-artifact/source.tar.gz -C engine-source
+          git -C engine-source init
+          git -C engine-source add .
+          git -C engine-source apply "$GITHUB_WORKSPACE/engine-artifact/SOURCE-PATCH.diff"
+          rustup toolchain install 1.98.1 --profile minimal
+
+      - name: Generate Android-compatible cleanup using official UniFFI option
+        working-directory: engine-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply <<'PATCH'
+          diff --git a/rust_backend/crates/mobile/uniffi.toml b/rust_backend/crates/mobile/uniffi.toml
+          --- a/rust_backend/crates/mobile/uniffi.toml
+          +++ b/rust_backend/crates/mobile/uniffi.toml
+          @@ -1,6 +1,7 @@
+           [bindings.kotlin]
+           package_name = "com.spotiflac.backend"
+           cdylib_name = "spotiflac_mobile"
+          +disable_java_cleaner = true
+           
+           [bindings.swift]
+           module_name = "SpotiFLACBackend"
+          PATCH
+          cd rust_backend
+          cargo run --locked -p spotiflac-bindgen -- generate \
+            --library "$GITHUB_WORKSPACE/engine-artifact/jniLibs/arm64-v8a/libspotiflac_mobile.so" \
+            --language kotlin --out-dir "$GITHUB_WORKSPACE/android-kotlin" --no-format
+          old="$GITHUB_WORKSPACE/engine-artifact/kotlin/com/spotiflac/backend/spotiflac_mobile.kt"
+          new="$GITHUB_WORKSPACE/android-kotlin/com/spotiflac/backend/spotiflac_mobile.kt"
+          test -s "$new"
+          diff <(grep -E 'external fun|checksum_' "$old") <(grep -E 'external fun|checksum_' "$new")
+          ! grep -F 'java.lang.ref.Cleaner' "$new"
+          grep -F 'com.sun.jna.internal.Cleaner.getCleaner()' "$new"
+          cp "$new" "$old"
+          git diff --binary > "$GITHUB_WORKSPACE/engine-artifact/SOURCE-PATCH.diff"
+          printf 'upstream=https://github.com/spotiflacapp/SpotiFLAC-Mobile\ncommit=37ecd39a9ef8ac4b0d6f0cfb114e928f71e7ff09\nsource_patch=SOURCE-PATCH.diff (test fixture and binding configuration only)\nnative_run=37185387374\nrust=1.98.1\nndk=29.0.14206865\nabis=arm64-v8a,armeabi-v7a\nworkflow_commit=%s\nrun=%s\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" > "$GITHUB_WORKSPACE/engine-artifact/PROVENANCE.txt"
+          (cd "$GITHUB_WORKSPACE/engine-artifact" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$GITHUB_WORKSPACE/engine-artifact" && sha256sum --check SHA256SUMS)
+
+      - name: Retain Android-compatible engine artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vibearc-download-engine-android-${{ github.run_id }}
           path: engine-artifact/
           if-no-files-found: error
           retention-days: 14
