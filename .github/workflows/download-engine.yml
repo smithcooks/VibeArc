@@ -1,0 +1,92 @@
+# Builds libraries only. No Flutter, app signing, APK or release publishing.
+name: VibeArc download engine
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [build/download-engine-native]
+    paths: [.github/workflows/download-engine.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: download-engine-native
+  cancel-in-progress: false
+
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ENGINE_REV: 37ecd39a9ef8ac4b0d6f0cfb114e928f71e7ff09
+      SPOTIFLAC_RUST_ANDROID_ABIS: arm64-v8a,armeabi-v7a
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - name: Fetch pinned engine source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init engine-source
+          git -C engine-source remote add origin https://github.com/spotiflacapp/SpotiFLAC-Mobile.git
+          git -C engine-source fetch --depth=1 origin "$ENGINE_REV"
+          git -C engine-source checkout --detach FETCH_HEAD
+          test "$(git -C engine-source rev-parse HEAD)" = "$ENGINE_REV"
+
+      - name: Java for Android SDK tools
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Native build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libclang-dev
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;29.0.14206865'
+
+      - name: Formatting, Clippy and native tests
+        working-directory: engine-source
+        shell: bash
+        run: bash scripts/check_rust_backend.sh
+
+      - name: Build Android engine and matching bindings
+        working-directory: engine-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
+          bash scripts/build_rust_backend.sh android
+
+      - name: Package libraries, bindings and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p engine-artifact
+          cp -R engine-source/rust_backend/target/android/jniLibs engine-artifact/
+          cp -R engine-source/rust_backend/target/bindings/kotlin engine-artifact/
+          cp engine-source/LICENSE engine-artifact/UPSTREAM-LICENSE.txt
+          cp engine-source/rust_backend/Cargo.lock engine-artifact/Cargo.lock
+          git -C engine-source archive --format=tar.gz --output="$GITHUB_WORKSPACE/engine-artifact/source.tar.gz" \
+            "$ENGINE_REV" rust_backend scripts/build_rust_backend.sh scripts/check_rust_backend.sh LICENSE
+          printf 'upstream=https://github.com/spotiflacapp/SpotiFLAC-Mobile\ncommit=%s\nrust=1.98.1\nndk=29.0.14206865\nabis=arm64-v8a,armeabi-v7a\nworkflow_commit=%s\nrun=%s\n' \
+            "$ENGINE_REV" "$GITHUB_SHA" "$GITHUB_RUN_ID" > engine-artifact/PROVENANCE.txt
+          test -s engine-artifact/jniLibs/arm64-v8a/libspotiflac_mobile.so
+          test -s engine-artifact/jniLibs/armeabi-v7a/libspotiflac_mobile.so
+          test "$(find engine-artifact/kotlin -name '*.kt' -type f | wc -l)" -gt 0
+          file engine-artifact/jniLibs/*/libspotiflac_mobile.so
+          readelf -h engine-artifact/jniLibs/arm64-v8a/libspotiflac_mobile.so | grep 'AArch64'
+          readelf -h engine-artifact/jniLibs/armeabi-v7a/libspotiflac_mobile.so | grep 'ARM'
+          (cd engine-artifact && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd engine-artifact && sha256sum --check SHA256SUMS)
+
+      - name: Retain engine artifacts, not an APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vibearc-download-engine-${{ github.run_id }}
+          path: engine-artifact/
+          if-no-files-found: error
+          retention-days: 14
