@@ -48,6 +48,45 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;29.0.14206865'
 
+      - name: Reproduce upstream delayed-body fixture
+        working-directory: engine-source/rust_backend
+        shell: bash
+        run: |
+          set -uo pipefail
+          # Preserve red/green evidence. The full suite below remains mandatory.
+          set +e
+          cargo test --locked -p spotiflac-extensions --test optimization_chunked -- --nocapture
+          baseline_status=$?
+          set -e
+          printf 'Unmodified delayed-body fixture exit: %s\n' "$baseline_status"
+          test "$baseline_status" -eq 0 || test "$baseline_status" -eq 101
+
+      - name: Correct fixture TCP buffering and verify keep-alive
+        working-directory: engine-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Nagle can delay the four-byte body beyond the deliberate 3 ms sleep.
+          # Correct the server fixture only; keep the production 20 ms bound.
+          git apply <<'PATCH'
+          diff --git a/rust_backend/crates/extensions/tests/optimization_chunked.rs b/rust_backend/crates/extensions/tests/optimization_chunked.rs
+          --- a/rust_backend/crates/extensions/tests/optimization_chunked.rs
+          +++ b/rust_backend/crates/extensions/tests/optimization_chunked.rs
+          @@ -33,6 +33,9 @@
+           /// Serves byte ranges over keep-alive HTTP/1.1. `/busy` answers the first
+           /// ranged chunk (after the two-byte probe) with a small retryable 503 body.
+           fn connection(mut stream: TcpStream, stop: &AtomicBool, busy: &AtomicBool) {
+          +    // The 3 ms fixture delay must not inherit Nagle/delayed-ACK buffering.
+          +    // Production discard still enforces its bounded 20 ms deadline.
+          +    stream.set_nodelay(true).unwrap();
+               stream
+                   .set_read_timeout(Some(Duration::from_millis(25)))
+                   .unwrap();
+          PATCH
+          for attempt in 1 2 3; do
+            cargo test --manifest-path rust_backend/Cargo.toml --locked -p spotiflac-extensions --test optimization_chunked
+          done
+
       - name: Formatting, Clippy and native tests
         working-directory: engine-source
         shell: bash
@@ -72,7 +111,9 @@ jobs:
           cp engine-source/rust_backend/Cargo.lock engine-artifact/Cargo.lock
           git -C engine-source archive --format=tar.gz --output="$GITHUB_WORKSPACE/engine-artifact/source.tar.gz" \
             "$ENGINE_REV" rust_backend scripts/build_rust_backend.sh scripts/check_rust_backend.sh LICENSE
-          printf 'upstream=https://github.com/spotiflacapp/SpotiFLAC-Mobile\ncommit=%s\nrust=1.98.1\nndk=29.0.14206865\nabis=arm64-v8a,armeabi-v7a\nworkflow_commit=%s\nrun=%s\n' \
+          git -C engine-source diff --binary > engine-artifact/SOURCE-PATCH.diff
+          test -s engine-artifact/SOURCE-PATCH.diff
+          printf 'upstream=https://github.com/spotiflacapp/SpotiFLAC-Mobile\ncommit=%s\nsource_patch=SOURCE-PATCH.diff (test fixture only)\nrust=1.98.1\nndk=29.0.14206865\nabis=arm64-v8a,armeabi-v7a\nworkflow_commit=%s\nrun=%s\n' \
             "$ENGINE_REV" "$GITHUB_SHA" "$GITHUB_RUN_ID" > engine-artifact/PROVENANCE.txt
           test -s engine-artifact/jniLibs/arm64-v8a/libspotiflac_mobile.so
           test -s engine-artifact/jniLibs/armeabi-v7a/libspotiflac_mobile.so
