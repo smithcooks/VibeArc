@@ -6,6 +6,20 @@ import org.junit.Test
 
 class AppearanceSettingsTest {
     @Test
+    fun `lyrics animation can be turned off without changing the theme`() {
+        val original = AppearanceConfig()
+        val disabled = original.copy(lyricsAnimationEnabled = false)
+        assertEquals(true, original.lyricsAnimationEnabled)
+        assertEquals(false, disabled.lyricsAnimationEnabled)
+        assertEquals(original.resolvedAccentArgb(), disabled.resolvedAccentArgb())
+        assertEquals(1f, lyricMotionTarget(true, false).first)
+        assertEquals(0f, lyricMotionTarget(true, false).second)
+        assertEquals(1.035f, lyricMotionTarget(true, true).first)
+        assertEquals(-3f, lyricMotionTarget(true, true).second)
+        assertEquals(1f, lyricMotionTarget(false, true).first)
+    }
+
+    @Test
     fun `six digit accent gains an opaque alpha channel`() {
         assertEquals(0xFFFF6B6BL, parseAccentHex("#ff6b6b"))
     }

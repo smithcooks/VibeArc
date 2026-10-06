@@ -4,6 +4,52 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class YouTubeAccountTest {
+    @Test fun `play counts are not part of a song title or artist`() {
+        val response="""{"contents":[{"musicResponsiveListItemRenderer":{"playlistItemData":{"videoId":"loser"},"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Loser • 128 million plays"}]}}},{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Tame Impala, 128M plays"}]}}}]}}]}"""
+        val track=parseYouTubeMusicPlaylistItems(response,"Favorites").items.single().track
+        assertEquals("Loser",track.title)
+        assertEquals("Tame Impala",track.artist)
+    }
+    @Test
+    fun `imported playlist separates artist metadata and fixed duration from mixed runs`() {
+        val response = """{"contents":[{"musicResponsiveListItemRenderer":{
+            "playlistItemData":{"videoId":"not-like-us","playlistSetVideoId":"set-1"},
+            "flexColumns":[
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Not Like Us"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[
+                    {"text":"Kendrick Lamar"},{"text":" • "},{"text":"Not Like Us"},{"text":" • "},{"text":"274M plays"}
+                ]}}}
+            ],
+            "fixedColumns":[{"musicResponsiveListItemFixedColumnRenderer":{"text":{"runs":[{"text":"4:34"}]}}}]
+        }}]}"""
+
+        val track = parseYouTubeMusicPlaylistItems(response, "Favorites").items.single().track
+
+        assertEquals("Kendrick Lamar", track.artist)
+        assertEquals(274_000L, track.durationMs)
+    }
+
+    @Test
+    fun `feed responsive track keeps artist clean and clock duration from combined metadata`() {
+        val response = """{"contents":[{"musicCarouselShelfRenderer":{
+            "header":{"musicCarouselShelfBasicHeaderRenderer":{"title":{"runs":[{"text":"Quick picks"}]}}},
+            "contents":[{"musicResponsiveListItemRenderer":{
+                "playlistItemData":{"videoId":"one-of-the-girls"},
+                "flexColumns":[
+                    {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"One Of The Girls"}]}}},
+                    {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[
+                        {"text":"The Weeknd"},{"text":" • "},{"text":"The Idol"},{"text":" • "},{"text":"4:04"}
+                    ]}}}
+                ]
+            }}]
+        }}]}"""
+
+        val track = parseYouTubeMusicFeed(response).single().tracks.single()
+
+        assertEquals("The Weeknd", track.artist)
+        assertEquals(244_000L, track.durationMs)
+    }
+
     @Test
     fun `web session parses cookies without losing encoded values`() {
         assertEquals(

@@ -113,9 +113,25 @@ private val LyricsTitleSuffix = Regex(
 private val TopicArtistSuffix = Regex("(?i)\\s+-\\s+topic\\s*$")
 private val MetadataSeparator = Regex("[^\\p{L}\\p{N}]+")
 
-internal fun lyricsSearchTitle(value: String): String = value.replace(LyricsTitleSuffix, "").trim()
-internal fun lyricsSearchArtist(value: String): String = value.replace(TopicArtistSuffix, "").trim()
+internal fun lyricsSearchTitle(value: String): String = cleanRecordingLabel(value).replace(LyricsTitleSuffix, "")
+    .replace(Regex("(?i)\\s*[\\[(](?:feat\\.?|ft\\.?|featuring|with)\\s+[^\\])]+[\\])]"), "").trim()
+internal fun lyricsSearchArtist(value: String): String = cleanRecordingLabel(value).substringBefore(" • ").substringBefore(" · ")
+    .replace(TopicArtistSuffix, "").replace(Regex("(?i)VEVO$"), "").trim()
 private fun normalizedMetadata(value: String): String = value.lowercase().replace(MetadataSeparator, " ").trim()
+private fun primaryArtist(value: String) = value.split(Regex("(?i)\\s*(?:,|&| feat\\.? | ft\\.? | featuring )\\s*")).first().trim()
+private fun unknownLyricsArtist(value: String) = normalizedMetadata(value) in setOf("", "youtube music", "song", "unknown artist", "on this device")
+private fun lyricsQueryTrack(track: Track): Track {
+    val title = lyricsSearchTitle(track.title)
+    val artist = lyricsSearchArtist(track.artist)
+    val parts = title.split(Regex("\\s+[-–—]\\s+"), limit=2)
+    return if (parts.size == 2 && (unknownLyricsArtist(artist) ||
+            normalizedMetadata(parts[0]).replace(" ", "") == normalizedMetadata(artist).replace(" ", "")))
+        track.copy(title=parts[1], artist=parts[0]) else track.copy(title=title, artist=artist)
+}
+private fun sameLyricsVersion(a: String, b: String): Boolean {
+    val markers = Regex("(?i)\\b(live|remix|acoustic|cover|karaoke|instrumental|slowed|nightcore|sped up)\\b")
+    return markers.findAll(a).map { it.value.lowercase() }.toSet() == markers.findAll(b).map { it.value.lowercase() }.toSet()
+}
 private fun LyricsDocument.hasLyrics(): Boolean = instrumental || syncedLines.isNotEmpty() || plainLines.isNotEmpty()
 
 private fun List<Pair<String, String>>.encoded(): String = joinToString("&") { (name, value) ->
@@ -123,39 +139,55 @@ private fun List<Pair<String, String>>.encoded(): String = joinToString("&") { (
 }
 
 internal fun fetchLrclibLyrics(track: Track, request: (String) -> Pair<Int, String?>): LyricsDocument? {
-    val title = lyricsSearchTitle(track.title)
-    val artist = lyricsSearchArtist(track.artist)
-    if (title.isBlank() || artist.isBlank()) return null
+    val queryTrack = lyricsQueryTrack(track)
+    val title = queryTrack.title
+    val artist = queryTrack.artist
+    if (title.isBlank()) return null
     val parameters = buildList {
         add("track_name" to title)
         add("artist_name" to artist)
         track.album.takeIf { it.isNotBlank() && it != "YouTube Music" }?.let { add("album_name" to it) }
         (track.durationMs / 1_000).takeIf { it in 1..3_600 }?.let { add("duration" to it.toString()) }
     }
-    runCatching {
+    if (!unknownLyricsArtist(artist)) runCatching {
         val (code, body) = request("https://lrclib.net/api/get?${parameters.encoded()}")
         if (code in 200..299) body?.let(::parseLyricsResponse)?.takeIf { it.hasLyrics() } else null
     }.getOrNull()?.let { return it }
-    return runCatching {
-        val search = listOf("track_name" to title, "artist_name" to artist)
+    val searches = listOf(artist, primaryArtist(artist)).distinct().map { name ->
+        buildList { add("track_name" to title); if (!unknownLyricsArtist(name)) add("artist_name" to name) }
+    }
+    for (search in searches) runCatching {
         val (code, body) = request("https://lrclib.net/api/search?${search.encoded()}")
-        if (code in 200..299) body?.let { parseLyricsSearchResponse(it, track) } else null
-    }.getOrNull()
+        if (code in 200..299) body?.let { parseLyricsSearchResponse(it, queryTrack) } else null
+    }.getOrNull()?.let { return it }
+    // A video-length duration or incorrect album must not hide an exact song match.
+    if (!unknownLyricsArtist(artist)) for (name in listOf(artist, primaryArtist(artist)).distinct()) {
+        runCatching {
+            val (code, body) = request("https://lrclib.net/api/get?${listOf("track_name" to title, "artist_name" to name).encoded()}")
+            if (code in 200..299) body?.let(::parseLyricsResponse)?.takeIf { it.hasLyrics() } else null
+        }.getOrNull()?.let { return it }
+    }
+    return null
 }
 
 internal fun parseLyricsSearchResponse(value: String, track: Track): LyricsDocument? {
-    val wantedTitle = normalizedMetadata(lyricsSearchTitle(track.title))
-    val wantedArtist = normalizedMetadata(lyricsSearchArtist(track.artist))
-    if (wantedTitle.isBlank() || wantedArtist.isBlank()) return null
-    return JsonParser.array().from(value).mapNotNull { it as? JsonObject }
+    val query = lyricsQueryTrack(track)
+    val wantedTitle = normalizedMetadata(query.title)
+    val wantedArtist = normalizedMetadata(primaryArtist(query.artist))
+    val unknown = unknownLyricsArtist(query.artist)
+    if (wantedTitle.isBlank()) return null
+    val matched = JsonParser.array().from(value).mapNotNull { it as? JsonObject }
         .filter { result ->
-            val title = normalizedMetadata(result.getString("trackName", ""))
-            val artist = normalizedMetadata(result.getString("artistName", ""))
+            val rawTitle = result.getString("trackName", "")
+            val title = normalizedMetadata(lyricsSearchTitle(rawTitle))
+            val artist = normalizedMetadata(primaryArtist(result.getString("artistName", "")))
             lyricsDocument(result).hasLyrics() && title.isNotBlank() && artist.isNotBlank() &&
-                (title.contains(wantedTitle) || wantedTitle.contains(title)) &&
-                (artist.contains(wantedArtist) || wantedArtist.contains(artist))
+                title == wantedTitle && sameLyricsVersion(query.title, rawTitle) &&
+                (if (unknown) track.durationMs > 0 && kotlin.math.abs(result.getDouble("duration", 0.0)*1000-track.durationMs) <= 8_000
+                else artist.replace(" ", "") == wantedArtist.replace(" ", ""))
         }
-        .maxByOrNull { result ->
+    if (unknown && matched.map { normalizedMetadata(it.getString("artistName", "")) }.distinct().size != 1) return null
+    return matched.maxByOrNull { result ->
             val durationDifference = kotlin.math.abs(
                 ((result["duration"] as? Number)?.toDouble() ?: 0.0) * 1_000 - track.durationMs,
             )
@@ -172,7 +204,7 @@ internal object LyricsProvider {
     fun fetch(track: Track, title: String = track.title, artist: String = track.artist): LyricsDocument? {
         val key = "$title\n$artist\n${track.album}\n${track.durationMs}"
         synchronized(cache) { cache[key] }?.let { return it }
-        if (title.isBlank() || artist.isBlank()) return null
+        if (title.isBlank()) return null
         val queryTrack = track.copy(title = lyricsSearchTitle(title), artist = lyricsSearchArtist(artist))
         val result = fetchLrclibLyrics(queryTrack, ::request) ?: fetchKrc(queryTrack) ?: fetchPlainLyrics(queryTrack)
         return result?.let { remember(key, it) }
@@ -186,6 +218,7 @@ internal object LyricsProvider {
     }
 
     private fun fetchKrc(track: Track): LyricsDocument? = runCatching {
+        if(unknownLyricsArtist(track.artist)) return null
         val query = listOf(
             "ver" to "1", "man" to "yes", "client" to "pc",
             "keyword" to "${lyricsSearchArtist(track.artist)} - ${lyricsSearchTitle(track.title)}",
@@ -216,6 +249,7 @@ internal object LyricsProvider {
     }.getOrNull()
 
     private fun fetchPlainLyrics(track: Track): LyricsDocument? = runCatching {
+        if(unknownLyricsArtist(track.artist)) return null
         fun path(value: String) = URLEncoder.encode(value, UTF_8.name()).replace("+", "%20")
         val response = request("https://api.lyrics.ovh/v1/${path(track.artist)}/${path(track.title)}")
         if (response.first !in 200..299) return null

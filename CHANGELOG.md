@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0] - 2026-10-06
+
+### Changed
+
+- Main-app downloads now use the playback downloader confirmed working in the separate test APK; the failing native extension engine is no longer shipped.
+- Rebuilt Downloads with Songs/Artists/Albums, search, sorting, actual codec and lyrics filters, storage details, folder export, and Play/Shuffle controls.
+- Wi-Fi and mobile data are allowed by default. Settings → Audio & Streaming → Download on Wi-Fi only provides an optional restriction.
+- Existing main-app downloads and preferences remain intact; files in the separate test package are not automatically transferred.
+- Online recording labels omit play-count decorations; lyrics fixes and cached LRC sidecars are included.
+
+### Verification and limitations
+
+- All 118 Android JVM tests passed; release lint and packaging succeeded. Existing lint warnings remain.
+- APK signature and 16 KiB alignment verified; version code 17 uses the existing release certificate.
+- Physical-device layout, folder export, and mobile-data transfer still need installation testing. Provider availability varies; no universal download or lossless guarantee is made.
+- Android downloads on the website and README now point directly to this release. Windows and Linux remain coming soon.
+
 ## [1.0.0] - 2026-10-02
 
 ### Changed

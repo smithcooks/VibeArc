@@ -18,8 +18,8 @@ class OfflineFilesTest {
 
     @Test
     fun `only trusted https audio hosts can be downloaded`() {
-        assertEquals(true, isTrustedOnlineAudioUrl("https://rr1---sn.example.googlevideo.com/videoplayback"))
-        assertEquals(false, isTrustedOnlineAudioUrl("http://rr1---sn.example.googlevideo.com/videoplayback"))
-        assertEquals(false, isTrustedOnlineAudioUrl("https://googlevideo.com.evil.example/audio"))
+        assertEquals(false, isLegalAudioUrl("https://rr1---sn.example.googlevideo.com/videoplayback"))
+        assertEquals(false, isLegalAudioUrl("http://rr1---sn.example.googlevideo.com/videoplayback"))
+        assertEquals(true, isLegalAudioUrl("https://artist.example/audio.mp3"))
     }
 }

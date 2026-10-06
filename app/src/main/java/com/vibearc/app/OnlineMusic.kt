@@ -124,7 +124,10 @@ internal fun parseInnertubeSearch(json: String): List<Track> {
         val artist = metadataRuns.firstNotNullOfOrNull { run ->
             run.takeIf { it.musicPageType() == "MUSIC_PAGE_TYPE_ARTIST" || it.browseId().startsWith("UC") }
                 ?.getString("text", "")
-        }?.takeIf(String::isNotBlank) ?: "YouTube Music"
+        }?.takeIf(String::isNotBlank) ?: columnRuns(columns, 1).map { it.getString("text", "").trim() }
+            .firstOrNull { text -> text.isNotBlank() && text !in setOf("•", "·", "Song", "Video", "Album", "Single") &&
+                !text.matches(DurationPattern) && !text.contains(Regex("(?i)\\b(plays|views|subscribers)\\b")) }
+            ?: "YouTube Music"
         val album = metadataRuns.firstNotNullOfOrNull { run ->
             run.takeIf { it.musicPageType() == "MUSIC_PAGE_TYPE_ALBUM" || it.browseId().startsWith("MPRE") }
                 ?.getString("text", "")
@@ -152,7 +155,7 @@ internal fun parseInnertubeSearch(json: String): List<Track> {
                 ?.let(::highResolutionArtworkUrl)
                 .orEmpty(),
             folder = "YouTube Music",
-        )
+        ).withoutPlayCounts()
     }.distinctBy(Track::uri).take(20)
 }
 

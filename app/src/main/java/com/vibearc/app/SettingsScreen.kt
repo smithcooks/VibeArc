@@ -55,8 +55,8 @@ internal fun SettingsScreen(
     var sheet by remember { mutableStateOf<String?>(null) }
     var streamFormat by remember { mutableStateOf(context.streamAudioFormat()) }
     var streamQuality by remember { mutableStateOf(context.streamAudioQuality()) }
-    var downloadFormat by remember { mutableStateOf(context.downloadAudioFormat()) }
-    var downloadQuality by remember { mutableStateOf(context.downloadAudioQuality()) }
+    val downloads=remember(context) { OfflineDownloads.get(context) }
+    var wifiOnly by remember { mutableStateOf(downloads.wifiOnly) }
     var scrobblingEnabled by remember { mutableStateOf(context.lastFmScrobblingEnabled()) }
     var excludedScrobbleUris by remember { mutableStateOf(context.loadLastFmExcludedUris()) }
     var wavySeekbar by remember { mutableStateOf(context.wavySeekbarEnabled()) }
@@ -143,7 +143,7 @@ internal fun SettingsScreen(
         }
         item { SettingsHeading("Experimental") }
         item { ReferenceRow("Liquid Glass","Translucent materials across the app","glass",0,5,appearance.liquidGlassEnabled,onClick={onAppearanceChange(appearance.copy(liquidGlassEnabled=!appearance.liquidGlassEnabled))}) }
-        item { ReferenceRow("Lyrics Animation","Word timing when supplied · line fallback","lyrics",1,5,onClick={unavailable("Lyrics Animation","Open the quotation-mark button in Now Playing. VibeArc animates KuGou KRC or enhanced-LRC word timestamps when supplied and otherwise highlights synchronized lines.")}) }
+        item { ReferenceRow("Lyrics Animation","Bouncy line transitions and smooth following","lyrics",1,5,appearance.lyricsAnimationEnabled,onClick={onAppearanceChange(appearance.copy(lyricsAnimationEnabled=!appearance.lyricsAnimationEnabled))}) }
         item { ReferenceRow("Equalizer",if(Build.VERSION.SDK_INT>=28) "Built-in 15-band equalizer" else "Requires Android 9 or later","equalizer",2,5,audioTuning.equalizerEnabled,enabled=Build.VERSION.SDK_INT>=28,onClick={sheet="Equalizer"}) }
         item { ReferenceRow("Wavy Seekbar","Lightweight wave while music plays","wave",3,5,wavySeekbar,onClick={wavySeekbar=!wavySeekbar;context.getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putBoolean("wavy_seekbar",wavySeekbar).apply()}) }
         item { ReferenceRow("Studio Master Clarity","Native clarity EQ and peak limiter","spark",4,5,audioTuning.studioMasterEnabled,enabled=Build.VERSION.SDK_INT>=28,onClick={
@@ -151,7 +151,11 @@ internal fun SettingsScreen(
         }) }
         item { SettingsHeading("Audio & Streaming") }
         item { ReferenceRow("Streaming Quality","${streamFormat.label} · ${streamQuality.label}","quality",0,6,onClick={sheet="Streaming Quality"}) }
-        item { ReferenceRow("Download Quality","${downloadFormat.label} · ${downloadQuality.label}","download",1,6,onClick={sheet="Download Quality"}) }
+        item { ReferenceRow("Offline Downloads","Save original playback audio · no format conversion","download",1,6,onClick=onDownloads) }
+        item { ReferenceRow("Download on Wi-Fi only",if(wifiOnly) "Mobile data is off for downloads" else "Wi-Fi and mobile data allowed · carrier charges may apply","download",checked=wifiOnly,onClick={
+            wifiOnly=!wifiOnly;downloads.setWifiOnly(wifiOnly)
+            if(downloads.entries.value.any { it.status==DownloadStatus.QUEUED || (it.status==DownloadStatus.PAUSED && it.autoResume) }) runCatching { DownloadService.start(context) }
+        }) }
         item { ReferenceRow("Bit-Perfect Mode",if(audioTuning.bitPerfectEnabled) context.bitPerfectStatus() else if(Build.VERSION.SDK_INT>=34) "Verified USB mixer path when available" else "Requires Android 14 and a compatible USB DAC","equalizer",2,6,audioTuning.bitPerfectEnabled,enabled=Build.VERSION.SDK_INT>=34,onClick={
             val enabled=!audioTuning.bitPerfectEnabled
             updateAudioTuning(audioTuning.copy(bitPerfectEnabled=enabled,equalizerEnabled=if(enabled) false else audioTuning.equalizerEnabled,studioMasterEnabled=if(enabled) false else audioTuning.studioMasterEnabled,crossfadeSeconds=if(enabled) 0 else audioTuning.crossfadeSeconds))
@@ -174,7 +178,7 @@ internal fun SettingsScreen(
         item { SettingsHeading("App icon") }
         item { ReferenceRow("Launcher Icon",selectedIcon.label,"album",onClick={sheet="App icon"}) }
         item { SettingsHeading("About") }
-        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, KuGou, LRCLIB, Lyrics.ovh, Last.fm, and GitHub. Full notices are included with the source release.")}) }
+        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, KuGou, LRCLIB, Lyrics.ovh, Last.fm, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
         item { ReferenceRow("Updates & Support","VibeArc on GitHub","spark",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/$UpdateRepository")))}}) }
         item {
             Spacer(Modifier.height(24.dp))
@@ -309,21 +313,6 @@ internal fun SettingsScreen(
                             }
                         }
                     }
-                    "Download Quality" -> {
-                        item { Text("Online downloads save an actual source offered in the selected codec. VibeArc does not relabel or fake lossless audio; unavailable formats fail clearly.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        items(AudioFormat.entries.size) { index ->
-                            val choice=AudioFormat.entries[index]
-                            QualityChoice(choice.label,"Format",if(choice==AudioFormat.ANY) "Keep the best available source format." else "Require ${choice.label} from the source.",downloadFormat==choice) {
-                                downloadFormat=choice;context.saveDownloadAudioPreference(downloadFormat,downloadQuality)
-                            }
-                        }
-                        items(AudioQuality.entries.size) { index ->
-                            val choice=AudioQuality.entries[index]
-                            QualityChoice(choice.label,"Quality",choice.maxBitrateKbps?.let { "Download the highest real source at or below $it kbps." } ?: "Download the highest available real source.",downloadQuality==choice) {
-                                downloadQuality=choice;context.saveDownloadAudioPreference(downloadFormat,downloadQuality)
-                            }
-                        }
-                    }
                     "YouTube Playlists" -> {
                         item { Text("Tap a playlist to add its available tracks to your VibeArc library. This does not download audio or modify YouTube.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         if (youtubeAccountData?.playlists.isNullOrEmpty()) item {
@@ -386,8 +375,6 @@ private fun Context.saveHighestAudioQuality(enabled:Boolean) {
 
 internal fun Context.streamAudioFormat():AudioFormat = enumPreference("stream_audio_format",AudioFormat.ANY)
 internal fun Context.streamAudioQuality():AudioQuality = enumPreference("stream_audio_quality",if(getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getBoolean(HighestAudioQualityKey,true)) AudioQuality.HIGHEST else AudioQuality.BALANCED)
-internal fun Context.downloadAudioFormat():AudioFormat = enumPreference("download_audio_format",AudioFormat.ANY)
-internal fun Context.downloadAudioQuality():AudioQuality = enumPreference("download_audio_quality",AudioQuality.HIGHEST)
 
 private inline fun <reified T:Enum<T>> Context.enumPreference(key:String,fallback:T):T =
     runCatching { enumValueOf<T>(getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getString(key,fallback.name)!!) }.getOrDefault(fallback)
@@ -396,6 +383,3 @@ internal fun Context.saveStreamAudioPreference(format:AudioFormat,quality:AudioQ
     getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putString("stream_audio_format",format.name).putString("stream_audio_quality",quality.name).apply()
 }
 
-internal fun Context.saveDownloadAudioPreference(format:AudioFormat,quality:AudioQuality) {
-    getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).edit().putString("download_audio_format",format.name).putString("download_audio_quality",quality.name).apply()
-}

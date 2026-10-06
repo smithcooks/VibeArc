@@ -21,6 +21,9 @@ internal data class Track(
 )
 
 internal val Track.catalogUri: String get() = sourceUri.ifBlank { uri }
+private val PlaybackCountSuffix=Regex("(?i)(?:\\s*[•·,|–—]\\s*|\\s+)\\d[\\d.,]*\\s*(?:[kmb]|thousand|million|billion)?\\s*(?:plays|views|listeners|subscribers)\\b.*$")
+internal fun cleanRecordingLabel(value: String): String = value.replace(PlaybackCountSuffix,"").trim().ifBlank { value }
+internal fun Track.withoutPlayCounts(): Track = copy(title=cleanRecordingLabel(title),artist=cleanRecordingLabel(artist))
 
 internal data class Playlist(
     val id: String,
@@ -134,7 +137,7 @@ internal object LibraryCodec {
                 artworkUri = fields.getOrNull(6)?.let { String(decoder.decode(it), UTF_8) }.orEmpty(),
                 folder = fields.getOrNull(7)?.let { String(decoder.decode(it), UTF_8) } ?: "Imported",
                 sourceUri = fields.getOrNull(8)?.let { String(decoder.decode(it), UTF_8) }.orEmpty(),
-            )
+            ).withoutPlayCounts()
         }.getOrNull()
     }.toList()
 }

@@ -54,13 +54,13 @@ internal fun parseYouTubeMusicPlaylistItems(json: String, playlistTitle: String)
             id = setVideoId,
             track = Track(
                 title = title,
-                artist = texts.getOrNull(1).orEmpty().ifBlank { "YouTube Music" },
+                artist = texts.getOrNull(1).orEmpty().substringBefore(" • ").substringBefore(" · ").ifBlank { "YouTube Music" },
                 album = playlistTitle,
                 uri = "$MusicOrigin/watch?v=$videoId",
-                durationMs = texts.firstNotNullOfOrNull(::parseClockMillis) ?: 0,
+                durationMs = renderer.metadataSegments().firstNotNullOfOrNull(::parseClockMillis) ?: 0,
                 artworkUri = renderer.firstImageUrl(),
                 folder = "YouTube Music",
-            ),
+            ).withoutPlayCounts(),
         )
     }.distinctBy(YouTubePlaylistItem::id).toList()
     val continuation = jsonObjects(root).firstNotNullOfOrNull { wrapper ->
@@ -94,17 +94,21 @@ private fun feedTrack(wrapper: JsonObject): Track? {
     if (title.isBlank()) return null
     val subtitle = (renderer["subtitle"] as? JsonObject).displayText()
     val texts = renderer.flexTexts()
-    val artist = texts.getOrNull(1).orEmpty().ifBlank { subtitle.substringBefore(" • ").ifBlank { "YouTube Music" } }
+    val artist = texts.getOrNull(1).orEmpty().substringBefore(" • ").substringBefore(" · ").ifBlank { subtitle.substringBefore(" • ").ifBlank { "YouTube Music" } }
     return Track(
         title = title,
         artist = artist,
         album = "YouTube Music",
         uri = "$MusicOrigin/watch?v=$videoId",
-        durationMs = (texts + subtitle).firstNotNullOfOrNull(::parseClockMillis) ?: 0,
+        durationMs = (renderer.metadataSegments() + subtitle.split(Regex("\\s*[•·]\\s*"))).firstNotNullOfOrNull(::parseClockMillis) ?: 0,
         artworkUri = renderer.firstImageUrl(),
         folder = "YouTube Music",
-    )
+    ).withoutPlayCounts()
 }
+
+private fun JsonObject.metadataSegments(): List<String> = listOf("flexColumns", "fixedColumns").flatMap { key ->
+    jsonObjects(this[key]).map { it.getString("text", "").trim() }.filter(String::isNotBlank).toList()
+}.flatMap { it.split(Regex("\\s*[•·]\\s*")) }
 
 private fun parseClockMillis(value: String): Long? {
     if (!value.matches(Regex("[0-9]{1,2}(:[0-9]{2}){1,2}"))) return null

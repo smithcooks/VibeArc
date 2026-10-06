@@ -1,6 +1,10 @@
 package com.vibearc.app
 
 import android.text.format.DateUtils
+import android.animation.ValueAnimator
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +54,7 @@ internal fun PlayerScreen(
     onBack: () -> Unit, onFavorite: (() -> Unit)?, onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit, onCycleSleepTimer: () -> Unit,
     dynamicArtworkColor: Boolean,
+    lyricsAnimationEnabled: Boolean,
 ) {
     var page by rememberSaveable { mutableStateOf("player") }
     var menu by remember { mutableStateOf(false) }
@@ -86,7 +92,7 @@ internal fun PlayerScreen(
             }
             when (page) {
                 "queue" -> PlayingQueueScreen(player, queue)
-                "lyrics" -> LyricsScreen(player, track, isPlaying, wavy)
+                "lyrics" -> LyricsScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled)
                 else -> {
                     LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -162,7 +168,7 @@ private fun PlayingQueueScreen(player: Player, queue: List<Track>) {
 }
 
 @Composable
-private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy: Boolean) {
+private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy: Boolean, animationEnabled: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var expanded by remember { mutableStateOf(false) }
@@ -172,12 +178,13 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
     var lyrics by remember(track.uri) { mutableStateOf<LyricsDocument?>(null) }
     var position by remember(track.uri) { mutableLongStateOf(0L) }
     var editor by remember(track.uri) { mutableStateOf(false) }
-    var searchTitle by remember(track.uri) { mutableStateOf(track.title) }
-    var searchArtist by remember(track.uri) { mutableStateOf(track.artist) }
+    var searchTitle by remember(track.uri,track.title) { mutableStateOf(track.title) }
+    var searchArtist by remember(track.uri,track.artist) { mutableStateOf(track.artist) }
     var manualRaw by remember(track.uri) { mutableStateOf("") }
     var offsetText by remember(track.uri) { mutableStateOf("0") }
     val overrideStore = remember(context) { LyricsOverrideStore(context) }
     val listState = rememberLazyListState()
+    val motionEnabled = animationEnabled && ValueAnimator.areAnimatorsEnabled()
     val saveLyrics = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val lines = lyrics?.syncedLines.orEmpty()
         if (uri != null && lines.isNotEmpty()) scope.launch {
@@ -191,12 +198,22 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
             android.widget.Toast.makeText(context, if(saved) "Synced lyrics saved" else "Could not save lyrics", android.widget.Toast.LENGTH_LONG).show()
         }
     }
-    LaunchedEffect(track.uri, request) {
+    LaunchedEffect(track.catalogUri, track.title, track.artist, request) {
         loading = true
         failed = false
-        val local = withContext(Dispatchers.IO) { overrideStore.load(track) }
+        if(track.durationMs<=0 && player.duration<=0) {
+            // Let Media3 publish its duration before a title-only fallback is considered.
+            repeat(30) { if(player.duration<=0) delay(100) }
+        }
+        val query = track.copy(durationMs=track.durationMs.takeIf { it>0 } ?: player.duration.coerceAtLeast(0))
+        val local = withContext(Dispatchers.IO) { overrideStore.load(query) }
         val result = if(local != null && request == 0) Result.success(local.first) else withContext(Dispatchers.IO) {
-            runCatching { LyricsProvider.fetch(track, searchTitle, searchArtist) }
+            val disk = LyricsDiskCache(context)
+            val saved = if(request==0) disk.read(query) else null
+            runCatching { saved ?: LyricsProvider.fetch(query, searchTitle, searchArtist)?.also { document ->
+                // A cache write failure must never hide successfully fetched lyrics.
+                runCatching { disk.save(query,document) }
+            } }
         }
         lyrics = result.getOrNull()
         local?.second?.let { offsetText=it.toString() }
@@ -210,8 +227,11 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
         }
     }
     val activeLine = activeLyricIndex(lyrics?.syncedLines.orEmpty(), position)
-    LaunchedEffect(activeLine) {
-        if(activeLine >= 0) listState.animateScrollToItem((activeLine - 1).coerceAtLeast(0))
+    LaunchedEffect(activeLine, motionEnabled) {
+        if(activeLine >= 0) {
+            if(motionEnabled) listState.animateScrollToItem((activeLine - 1).coerceAtLeast(0))
+            else listState.scrollToItem((activeLine - 1).coerceAtLeast(0))
+        }
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape) {
@@ -263,12 +283,20 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
                                 })) { append(word.text) }
                             }
                         }
+                        val target=lyricMotionTarget(index==activeLine,motionEnabled)
+                        val scale by animateFloatAsState(target.first,if(motionEnabled) spring(dampingRatio=.62f,stiffness=380f) else snap(),label="lyric scale")
+                        val lift by animateFloatAsState(target.second,if(motionEnabled) spring(dampingRatio=.62f,stiffness=380f) else snap(),label="lyric lift")
+                        val density=LocalDensity.current.density
                         Text(
                             animatedText ?: androidx.compose.ui.text.AnnotatedString(line.text),
+                            modifier=Modifier.fillMaxWidth().padding(end=12.dp).graphicsLayer {
+                                scaleX=scale;scaleY=scale;translationY=lift*density
+                                transformOrigin=TransformOrigin(0f,.5f)
+                            },
                             color = if(index == activeLine) MaterialTheme.colorScheme.onSurface else MutedText.copy(alpha = .45f),
-                            fontSize = if(index == activeLine) 28.sp else 23.sp,
+                            fontSize = 26.sp,
                             lineHeight = 34.sp,
-                            fontWeight = if(index == activeLine) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }

@@ -5,6 +5,48 @@ import org.junit.Test
 
 class LyricsTest {
     @Test
+    fun `generic YouTube metadata finds unambiguous matching title and duration`() {
+        val track = Track("Not Like Us", "YouTube Music", "YouTube Music", "https://music.youtube.com/watch?v=example", durationMs = 274_000)
+        val search = """[{"trackName":"Not Like Us","artistName":"Kendrick Lamar","duration":274,"syncedLyrics":"[00:01.00]Matched"}]"""
+
+        val document = fetchLrclibLyrics(track) { url ->
+            val query = java.net.URLDecoder.decode(url.substringAfter('?'), "UTF-8")
+            if (url.contains("/search?") && !query.contains("artist_name=YouTube Music")) 200 to search
+            else 404 to null
+        }
+
+        assertEquals("Matched", document?.syncedLines?.single()?.text)
+    }
+
+    @Test
+    fun `uploader title separates artist and song for lyrics lookup`() {
+        val track = Track("Kendrick Lamar - Not Like Us (Official Video)", "KendrickLamarVEVO", "YouTube Music", "https://music.youtube.com/watch?v=example", durationMs = 274_000)
+        val search = """[{"trackName":"Not Like Us","artistName":"Kendrick Lamar","duration":274,"plainLyrics":"Matched"}]"""
+
+        val document = fetchLrclibLyrics(track) { url ->
+            val query = java.net.URLDecoder.decode(url.substringAfter('?'), "UTF-8")
+            if (url.contains("/search?") && query.contains("track_name=Not Like Us") && query.contains("artist_name=Kendrick Lamar")) 200 to search
+            else 404 to null
+        }
+
+        assertEquals(listOf("Matched"), document?.plainLines)
+    }
+
+    @Test
+    fun `collaboration metadata retries the primary artist without losing title match`() {
+        val track = Track("One Of The Girls", "The Weeknd, JENNIE & Lily Rose Depp", "YouTube Music", "https://music.youtube.com/watch?v=example", durationMs = 244_000)
+        val search = """[{"trackName":"One Of The Girls","artistName":"The Weeknd","duration":244,"syncedLyrics":"[00:01.00]Matched"}]"""
+
+        val document = fetchLrclibLyrics(track) { url ->
+            val query = java.net.URLDecoder.decode(url.substringAfter('?'), "UTF-8")
+            if (url.contains("/search?") && query.substringAfter("artist_name=").substringBefore('&') == "The Weeknd") 200 to search
+            else 404 to null
+        }
+
+        assertEquals("Matched", document?.syncedLines?.single()?.text)
+    }
+
+    @Test
     fun `free lyrics search survives failed or empty exact lookup`() {
         val track = Track("Loser (Official Music Video)", "Tame Impala - Topic", "YouTube Music", "https://example.com/song", durationMs = 232_000)
         val search = """[{"trackName":"Loser","artistName":"Tame Impala","duration":232.5,"syncedLyrics":"[00:01.00]Matched"}]"""

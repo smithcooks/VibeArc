@@ -20,7 +20,7 @@ internal fun Context.selectedLauncherIcon(): LauncherIconChoice {
 }
 
 internal fun Context.setLauncherIcon(choice: LauncherIconChoice): Boolean = runCatching {
-    val selectedComponent = ComponentName(packageName, "$packageName.${choice.alias}")
+    val selectedComponent = ComponentName(packageName, "com.vibearc.app.${choice.alias}")
     packageManager.setComponentEnabledSetting(
         selectedComponent,
         PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
@@ -28,7 +28,7 @@ internal fun Context.setLauncherIcon(choice: LauncherIconChoice): Boolean = runC
     )
     LauncherIconChoice.entries.filterNot { it == choice }.forEach { other ->
         packageManager.setComponentEnabledSetting(
-            ComponentName(packageName, "$packageName.${other.alias}"),
+            ComponentName(packageName, "com.vibearc.app.${other.alias}"),
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
             PackageManager.DONT_KILL_APP,
         )

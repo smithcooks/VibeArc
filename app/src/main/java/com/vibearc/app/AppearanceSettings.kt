@@ -31,6 +31,7 @@ internal data class AppearanceConfig(
     val accentPreset: AccentPreset = AccentPreset.Mono,
     val applicationFontEnabled: Boolean = true,
     val customAccentArgb: Long = DEFAULT_ACCENT_ARGB,
+    val lyricsAnimationEnabled: Boolean = true,
 )
 
 internal fun AppearanceConfig.resolvedAccentArgb(): Long = when (accentPreset) {
@@ -63,6 +64,7 @@ internal fun Context.loadAppearanceConfig(): AppearanceConfig {
         accentPreset = if (!preferences.getBoolean("reference_theme", false) && preset == AccentPreset.LiquidGold) AccentPreset.Mono else preset,
         applicationFontEnabled = preferences.getBoolean("application_font", true),
         customAccentArgb = preferences.getLong("custom_accent", DEFAULT_ACCENT_ARGB),
+        lyricsAnimationEnabled = preferences.getBoolean("lyrics_animation", true),
     )
 }
 
@@ -77,5 +79,9 @@ internal fun Context.saveAppearanceConfig(config: AppearanceConfig) {
         .putBoolean("application_font", config.applicationFontEnabled)
         .putString("accent_preset", config.accentPreset.name)
         .putLong("custom_accent", config.customAccentArgb)
+        .putBoolean("lyrics_animation", config.lyricsAnimationEnabled)
         .apply()
 }
+
+internal fun lyricMotionTarget(active: Boolean, enabled: Boolean): Pair<Float,Float> =
+    if(active && enabled) 1.035f to -3f else 1f to 0f

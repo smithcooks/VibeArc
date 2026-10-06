@@ -137,7 +137,9 @@ class PlaybackService : MediaSessionService() {
         val http = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
         val sources = ResolvingDataSource.Factory(DefaultDataSource.Factory(this, http)) { spec ->
             try {
-                val audio = resolvePlaybackSource(spec.uri.toString()) { track ->
+                val downloads=OfflineDownloads.get(this)
+                val offline=runCatching { downloads.load(); downloads.offlineTrack(Track("","","",spec.uri.toString())) }.getOrNull()
+                val audio = offline?.uri ?: resolvePlaybackSource(spec.uri.toString()) { track ->
                     OnlineMusic.resolve(track, streamAudioFormat(), streamAudioQuality())
                 }
                 // The audio CDN's un-ranged initial response is slower; native seek ranges take priority.

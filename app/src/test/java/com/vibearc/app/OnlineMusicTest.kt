@@ -164,4 +164,23 @@ class OnlineMusicTest {
             parseInnertubeSearch(response),
         )
     }
+
+    @Test
+    fun `innerTube unlinked artist runs retain lyrics metadata and fixed column duration`() {
+        val response = """{"contents":[{"musicResponsiveListItemRenderer":{
+            "playlistItemData":{"videoId":"not-like-us"},
+            "flexColumns":[
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Not Like Us"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[
+                    {"text":"Kendrick Lamar"},{"text":" • "},{"text":"Not Like Us"}
+                ]}}}
+            ],
+            "fixedColumns":[{"musicResponsiveListItemFixedColumnRenderer":{"text":{"runs":[{"text":"4:34"}]}}}]
+        }}]}"""
+
+        val track = parseInnertubeSearch(response).single()
+
+        assertEquals("Kendrick Lamar", track.artist)
+        assertEquals(274_000L, track.durationMs)
+    }
 }

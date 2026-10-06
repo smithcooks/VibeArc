@@ -373,6 +373,7 @@ internal fun LibraryScreen(
     onRenamePlaylist:(String,String)->Unit, onDeletePlaylist:(String)->Unit,
     onAddToPlaylist:(String,String)->Unit, onRemoveFromPlaylist:(String,String)->Unit,
     onDownloadAll:(List<Track>)->Unit,
+    onDownloads:()->Unit,
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var sort by remember { mutableStateOf("Newest first") }
@@ -409,6 +410,7 @@ internal fun LibraryScreen(
         Box(Modifier.weight(1f)) {
             LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=12.dp,bottom=padding.calculateBottomPadding()+72.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
                 if(selectedId==null) {
+                    item { ReferenceRow("Downloads","Saved songs, progress & storage","download",onClick=onDownloads) }
                     item { PlaylistTile("Liked Songs","${tracks.count(Track::isFavorite)} tracks",tracks.firstOrNull(Track::isFavorite),0,playlists.size+2,{selectedId="__liked"}) {} }
                     val ordered=when(sort) { "Name"->playlists.sortedBy{it.name.lowercase()}; "Track count"->playlists.sortedByDescending{it.trackUris.size}; "Oldest first"->playlists; else->playlists.reversed() }
                     items(ordered,key=Playlist::id) { p ->

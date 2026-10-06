@@ -30,8 +30,8 @@ android {
         applicationId = "com.vibearc.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.0.0"
+        versionCode = 17
+        versionName = "1.3.0"
         buildConfigField("String", "LASTFM_API_KEY", "\"$escapedLastFmApiKey\"")
         buildConfigField("String", "LASTFM_SIGNER_URL", "\"${configValue("LASTFM_SIGNER_URL")}\"")
         buildConfigField("String", "LASTFM_SIGNER_TOKEN", "\"${configValue("LASTFM_SIGNER_TOKEN")}\"")
@@ -57,6 +57,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+        }
+        create("downloadTest") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".downloadtest"
+            versionNameSuffix = "-fallback"
+            matchingFallbacks += "release"
         }
         create("performance") {
             initWith(getByName("release"))

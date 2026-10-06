@@ -100,7 +100,8 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
             searching = true
             hasSearched = true
             try {
-                onlineResults = withContext(Dispatchers.IO) { OnlineMusic.search(requestedQuery) }
+                if(!networkAllowsDownload(context,false)) onlineError="You're offline. Saved and phone music are still available in Library and Downloads."
+                else onlineResults = withContext(Dispatchers.IO) { OnlineMusic.search(requestedQuery) }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 onlineResults = emptyList()

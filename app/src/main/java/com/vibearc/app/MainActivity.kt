@@ -81,6 +81,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -467,6 +468,8 @@ private fun VibeArcApp(
     var offlineCopyProgress by remember { mutableStateOf(0f) }
     var offlineCopyError by remember { mutableStateOf<Track?>(null) }
     var offlineCancelSignal by remember { mutableStateOf<AtomicBoolean?>(null) }
+    val offlineDownloads = remember(context) { OfflineDownloads.get(context) }
+    LaunchedEffect(offlineDownloads) { withContext(Dispatchers.IO) { runCatching { offlineDownloads.load() } } }
 
     LaunchedEffect(lastFmSnapshot) {
         if (lastFmRecommendations.isNotEmpty()) return@LaunchedEffect
@@ -521,7 +524,7 @@ private fun VibeArcApp(
     LaunchedEffect(activePlayer, library) {
         val connectedPlayer = activePlayer ?: return@LaunchedEffect
         connectedPlayer.currentMediaItem?.track?.let { restored ->
-            currentTrack = library.firstOrNull { it.uri == restored.uri } ?: restored
+            currentTrack = restored.copy(isFavorite=library.firstOrNull { it.catalogUri==restored.catalogUri }?.isFavorite ?: restored.isFavorite)
         }
         isPlaying = connectedPlayer.isPlaying
         queueTracks = connectedPlayer.queueTracks()
@@ -543,7 +546,7 @@ private fun VibeArcApp(
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 if (mediaItem == null) currentTrack = null
                 mediaItem?.track?.let { track ->
-                    currentTrack = library.firstOrNull { it.uri == track.uri } ?: track
+                    currentTrack = track.copy(isFavorite=library.firstOrNull { it.catalogUri==track.catalogUri }?.isFavorite ?: track.isFavorite)
                     recentUris = recentUris.recordRecentUri(mediaItem.mediaId)
                 }
                 queueTracks = activePlayer.queueTracks()
@@ -675,10 +678,15 @@ private fun VibeArcApp(
 
     val playTrack: (Track, List<Track>) -> Unit = { track, source ->
         if (activePlayer != null && isAllowedMediaUri(track.uri)) {
-            val saved = if (isYouTubeWatchUri(track.catalogUri)) track.copy(uri = track.catalogUri, sourceUri = "") else track
+            val saved = (if (isYouTubeWatchUri(track.catalogUri)) track.copy(uri = track.catalogUri, sourceUri = "") else track).withoutPlayCounts()
             library = library.upsert(saved).also(context::saveLibrary)
-            currentTrack = track
-            activePlayer.loadQueue(source, track)
+            fun withSavedArtwork(song: Track): Track {
+                val art=offlineDownloads.entries.value.firstOrNull { it.id==downloadIdentity(song) && it.status==DownloadStatus.COMPLETED }?.artworkUri
+                return (if(art.isNullOrBlank()) song else song.copy(artworkUri=art)).withoutPlayCounts()
+            }
+            val displayed=withSavedArtwork(track)
+            currentTrack = displayed
+            activePlayer.loadQueue(source.map(::withSavedArtwork), displayed)
             queueTracks = activePlayer.queueTracks()
             openPlayer()
         } else if (activePlayer == null) {
@@ -723,49 +731,14 @@ private fun VibeArcApp(
         }
     }
     fun copyTracksOffline(requested: List<Track>) {
-        val tracks = requested.filter(Track::canCopyOffline)
-        val folder = offlineFolder
-        if (folder == null) {
-            android.widget.Toast.makeText(context, "Choose an offline folder first", android.widget.Toast.LENGTH_LONG).show()
-        } else if (tracks.isEmpty()) {
-            android.widget.Toast.makeText(context, "No downloadable tracks were found", android.widget.Toast.LENGTH_LONG).show()
-        } else if (offlineCopyTrack == null) {
-            val signal = AtomicBoolean(false)
-            offlineCancelSignal = signal
-            offlineCopyTrack = tracks.first()
-            offlineCopyProgress = 0f
-            offlineCopyError = null
-            val format = context.downloadAudioFormat()
-            val quality = context.downloadAudioQuality()
-            uiScope.launch {
-                var failure: Pair<Track, Throwable>? = null
-                tracks.forEachIndexed { index, track ->
-                    if (failure != null || signal.get()) return@forEachIndexed
-                    offlineCopyTrack = track
-                    val copied = withContext(Dispatchers.IO) {
-                        runCatching {
-                            context.copyTrackToFolder(track, folder, format, quality, signal::get) { progress ->
-                                uiScope.launch { offlineCopyProgress = (index + progress) / tracks.size }
-                            }
-                        }
-                    }
-                    copied.getOrNull()?.let { file ->
-                        offlineFiles = (offlineFiles.filterNot { it.sourceUri == file.sourceUri } + file)
-                            .also(context::saveOfflineFiles)
-                    }
-                    copied.exceptionOrNull()?.let { failure = track to it }
-                }
-                if (failure != null && !signal.get()) {
-                    offlineCopyError = failure!!.first
-                    android.widget.Toast.makeText(
-                        context,
-                        failure!!.second.message ?: "Download failed",
-                        android.widget.Toast.LENGTH_LONG,
-                    ).show()
-                }
-                offlineCopyTrack = null
-                offlineCancelSignal = null
-            }
+        if(requested.isEmpty()) return
+        library = requested.fold(library) { saved,track -> saved.upsert(track) }.also(context::saveLibrary)
+        navigate(Tab.Downloads)
+        uiScope.launch {
+            val result=withContext(Dispatchers.IO) { runCatching { offlineDownloads.enqueue(requested) } }
+            if(result.isSuccess) runCatching { DownloadService.start(context) }.onFailure {
+                android.widget.Toast.makeText(context,"Tap Retry in Downloads to start the transfer",android.widget.Toast.LENGTH_LONG).show()
+            } else android.widget.Toast.makeText(context,"Could not queue downloads; saved files were preserved",android.widget.Toast.LENGTH_LONG).show()
         }
     }
     val copyTrackOffline: (Track) -> Unit = { copyTracksOffline(listOf(it)) }
@@ -787,12 +760,7 @@ private fun VibeArcApp(
         android.widget.Toast.makeText(context, "Added to playlist", android.widget.Toast.LENGTH_SHORT).show()
     }
     val downloadFromTrackMenu: (Track) -> Unit = { track ->
-        if (offlineFolder == null) {
-            navigate(Tab.Downloads)
-            android.widget.Toast.makeText(context, "Choose an offline folder first", android.widget.Toast.LENGTH_LONG).show()
-        } else {
-            copyTrackOffline(track)
-        }
+        copyTrackOffline(track)
     }
     fun mergeYouTubePlaylist(remotePlaylist: YouTubePlaylist, remoteTracks: List<Track>): Int {
         val id = "youtube:${remotePlaylist.id}"
@@ -946,7 +914,7 @@ private fun VibeArcApp(
     ) {
     Scaffold(
         topBar = {
-            if (currentTab !in listOf(Tab.Player, Tab.Search, Tab.Library)) ReferenceHeader(
+            if (currentTab !in listOf(Tab.Player, Tab.Search, Tab.Library, Tab.Downloads)) ReferenceHeader(
                 title = when(currentTab) { Tab.Home -> "Home"; Tab.Stats -> "Stats"; else -> currentTab.label },
                 onBack = if (currentTab !in MainTabs) navigateBack else null,
             ) {
@@ -1058,25 +1026,13 @@ private fun VibeArcApp(
                 onAddToPlaylist = { id, uri -> updatePlaylists(playlists.addTrackToPlaylist(id, uri)) },
                 onRemoveFromPlaylist = { id, uri -> updatePlaylists(playlists.removeTrackFromPlaylist(id, uri)) },
                 onDownloadAll = ::copyTracksOffline,
+                onDownloads = { navigate(Tab.Downloads) },
             )
-            Tab.Downloads -> DownloadsScreen(
+            Tab.Downloads -> OfflineDownloadsScreen(
                 padding = padding,
-                tracks = library,
-                offlineFolder = offlineFolder,
-                offlineFiles = offlineFiles,
-                copyingTrack = offlineCopyTrack,
-                copyProgress = offlineCopyProgress,
-                failedTrack = offlineCopyError,
-                onChooseFolder = { offlineFolderPicker.launch(offlineFolder) },
-                onCopy = copyTrackOffline,
-                onCancel = { offlineCancelSignal?.set(true) },
-                onRetry = { offlineCopyError?.let(copyTrackOffline) },
-                onDelete = { file ->
-                    if (context.deleteOfflineFile(file)) {
-                        offlineFiles = offlineFiles.filterNot { it.uri == file.uri }.also(context::saveOfflineFiles)
-                    }
-                },
                 onPlay = playTrack,
+                onBack = navigateBack,
+                onSettings = { navigate(Tab.Settings) },
             )
             Tab.Player -> if (activePlayer != null && currentTrack != null) PlayerScreen(
                 padding = padding,
@@ -1103,6 +1059,7 @@ private fun VibeArcApp(
                     )
                 },
                 dynamicArtworkColor = appearance.dynamicNowPlayingEnabled,
+                lyricsAnimationEnabled = appearance.lyricsAnimationEnabled,
             ) else EmptyPlayer(padding) { currentTab = Tab.Search }
             Tab.Settings -> SettingsScreen(
                 padding, appearance, onAppearanceChange,
@@ -1517,6 +1474,10 @@ internal fun SongActionTarget(track: Track?, onClick: () -> Unit, modifier: Modi
 @Composable
 private fun SongOptionsSheet(track: Track, playableTrack: Track?, onDismiss: () -> Unit) {
     val actions = LocalTrackActions.current ?: return
+    val downloadContext=LocalContext.current
+    val downloadStore=remember(downloadContext) { OfflineDownloads.get(downloadContext) }
+    val downloads by downloadStore.entries.collectAsState()
+    val download=downloads.firstOrNull { it.id==downloadIdentity(track) }
     var showPlaylists by remember(track.catalogUri) { mutableStateOf(false) }
         ModalBottomSheet(onDismissRequest = onDismiss) {
             Column(
@@ -1566,8 +1527,16 @@ private fun SongOptionsSheet(track: Track, playableTrack: Track?, onDismiss: () 
                         onDismiss()
                     }
                     ReferenceRow(
-                        "Download song",
-                        if (track.uri.startsWith("https://")) "Save audio to your selected offline folder" else "Copy to your selected offline folder",
+                        when(download?.status) {
+                            DownloadStatus.COMPLETED -> "Downloaded"
+                            DownloadStatus.RESOLVING -> "Resolving audio source"
+                            DownloadStatus.DOWNLOADING -> "Downloading ${(download.progress*100).toInt()}%"
+                            DownloadStatus.QUEUED -> "Download queued"
+                            DownloadStatus.PAUSED -> "Download paused"
+                            else -> "Download song"
+                        },
+                        if(download?.status==DownloadStatus.COMPLETED) "Open Downloads to play or remove the saved copy"
+                        else if (track.uri.startsWith("https://")) "Save playback audio · manage progress in Downloads" else "Use the original phone file without duplicating it",
                         "download",
                         5,
                         6,
@@ -1606,8 +1575,8 @@ private fun Player.queueTracks(): List<Track> =
 private fun Track.toMediaItem(): MediaItem {
     require(isAllowedMediaUri(uri)) { "Unsupported media URI" }
     val metadata = MediaMetadata.Builder()
-        .setTitle(title)
-        .setArtist(artist)
+        .setTitle(cleanRecordingLabel(title))
+        .setArtist(cleanRecordingLabel(artist))
         .setAlbumTitle(album)
         .setExtras(Bundle().apply {
             putLong("durationMs", durationMs)
@@ -1635,7 +1604,7 @@ private val MediaItem.track: Track
         artworkUri = mediaMetadata.artworkUri?.toString().orEmpty(),
         folder = mediaMetadata.extras?.getString("folder").orEmpty().ifBlank { "Imported" },
         sourceUri = mediaMetadata.extras?.getString("sourceUri").orEmpty().ifBlank { mediaId },
-    )
+    ).withoutPlayCounts()
 
 private fun Int.nextRepeatMode(): Int = when (this) {
     Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL

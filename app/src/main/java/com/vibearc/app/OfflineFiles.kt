@@ -5,8 +5,6 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import java.nio.charset.StandardCharsets.UTF_8
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Base64
 import java.util.concurrent.CancellationException
 
@@ -30,13 +28,7 @@ internal val OfflineFile.qualityLabel: String get() = buildList {
     sampleRateHz.takeIf { it > 0 }?.let { add("${it / 1_000.0} kHz") }
 }.joinToString(" · ")
 
-internal fun Track.canCopyOffline(): Boolean = Uri.parse(uri).scheme in setOf("content", "file") ||
-    Uri.parse(catalogUri).host in setOf("music.youtube.com", "www.youtube.com", "youtu.be")
-
-internal fun isTrustedOnlineAudioUrl(value: String): Boolean = runCatching {
-    val url = URL(value)
-    url.protocol == "https" && (url.host == "googlevideo.com" || url.host.endsWith(".googlevideo.com"))
-}.getOrDefault(false)
+internal fun Track.canCopyOffline(): Boolean = Uri.parse(uri).scheme in setOf("content", "file")
 
 internal fun safeOfflineFileName(value: String): String = value.trim()
     .replace(Regex("[\\\\/:*?\"<>|]"), "_")
@@ -98,7 +90,7 @@ internal fun Context.copyLocalTrackToFolder(
 ): OfflineFile {
     val source = Uri.parse(track.uri)
     require(source.scheme in setOf("content", "file")) { "Only local audio can be copied offline" }
-    val metadata = contentResolver.query(source, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
+    val metadata = if(source.scheme=="file") null else contentResolver.query(source, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
         ?.use { cursor ->
             if (!cursor.moveToFirst()) null else {
                 cursor.getString(0).orEmpty() to cursor.getLong(1).coerceAtLeast(0L)
@@ -115,9 +107,9 @@ internal fun Context.copyLocalTrackToFolder(
     ) ?: error("The selected folder could not create a file")
     try {
         val input = contentResolver.openInputStream(source) ?: error("Could not open local audio")
-        val destination = contentResolver.openOutputStream(output, "w") ?: error("Could not write destination")
         var copied = 0L
         input.use { sourceStream ->
+            val destination = contentResolver.openOutputStream(output, "w") ?: error("Could not write destination")
             destination.use { outputStream ->
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
@@ -138,86 +130,6 @@ internal fun Context.copyLocalTrackToFolder(
     }
 }
 
-internal fun Context.copyTrackToFolder(
-    track: Track,
-    folder: Uri,
-    format: AudioFormat,
-    quality: AudioQuality,
-    cancelled: () -> Boolean,
-    onProgress: (Float) -> Unit,
-): OfflineFile {
-    if (Uri.parse(track.uri).scheme in setOf("content", "file")) {
-        return copyLocalTrackToFolder(track, folder, cancelled, onProgress)
-    }
-    val candidate = OnlineMusic.audioCandidate(track.copy(uri = track.catalogUri), format, quality)
-    require(isTrustedOnlineAudioUrl(candidate.url)) { "The provider returned an untrusted audio location" }
-    val connection = openTrustedAudioConnection(candidate.url)
-    val responseType = connection.contentType.orEmpty().substringBefore(';').lowercase()
-    val size = connection.contentLengthLong.takeIf { it >= 0 } ?: candidate.contentLength
-    require(size <= MaxOfflineAudioBytes) { "This audio file is too large" }
-    require(responseType.startsWith("audio/") || responseType == "application/octet-stream") {
-        "The provider did not return audio"
-    }
-    val extension = candidate.extension.lowercase().takeIf { it in setOf("m4a", "mp4", "webm", "opus", "mp3", "flac") }
-        ?: candidate.format.extension
-    val name = safeOfflineFileName("${track.artist} - ${track.title}.$extension")
-    val parent = DocumentsContract.buildDocumentUriUsingTree(folder, DocumentsContract.getTreeDocumentId(folder))
-    val output = DocumentsContract.createDocument(
-        contentResolver,
-        parent,
-        candidate.mimeType.takeIf { it.startsWith("audio/") } ?: "audio/*",
-        name,
-    ) ?: error("The selected folder could not create a file")
-    try {
-        val destination = contentResolver.openOutputStream(output, "w") ?: error("Could not write destination")
-        var copied = 0L
-        connection.inputStream.use { sourceStream ->
-            destination.use { outputStream ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) {
-                    if (cancelled()) throw CancellationException("Offline download cancelled")
-                    val count = sourceStream.read(buffer)
-                    if (count < 0) break
-                    copied += count
-                    require(copied <= MaxOfflineAudioBytes) { "This audio file is too large" }
-                    outputStream.write(buffer, 0, count)
-                    if (size > 0) onProgress((copied.toFloat() / size).coerceIn(0f, 1f))
-                }
-            }
-        }
-        onProgress(1f)
-        return OfflineFile(
-            output.toString(), name, copied, track.catalogUri, candidate.format.label,
-            candidate.bitrate, candidate.sampleRate, candidate.isLossless, candidate.isHiRes,
-        )
-    } catch (error: Throwable) {
-        runCatching { DocumentsContract.deleteDocument(contentResolver, output) }
-        throw error
-    } finally {
-        connection.disconnect()
-    }
-}
-
-private const val MaxOfflineAudioBytes = 1024L * 1024 * 1024
-
-private fun openTrustedAudioConnection(value: String): HttpURLConnection {
-    var next = value
-    repeat(4) {
-        require(isTrustedOnlineAudioUrl(next)) { "The provider returned an untrusted audio location" }
-        val connection = URL(next).openConnection() as HttpURLConnection
-        connection.instanceFollowRedirects = false
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
-        connection.setRequestProperty("User-Agent", "VibeArc/0.9.0 (Android music player)")
-        val code = connection.responseCode
-        if (code in 200..299) return connection
-        val redirect = connection.getHeaderField("Location")
-        connection.disconnect()
-        if (code !in 300..399 || redirect.isNullOrBlank()) error("Audio download failed ($code)")
-        next = URL(URL(next), redirect).toString()
-    }
-    error("Too many audio redirects")
-}
 
 internal fun Context.deleteOfflineFile(file: OfflineFile): Boolean = runCatching {
     DocumentsContract.deleteDocument(contentResolver, Uri.parse(file.uri))
