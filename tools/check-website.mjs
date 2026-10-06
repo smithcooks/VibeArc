@@ -18,7 +18,12 @@ for (const image of html.matchAll(/<img\b[^>]+>/g)) {
   assert.match(image[0], /width="\d+"/);
   assert.match(image[0], /height="\d+"/);
 }
-assert.match(html, /releases\/download\/v1\.0\.0\/VibeArc-v1\.0\.0\.apk/);
+const downloadLinks = [...html.matchAll(/href="([^"]+\/releases\/download\/[^\"]+\.apk)"/g)].map(match => match[1]);
+assert.equal(downloadLinks.length, 2);
+for (const link of downloadLinks) assert.equal(link, 'https://github.com/smithcooks/VibeArc/releases/download/v1.3.0/VibeArc-v1.3.0.apk');
+assert.doesNotMatch(html, /v1\.0\.0/);
+assert.match(html, /v1\.3\.0 · 13\.8 MB/);
+assert.match(html, /releases\/tag\/v1\.3\.0/);
 assert.match(html, /disabled[^>]*>Windows/);
 assert.match(html, /disabled[^>]*>Linux/);
 assert.doesNotMatch(html, /Nuclear|Nuki|Discord|macOS|Flathub|Snapcraft|winget|Homebrew|lorem ipsum/i);

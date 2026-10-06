@@ -17,13 +17,13 @@ A native Android music player with liquid glass, artwork-driven colors, synchron
 </p>
 
 <p align="center">
-  <a href="https://github.com/smithcooks/VibeArc/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-A7D8C7?style=for-the-badge&labelColor=242424" alt="Release v1.0.0"></a>
+  <a href="https://github.com/smithcooks/VibeArc/releases/tag/v1.3.0"><img src="https://img.shields.io/badge/Release-v1.3.0-A7D8C7?style=for-the-badge&labelColor=242424" alt="Release v1.3.0"></a>
   <a href="#tech-stack--architecture"><img src="https://img.shields.io/badge/UI-Kotlin%20%2B%20Compose-C4B5FD?style=for-the-badge&logo=kotlin&logoColor=white&labelColor=242424" alt="Kotlin and Jetpack Compose"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-F4BACB?style=for-the-badge&labelColor=242424" alt="GPL v3 license"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk"><img src="https://img.shields.io/badge/Download-Android%20APK-3548D5?style=for-the-badge&logo=android&logoColor=white" alt="Download the Android APK"></a>
+  <a href="https://github.com/smithcooks/VibeArc/releases/download/v1.3.0/VibeArc-v1.3.0.apk"><img src="https://img.shields.io/badge/Download-Android%20APK-3548D5?style=for-the-badge&logo=android&logoColor=white" alt="Download the Android APK"></a>
   <a href="https://smithcooks.github.io/VibeArc/"><img src="https://img.shields.io/badge/Website-Explore%20VibeArc-242424?style=for-the-badge&logo=githubpages&logoColor=A7D8C7" alt="Visit the VibeArc website"></a>
   <a href="https://github.com/smithcooks/VibeArc/issues"><img src="https://img.shields.io/badge/Feedback-Report%20an%20issue-242424?style=for-the-badge&logo=github&logoColor=F4BACB" alt="Report an issue"></a>
 </p>
@@ -51,7 +51,7 @@ A native Android music player with liquid glass, artwork-driven colors, synchron
   <br><br>
   <a href="docs/screenshots/accounts.jpg"><img src="docs/screenshots/accounts.jpg" width="31%" alt="VibeArc connected account and playlist settings"></a>
   <a href="docs/screenshots/about.jpg"><img src="docs/screenshots/about.jpg" width="31%" alt="VibeArc About screen showing version 0.9.0 beta"></a>
-  <p><sub>Screenshots captured from VibeArc v0.9 beta. Unaltered app UI; the current download is v1.0.0. Click a screenshot to view it in full.</sub></p>
+  <p><sub>Screenshots captured from VibeArc v0.9 beta. Unaltered app UI; the current download is v1.3.0. Click a screenshot to view it in full.</sub></p>
 </div>
 
 <br>
@@ -72,7 +72,7 @@ Built with **Kotlin, Jetpack Compose, Material 3, and Media3**, it gives you a p
 | <img src="https://api.iconify.design/lucide:music.svg?color=%23A7D8C7" width="20" height="20" alt=""> | **Your library & queue** | Browse tracks, artists, albums, and folders. Long-press to like, queue, save to a playlist, or download. |
 | <img src="https://api.iconify.design/lucide:radio.svg?color=%23D51007" width="20" height="20" alt=""> | **Last.fm connection** | Profiles, statistics, and radio with configuration; authenticated Now Playing and scrobbling require your deployed signer. |
 | <img src="https://api.iconify.design/lucide:mic.svg?color=%23F4BACB" width="20" height="20" alt=""> | **Synchronized lyrics** | Line highlighting, timed words when supplied, manual matching/editing, timing offsets, and `.lrc` export. |
-| <img src="https://api.iconify.design/lucide:arrow-down-to-line.svg?color=%23A7D8C7" width="20" height="20" alt=""> | **Offline downloads** | Save authorized, compatible sources to a selected folder. Format preferences select available sources, not automatic conversion. |
+| <img src="https://api.iconify.design/lucide:arrow-down-to-line.svg?color=%23A7D8C7" width="20" height="20" alt=""> | **Offline downloads** | Save playable online songs using the tested playback downloader. Browse, search, filter, and export your offline collection; mobile data is allowed by default. |
 | <img src="https://api.iconify.design/lucide:compass.svg?color=%2362C7D7" width="20" height="20" alt=""> | **Discovery & radio** | Browse mixes, artist spotlights, recommendations, and radio from available provider and listening data. |
 | <img src="https://api.iconify.design/lucide:palette.svg?color=%23A7D8C7" width="20" height="20" alt=""> | **Make it yours** | Artwork-driven accents, wallpaper colors, AMOLED mode, optional liquid glass, custom fonts, and three launcher icons. |
 | <img src="https://api.iconify.design/lucide:headphones.svg?color=%23F4BACB" width="20" height="20" alt=""> | **Playback controls** | Background playback, lock-screen controls, shuffle, repeat, sleep timer, audio tuning, and crossfade where supported. |
@@ -94,7 +94,7 @@ Built with **Kotlin, Jetpack Compose, Material 3, and Media3**, it gives you a p
 <summary><strong>Downloads, audio quality, and device limitations</strong></summary>
 
 - Download only music you own or have permission to save, and respect provider terms.
-- AAC, Opus, MP3, and FLAC preferences select existing sources. Missing formats are not converted, and lossy audio is not made lossless.
+- Saved format and quality depend on the available playback source. Downloads report the actual codec; no conversion or invented lossless quality is promised.
 - The 15-band equalizer uses DynamicsProcessing on supported Android 9+ devices. Audio effects depend on Android and your hardware.
 - Studio Master is a tuning preset, not a quality certification. Lossless sources do not guarantee bit-perfect or Hi-Res device output.
 - Discovery results depend on provider data and account setup, not guaranteed complete personalization.
@@ -120,12 +120,12 @@ Built with **Kotlin, Jetpack Compose, Material 3, and Media3**, it gives you a p
 
 ## <img src="https://api.iconify.design/lucide:rocket.svg?color=%23A7D8C7" width="20" height="20" alt=""> Getting Started
 
-1. Download [**VibeArc-v1.0.0.apk**](https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk) from the [official release](https://github.com/smithcooks/VibeArc/releases/tag/v1.0.0).
+1. Download [**VibeArc-v1.3.0.apk**](https://github.com/smithcooks/VibeArc/releases/download/v1.3.0/VibeArc-v1.3.0.apk) from the [official release](https://github.com/smithcooks/VibeArc/releases/tag/v1.3.0).
 2. Allow installation for the browser or file manager you used, then install on **Android 8.0+ (API 26)**.
 3. Add local music or explore compatible online sources. Configure Last.fm separately if you want it.
 4. Choose your accent, build your queue, and press play.
 
-Export a JSON backup before updating. Version code **12** and the existing release certificate support updates over v0.9 and v1.0.0-beta; do not uninstall or clear data first. Check the [APK SHA-256 checksum](https://github.com/smithcooks/VibeArc/releases/download/v1.0.0/VibeArc-v1.0.0.apk.sha256). Sideloading warnings may appear; VibeArc is not a Google Play listing or Play Protect certification.
+Export a JSON backup before updating. Version code **17** and the existing release certificate support updates over earlier main-app releases; do not uninstall or clear data first. Downloads in the separate test app stay in that app’s storage. Check the [APK SHA-256 checksum](https://github.com/smithcooks/VibeArc/releases/download/v1.3.0/VibeArc-v1.3.0.apk.sha256). Sideloading warnings may appear; VibeArc is not a Google Play listing or Play Protect certification.
 
 **Android is available now. Windows and Linux are coming soon.**
 
