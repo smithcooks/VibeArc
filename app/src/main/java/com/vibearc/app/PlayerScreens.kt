@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -51,7 +53,7 @@ import kotlinx.coroutines.withContext
 internal fun PlayerScreen(
     padding: PaddingValues, player: Player, track: Track, isPlaying: Boolean,
     queue: List<Track>, shuffleEnabled: Boolean, repeatMode: Int, sleepRemainingMillis: Long,
-    onBack: () -> Unit, onFavorite: (() -> Unit)?, onToggleShuffle: () -> Unit,
+    onBack: () -> Unit, onFavorite: (() -> Unit)?, onDownload: () -> Unit, onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit, onCycleSleepTimer: () -> Unit,
     dynamicArtworkColor: Boolean,
     lyricsAnimationEnabled: Boolean,
@@ -60,6 +62,10 @@ internal fun PlayerScreen(
     var menu by remember { mutableStateOf(false) }
     var audioInfo by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val downloadStore = remember(context) { OfflineDownloads.get(context) }
+    val downloads by downloadStore.entries.collectAsState()
+    val download = downloads.firstOrNull { it.id == downloadIdentity(track) }
+    val downloadBusy = download?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RESOLVING, DownloadStatus.DOWNLOADING)
     val wavy = remember { context.wavySeekbarEnabled() }
     val background = MaterialTheme.colorScheme.background
     val tint = if (dynamicArtworkColor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -97,7 +103,23 @@ internal fun PlayerScreen(
                     LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         item {
-                            TrackArtwork(track, "Artwork for ${track.title}", Modifier.size(artworkSize).clip(RoundedCornerShape(28.dp)), sizePx = 768)
+                            TrackArtwork(track, "Artwork for ${track.title}. Swipe left for next track, right for previous track.",
+                                Modifier.size(artworkSize).clip(RoundedCornerShape(28.dp)).pointerInput(player, track.catalogUri) {
+                                    var distance = 0f
+                                    val threshold = 56.dp.toPx()
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { distance = 0f },
+                                        onDragCancel = { distance = 0f },
+                                        onDragEnd = {
+                                            when (artworkSwipeStep(distance, threshold)) {
+                                                1 -> if (player.hasNextMediaItem()) player.seekToNextMediaItem()
+                                                -1 -> if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
+                                            }
+                                            distance = 0f
+                                        },
+                                        onHorizontalDrag = { change, amount -> change.consume(); distance += amount },
+                                    )
+                                }, sizePx = 768)
                         }
                         item {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -107,6 +129,17 @@ internal fun PlayerScreen(
                                     Text(track.artist, style = MaterialTheme.typography.titleLarge, color = MutedText, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
                                 PlayerAction(if(track.isFavorite) "Remove from favorites" else "Add to favorites", if(track.isFavorite) "heartFilled" else "heart", enabled = onFavorite != null) { onFavorite?.invoke() }
+                                Spacer(Modifier.width(8.dp))
+                                PlayerAction(when(download?.status) {
+                                    DownloadStatus.COMPLETED -> "Open downloaded song"
+                                    DownloadStatus.QUEUED -> "Download queued"
+                                    DownloadStatus.RESOLVING -> "Finding download audio"
+                                    DownloadStatus.DOWNLOADING -> "Downloading ${((download?.progress ?: 0f) * 100).toInt()} percent"
+                                    DownloadStatus.PAUSED -> "Resume song download"
+                                    DownloadStatus.FAILED, DownloadStatus.CANCELLED -> "Retry song download"
+                                    null -> "Download song"
+                                }, if(download?.status == DownloadStatus.COMPLETED) "check" else "download",
+                                    enabled = !downloadBusy, busy = downloadBusy, onClick = onDownload)
                                 Spacer(Modifier.width(8.dp))
                                 PlayerAction("Show lyrics", "quote") { page = "lyrics" }
                             }
@@ -352,10 +385,11 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
 }
 
 @Composable
-private fun PlayerAction(label: String, glyph: String, size: androidx.compose.ui.unit.Dp = 48.dp, enabled: Boolean = true, onClick: () -> Unit) {
+private fun PlayerAction(label: String, glyph: String, size: androidx.compose.ui.unit.Dp = 48.dp, enabled: Boolean = true, busy: Boolean = false, onClick: () -> Unit) {
     ReferenceSurface(shape = CircleShape) {
         IconButton(onClick, Modifier.size(size).semantics { contentDescription = label }, enabled = enabled) {
-            Glyph(glyph, Modifier.size(25.dp), if(enabled) MaterialTheme.colorScheme.onSurface else MutedText.copy(alpha = .45f))
+            if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onSurface, strokeWidth = 2.dp)
+            else Glyph(glyph, Modifier.size(25.dp), if(enabled) MaterialTheme.colorScheme.onSurface else MutedText.copy(alpha = .45f))
         }
     }
 }

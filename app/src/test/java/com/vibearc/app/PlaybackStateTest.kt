@@ -5,6 +5,20 @@ import org.junit.Test
 
 class PlaybackStateTest {
     @Test
+    fun `artwork swipes go left for next and right for previous only beyond the threshold`() {
+        assertEquals(1, artworkSwipeStep(-80f, 56f))
+        assertEquals(-1, artworkSwipeStep(80f, 56f))
+        assertEquals(1, artworkSwipeStep(-56f, 56f))
+        assertEquals(-1, artworkSwipeStep(56f, 56f))
+        assertEquals(0, artworkSwipeStep(55f, 56f))
+        assertEquals(0, artworkSwipeStep(-55f, 56f))
+        assertEquals(0, artworkSwipeStep(0f, 56f))
+        assertEquals(0, artworkSwipeStep(Float.NaN, 56f))
+        assertEquals(0, artworkSwipeStep(Float.POSITIVE_INFINITY, 56f))
+        assertEquals(0, artworkSwipeStep(80f, 0f))
+    }
+
+    @Test
     fun `home feed includes current music and keeps playable unique tracks`() {
         val current = Track("Current", "Artist", "Album", "https://example.com/current")
         val recent = Track("Recent", "Artist", "Album", "content://media/recent")

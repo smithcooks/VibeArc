@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0] - 2026-10-06
+
+### Added
+
+- Settings → About includes Buy Me a Chai, opening Smith's existing support page in the browser. Contributions are optional.
+- Now Playing has a Download action beside Like and Lyrics. It uses the existing downloader without leaving the player, shows busy/saved states, and opens Downloads for a saved song.
+- Swipe the album artwork left for the next queued song or right for the previous one. Short/cancelled drags do not skip; Previous/Next buttons remain available.
+
+### Fixed
+
+- Wi-Fi-only downloads now share the Audio & Streaming group's corners and spacing, with shorter explanatory text. Mobile-data policy is unchanged.
+
 ## [1.3.0] - 2026-10-06
 
 ### Changed

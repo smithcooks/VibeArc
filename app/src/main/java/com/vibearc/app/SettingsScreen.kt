@@ -150,19 +150,19 @@ internal fun SettingsScreen(
             updateAudioTuning(audioTuning.copy(studioMasterEnabled=!audioTuning.studioMasterEnabled,bitPerfectEnabled=false))
         }) }
         item { SettingsHeading("Audio & Streaming") }
-        item { ReferenceRow("Streaming Quality","${streamFormat.label} · ${streamQuality.label}","quality",0,6,onClick={sheet="Streaming Quality"}) }
-        item { ReferenceRow("Offline Downloads","Save original playback audio · no format conversion","download",1,6,onClick=onDownloads) }
-        item { ReferenceRow("Download on Wi-Fi only",if(wifiOnly) "Mobile data is off for downloads" else "Wi-Fi and mobile data allowed · carrier charges may apply","download",checked=wifiOnly,onClick={
+        item { ReferenceRow("Streaming Quality","${streamFormat.label} · ${streamQuality.label}","quality",0,7,onClick={sheet="Streaming Quality"}) }
+        item { ReferenceRow("Offline Downloads","Save original playback audio · no format conversion","download",1,7,onClick=onDownloads) }
+        item { ReferenceRow("Download on Wi-Fi only",if(wifiOnly) "Mobile data off for downloads" else "Wi-Fi + mobile data · charges may apply","download",2,7,checked=wifiOnly,onClick={
             wifiOnly=!wifiOnly;downloads.setWifiOnly(wifiOnly)
             if(downloads.entries.value.any { it.status==DownloadStatus.QUEUED || (it.status==DownloadStatus.PAUSED && it.autoResume) }) runCatching { DownloadService.start(context) }
         }) }
-        item { ReferenceRow("Bit-Perfect Mode",if(audioTuning.bitPerfectEnabled) context.bitPerfectStatus() else if(Build.VERSION.SDK_INT>=34) "Verified USB mixer path when available" else "Requires Android 14 and a compatible USB DAC","equalizer",2,6,audioTuning.bitPerfectEnabled,enabled=Build.VERSION.SDK_INT>=34,onClick={
+        item { ReferenceRow("Bit-Perfect Mode",if(audioTuning.bitPerfectEnabled) context.bitPerfectStatus() else if(Build.VERSION.SDK_INT>=34) "Verified USB mixer path when available" else "Requires Android 14 and a compatible USB DAC","equalizer",3,7,audioTuning.bitPerfectEnabled,enabled=Build.VERSION.SDK_INT>=34,onClick={
             val enabled=!audioTuning.bitPerfectEnabled
             updateAudioTuning(audioTuning.copy(bitPerfectEnabled=enabled,equalizerEnabled=if(enabled) false else audioTuning.equalizerEnabled,studioMasterEnabled=if(enabled) false else audioTuning.studioMasterEnabled,crossfadeSeconds=if(enabled) 0 else audioTuning.crossfadeSeconds))
         }) }
-        item { ReferenceRow("Crossfade",audioTuning.crossfadeSeconds.takeIf{it>0}?.let{"$it-second overlapping transition"}?:"Off","equalizer",3,6,audioTuning.crossfadeSeconds>0,onClick={sheet="Crossfade"}) }
-        item { ReferenceRow("Download Synced Lyrics","Save matching lyrics as an .lrc file","lyrics",4,6,onClick={unavailable("Download Synced Lyrics","Open Lyrics from Now Playing. When synchronized lyrics are available, tap the download button and choose where to save the .lrc file.")}) }
-        item { ReferenceRow("Background Playback","Manage this app's battery settings","clock",5,6,onClick={
+        item { ReferenceRow("Crossfade",audioTuning.crossfadeSeconds.takeIf{it>0}?.let{"$it-second overlapping transition"}?:"Off","equalizer",4,7,audioTuning.crossfadeSeconds>0,onClick={sheet="Crossfade"}) }
+        item { ReferenceRow("Download Synced Lyrics","Save matching lyrics as an .lrc file","lyrics",5,7,onClick={unavailable("Download Synced Lyrics","Open Lyrics from Now Playing. When synchronized lyrics are available, tap the download button and choose where to save the .lrc file.")}) }
+        item { ReferenceRow("Background Playback","Manage this app's battery settings","clock",6,7,onClick={
             runCatching {context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:${context.packageName}")))}
                 .onFailure {unavailable("Background Playback","Open Android Settings → Apps → VibeArc → Battery.")}
         }) }
@@ -180,6 +180,10 @@ internal fun SettingsScreen(
         item { SettingsHeading("About") }
         item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, KuGou, LRCLIB, Lyrics.ovh, Last.fm, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
         item { ReferenceRow("Updates & Support","VibeArc on GitHub","spark",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/$UpdateRepository")))}}) }
+        item { ReferenceRow("Buy Me a Chai","Support Smith · opens your browser","heart",onClick={
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://buymeachai.ezee.li/Smith_cooks"))) }
+                .onFailure { unavailable("Buy Me a Chai","Open https://buymeachai.ezee.li/Smith_cooks in your browser to support Smith. Contributions are optional.") }
+        }) }
         item {
             Spacer(Modifier.height(24.dp))
             ReferenceSurface {

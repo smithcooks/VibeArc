@@ -5,6 +5,13 @@ import java.util.Base64
 
 private const val RecentLimit = 20
 
+internal fun artworkSwipeStep(distancePx: Float, thresholdPx: Float): Int = when {
+    !distancePx.isFinite() || !thresholdPx.isFinite() || thresholdPx <= 0f -> 0
+    distancePx <= -thresholdPx -> 1
+    distancePx >= thresholdPx -> -1
+    else -> 0
+}
+
 internal fun homeFeedTracks(library: List<Track>, recent: List<Track>, current: Track?): List<Track> =
     (listOfNotNull(current) + recent + library).filter { isAllowedMediaUri(it.uri) }.distinctBy(Track::uri)
 

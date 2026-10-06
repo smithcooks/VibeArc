@@ -730,10 +730,10 @@ private fun VibeArcApp(
             }
         }
     }
-    fun copyTracksOffline(requested: List<Track>) {
+    fun copyTracksOffline(requested: List<Track>, showDownloads: Boolean = true) {
         if(requested.isEmpty()) return
         library = requested.fold(library) { saved,track -> saved.upsert(track) }.also(context::saveLibrary)
-        navigate(Tab.Downloads)
+        if (showDownloads) navigate(Tab.Downloads)
         uiScope.launch {
             val result=withContext(Dispatchers.IO) { runCatching { offlineDownloads.enqueue(requested) } }
             if(result.isSuccess) runCatching { DownloadService.start(context) }.onFailure {
@@ -1025,7 +1025,7 @@ private fun VibeArcApp(
                 },
                 onAddToPlaylist = { id, uri -> updatePlaylists(playlists.addTrackToPlaylist(id, uri)) },
                 onRemoveFromPlaylist = { id, uri -> updatePlaylists(playlists.removeTrackFromPlaylist(id, uri)) },
-                onDownloadAll = ::copyTracksOffline,
+                onDownloadAll = { copyTracksOffline(it) },
                 onDownloads = { navigate(Tab.Downloads) },
             )
             Tab.Downloads -> OfflineDownloadsScreen(
@@ -1045,6 +1045,11 @@ private fun VibeArcApp(
                 sleepRemainingMillis = sleepRemainingMillis,
                 onBack = closePlayer,
                 onFavorite = if (library.any { it.uri == currentTrack!!.uri }) ({ toggleFavorite(currentTrack!!) }) else null,
+                onDownload = {
+                    val selected = currentTrack!!
+                    if (offlineDownloads.entries.value.any { it.id == downloadIdentity(selected) && it.status == DownloadStatus.COMPLETED }) navigate(Tab.Downloads)
+                    else copyTracksOffline(listOf(selected), showDownloads = false)
+                },
                 onToggleShuffle = { activePlayer.shuffleModeEnabled = !activePlayer.shuffleModeEnabled },
                 onCycleRepeat = { activePlayer.repeatMode = activePlayer.repeatMode.nextRepeatMode() },
                 onCycleSleepTimer = {
