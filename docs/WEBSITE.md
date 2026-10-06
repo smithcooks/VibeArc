@@ -7,13 +7,13 @@ not branding, mascot, copy, or distribution links.
 
 ## Content and scope
 
-Hero → Search → Library/playlists → Appearance → Settings → screenshot rail →
-open source → download → footer. Android v1.3.0 has a direct official APK link.
+Hero → click-to-play promo → Search → Library/playlists → Appearance → Settings → screenshot rail →
+open source → download → footer. Android v1.4.0 has a direct official APK link.
 Windows and Linux are clearly disabled, labeled Coming soon. No invented
 package distributions, testimonials, plugin support, or playback guarantees.
-The v1.3.0 download links use the signed GitHub release asset. The optional
+The v1.4.0 download links use the signed GitHub release asset. The optional
 Buy Me a Chai support button uses the user-provided URL and external image. CSP
-permits only that additional image host; the text fallback survives image failure.
+permits that additional image host and the GitHub release media hosts; the text fallback survives image failure.
 The support button also appears beside the logo in the initial header, with a
 compact mobile layout so it is visible before scrolling.
 
@@ -69,3 +69,4 @@ Rollback by reverting the website commits; APK assets remain independent.
 Versioned stylesheet/script URLs prevent returning browsers from mixing the
 new HTML with the previous design's cached assets. Bump both asset revisions
 when either changes; the website contract guards this deployment boundary.
+The approved silent 30-second 1080×1920 promo is a GitHub release asset, not a large file in git. Native video controls, playsinline, preload="none", a local poster with reserved aspect ratio, and a permanent download link keep playback optional and provide a fallback.

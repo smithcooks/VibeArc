@@ -20,10 +20,10 @@ for (const image of html.matchAll(/<img\b[^>]+>/g)) {
 }
 const downloadLinks = [...html.matchAll(/href="([^"]+\/releases\/download\/[^\"]+\.apk)"/g)].map(match => match[1]);
 assert.equal(downloadLinks.length, 2);
-for (const link of downloadLinks) assert.equal(link, 'https://github.com/smithcooks/VibeArc/releases/download/v1.3.0/VibeArc-v1.3.0.apk');
+for (const link of downloadLinks) assert.equal(link, 'https://github.com/smithcooks/VibeArc/releases/download/v1.4.0/VibeArc-v1.4.0.apk');
 assert.doesNotMatch(html, /v1\.0\.0/);
-assert.match(html, /v1\.3\.0 · 13\.8 MB/);
-assert.match(html, /releases\/tag\/v1\.3\.0/);
+assert.match(html, /v1\.4\.0 · 13\.8 MB/);
+assert.match(html, /releases\/tag\/v1\.4\.0/);
 assert.match(html, /disabled[^>]*>Windows/);
 assert.match(html, /disabled[^>]*>Linux/);
 assert.doesNotMatch(html, /Nuclear|Nuki|Discord|macOS|Flathub|Snapcraft|winget|Homebrew|lorem ipsum/i);
@@ -33,8 +33,12 @@ assert.match(css, /:focus-visible/);
 assert.match(js, /showModal\(/);
 assert.match(js, /addEventListener\('close'/);
 assert.doesNotMatch(js, /innerHTML|setInterval|requestAnimationFrame|fetch\(/);
-assert.match(html, /styles\.css\?v=header-chai-20261003/);
+assert.match(html, /styles\.css\?v=release-140-promo/);
 assert.match(html, /script\.js\?v=header-chai-20261003/);
+assert.match(html, /<video[^>]+controls playsinline preload="none"/);
+assert.ok(html.includes('poster="promo-poster.png"'));
+assert.ok(html.includes('https://release-assets.githubusercontent.com'));
+assert.ok(html.includes('https://github.com/smithcooks/VibeArc/releases/download/v1.4.0/VibeArc-launch.mp4'));
 const header = html.match(/<header\b[\s\S]*?<\/header>/)[0];
 assert.match(header, /class="header-chai"[^>]*href="https:\/\/buymeachai\.ezee\.li\/Smith_cooks"/);
 assert.match(header, /alt="Buy Me A Chai"/);
