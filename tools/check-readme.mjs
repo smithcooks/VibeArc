@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const readme = readFileSync(root + 'README.md', 'utf8');
+const promoLink = readme.match(/<a href="([^"]+)"><img src="docs\/promo-poster\.png"/);
+assert.equal(promoLink?.[1], 'https://smithcooks.github.io/VibeArc/#promo', 'Watch must open the player, not the download-only release asset.');
 for (const screen of ['home', 'player', 'search', 'library', 'discovery', 'appearance', 'accounts', 'about']) {
   assert.match(readme, new RegExp(`docs/screenshots/${screen}\\.jpg`));
 }

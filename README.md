@@ -42,9 +42,9 @@ A native Android music player with liquid glass, artwork-driven colors, synchron
 
 ## Watch VibeArc in motion
 
-<a href="https://github.com/smithcooks/VibeArc/releases/download/v1.4.0/VibeArc-launch.mp4"><img src="docs/promo-poster.png" width="320" height="569" alt="Watch the 30-second VibeArc cinematic promo"></a>
+<a href="https://smithcooks.github.io/VibeArc/#promo"><img src="docs/promo-poster.png" width="320" height="569" alt="Watch the 30-second VibeArc cinematic promo on the website"></a>
 
-A 30-second cinematic look at the real app. Click to play or download the video; this promo has no audio.
+A 30-second cinematic look at the real app. [Watch in your browser](https://smithcooks.github.io/VibeArc/#promo) or [download the MP4](https://github.com/smithcooks/VibeArc/releases/download/v1.4.0/VibeArc-launch.mp4). This promo has no audio.
 
 <br>
 
