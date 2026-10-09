@@ -1,5 +1,12 @@
 package com.vibearc.app
 
+import com.vibearc.app.GlassButton as Button
+import com.vibearc.app.GlassTextButton as OutlinedButton
+import com.vibearc.app.GlassTextButton as TextButton
+import com.vibearc.app.GlassButton as FilledTonalButton
+import com.vibearc.app.GlassIconButton as IconButton
+import com.vibearc.app.GlassFilledIconButton as FilledIconButton
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -9,7 +16,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
 
 @Composable
 internal fun UpdateDialog(update: AppUpdate, onDismiss: () -> Unit) {

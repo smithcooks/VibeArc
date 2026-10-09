@@ -4,6 +4,15 @@ import android.content.Context
 
 internal const val DEFAULT_ACCENT_ARGB = 0xFFD7A24AL
 
+internal enum class ThemeMode(val label: String) {
+    Dark("Dark"), Light("Light"), System("Follow system");
+
+    fun isDark(systemDark: Boolean): Boolean = this == Dark || (this == System && systemDark)
+}
+
+internal fun parseThemeMode(value: String?): ThemeMode =
+    ThemeMode.entries.firstOrNull { it.name == value } ?: ThemeMode.Dark
+
 internal enum class AccentPreset(val label: String, val argb: Long?) {
     Crimson("Crimson", 0xFFD94B50L),
     Violet("Violet", 0xFF8963E8L),
@@ -32,6 +41,8 @@ internal data class AppearanceConfig(
     val applicationFontEnabled: Boolean = true,
     val customAccentArgb: Long = DEFAULT_ACCENT_ARGB,
     val lyricsAnimationEnabled: Boolean = true,
+    val reduceMotion: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.Dark,
 )
 
 internal fun AppearanceConfig.resolvedAccentArgb(): Long = when (accentPreset) {
@@ -65,6 +76,8 @@ internal fun Context.loadAppearanceConfig(): AppearanceConfig {
         applicationFontEnabled = preferences.getBoolean("application_font", true),
         customAccentArgb = preferences.getLong("custom_accent", DEFAULT_ACCENT_ARGB),
         lyricsAnimationEnabled = preferences.getBoolean("lyrics_animation", true),
+        reduceMotion = preferences.getBoolean("reduce_motion", false),
+        themeMode = parseThemeMode(preferences.getString("theme_mode", null)),
     )
 }
 
@@ -80,8 +93,13 @@ internal fun Context.saveAppearanceConfig(config: AppearanceConfig) {
         .putString("accent_preset", config.accentPreset.name)
         .putLong("custom_accent", config.customAccentArgb)
         .putBoolean("lyrics_animation", config.lyricsAnimationEnabled)
+        .putBoolean("reduce_motion", config.reduceMotion)
+        .putString("theme_mode", config.themeMode.name)
         .apply()
 }
 
 internal fun lyricMotionTarget(active: Boolean, enabled: Boolean): Pair<Float,Float> =
     if(active && enabled) 1.035f to -3f else 1f to 0f
+
+internal fun uiMotionEnabled(reduceMotion: Boolean, systemAnimations: Boolean, resumed: Boolean): Boolean =
+    !reduceMotion && systemAnimations && resumed

@@ -5,6 +5,37 @@ import org.junit.Test
 
 class PlaybackStateTest {
     @Test
+    fun `play next keeps shuffle enabled and preserves the other shuffled entries`() {
+        assertEquals(listOf(4, 1, 2, 0, 3), prioritizeNextInShuffle(listOf(2, 4, 1, 0, 3), 1, 2))
+        assertEquals(listOf(0, 1), prioritizeNextInShuffle(listOf(1, 0), 0, 1))
+    }
+
+    @Test
+    fun `only a single next insertion is prioritized not a replacement removal or reorder`() {
+        val previous = listOf("previous", "current", "tail")
+        assertEquals(true, isNextQueueInsertion(previous, listOf("previous", "current", "current", "tail"), 1))
+        assertEquals(false, isNextQueueInsertion(previous, listOf("previous", "current", "tail", "added"), 1))
+        assertEquals(false, isNextQueueInsertion(previous, listOf("new", "queue", "items", "here"), 1))
+        assertEquals(false, isNextQueueInsertion(previous, listOf("previous", "tail", "current"), 1))
+        assertEquals(false, isNextQueueInsertion(previous, listOf("current", "tail"), 0))
+        assertEquals(false, isNextQueueInsertion(emptyList(), listOf("first"), -1))
+    }
+
+    @Test
+    fun `adding a song plays it immediately after the current song without replacing the queue`() {
+        val queue = mutableListOf("Earlier song", "Freaked Out", "Existing next", "Existing last")
+        queue.add(nextQueueInsertionIndex(1, queue.size), "One Of The Girls")
+        assertEquals(listOf("Earlier song", "Freaked Out", "One Of The Girls", "Existing next", "Existing last"), queue)
+    }
+
+    @Test
+    fun `play next handles empty queues and the final song`() {
+        assertEquals(0, nextQueueInsertionIndex(-1, 0))
+        assertEquals(3, nextQueueInsertionIndex(2, 3))
+        assertEquals(0, nextQueueInsertionIndex(-1, 3))
+    }
+
+    @Test
     fun `artwork swipes go left for next and right for previous only beyond the threshold`() {
         assertEquals(1, artworkSwipeStep(-80f, 56f))
         assertEquals(-1, artworkSwipeStep(80f, 56f))

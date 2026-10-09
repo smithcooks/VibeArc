@@ -1,5 +1,12 @@
 package com.vibearc.app
 
+import com.vibearc.app.GlassButton as Button
+import com.vibearc.app.GlassTextButton as OutlinedButton
+import com.vibearc.app.GlassTextButton as TextButton
+import com.vibearc.app.GlassButton as FilledTonalButton
+import com.vibearc.app.GlassIconButton as IconButton
+import com.vibearc.app.GlassFilledIconButton as FilledIconButton
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -35,6 +42,7 @@ import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+
 
 internal enum class DownloadFilter(val label: String) { All("All"), Lossless("Lossless / FLAC"), Lyrics("With lyrics (LRC)") }
 internal enum class DownloadSort(val label: String) { Recent("Recent"), Title("Title"), Artist("Artist"), Album("Album"), Size("Size") }
@@ -207,7 +215,7 @@ internal fun OfflineDownloadsScreen(padding: PaddingValues, onPlay: (Track,List<
                 itemsIndexed(songs,key={_,entry -> entry.id}) { index,entry ->
                     var menu by remember(entry.id) { mutableStateOf(false) }
                     val saved=entry.status==DownloadStatus.COMPLETED
-                    ReferenceSurface(shape=groupShape(index,songs.size)) {
+                    ReferenceSurface(modifier=if(LocalMotionEnabled.current) Modifier.animateItem() else Modifier,shape=groupShape(index,songs.size)) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
                             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 TrackArtwork(entry.track.copy(artworkUri=entry.artworkUri.ifBlank {entry.track.artworkUri}),null,Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)),sizePx=160)

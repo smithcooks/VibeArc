@@ -1,5 +1,12 @@
 package com.vibearc.app
 
+import com.vibearc.app.GlassButton as Button
+import com.vibearc.app.GlassTextButton as OutlinedButton
+import com.vibearc.app.GlassTextButton as TextButton
+import com.vibearc.app.GlassButton as FilledTonalButton
+import com.vibearc.app.GlassIconButton as IconButton
+import com.vibearc.app.GlassFilledIconButton as FilledIconButton
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,6 +25,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +41,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+
 
 @Composable
 internal fun HomeScreen(
@@ -62,13 +71,13 @@ internal fun HomeScreen(
             SongActionTarget(hero, { if (hero != null) onPlay(hero, pool) else onExplore() },
                 Modifier.fillMaxWidth().heightIn(min = 208.dp).clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surface)) {
                 if(hero != null) TrackArtwork(hero, null, Modifier.matchParentSize(), sizePx = 768)
-                Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .4f), Color(0xF21D1D1D)))))
+                Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface.copy(alpha = .78f), MaterialTheme.colorScheme.surface.copy(alpha = .97f)))))
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Surface(color = Color.White.copy(alpha = .18f), shape = CircleShape) {
                         Text("✦ MADE FOR YOU", Modifier.padding(horizontal = 12.dp, vertical = 5.dp), fontWeight = FontWeight.Bold)
                     }
                     Text(if(hero == null) "Your next favorite" else "Your daily mix", style = MaterialTheme.typography.headlineMedium)
-                    Text(if(hero == null) "Discover a new sound on YouTube Music" else if (onlineTracks.isEmpty()) "A mix from the music on your device" else "Personalized from YouTube Music and your listening", color = Color(0xFFD0D0D0))
+                    Text(if(hero == null) "Discover a new sound on YouTube Music" else if (onlineTracks.isEmpty()) "A mix from the music on your device" else "Personalized from YouTube Music and your listening", color = MutedText)
                     Button(onClick = { if(hero != null) onPlay(hero, pool) else onExplore() }, contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)) {
                         Icon(if(hero == null) Icons.Default.Add else Icons.Default.PlayArrow, null)
                         Spacer(Modifier.width(8.dp)); Text(if(hero == null) "Discover" else "Play", fontWeight = FontWeight.Bold)
@@ -126,7 +135,7 @@ internal fun HomeScreen(
                 if(artists.isEmpty()) FeedEmpty("Find artists by searching for a song you love.", onExplore)
                 else androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     items(artists.keys.toList(), key = { it }) { artist ->
-                        Column(Modifier.width(92.dp).clickable { onSearch(artist) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(Modifier.width(92.dp).motionClickable { onSearch(artist) }, horizontalAlignment = Alignment.CenterHorizontally) {
                             TrackArtwork(artists.getValue(artist).first(), null, Modifier.size(88.dp).clip(CircleShape), sizePx = 240)
                             Spacer(Modifier.height(10.dp))
                             Text(artist, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -163,7 +172,7 @@ private fun ShelfHeading(title: String, subtitle: String, action: (() -> Unit)? 
             Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(subtitle, color = MutedText, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        if(action != null) ReferenceSurface(Modifier.clip(CircleShape).clickable(onClick = action), CircleShape) {
+        if(action != null) ReferenceSurface(Modifier.clip(CircleShape).motionClickable(onClick = action), CircleShape) {
             Row(Modifier.heightIn(min = 44.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 if(actionLabel == "Play all") Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp))
                 else Glyph(if(actionLabel == "Shuffle") "shuffle" else "chevron", Modifier.size(16.dp))
@@ -223,7 +232,7 @@ private fun PrefetchAudio(track: Track?) {
 @Composable
 private fun FeedEmpty(message: String, onExplore: () -> Unit) {
     ReferenceSurface {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onExplore).padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().motionClickable(onClick = onExplore).padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             Glyph("music", Modifier.size(28.dp))
             Text(message, Modifier.weight(1f).padding(horizontal = 14.dp), color = MutedText, style = MaterialTheme.typography.bodyMedium)
             Glyph("chevron", Modifier.size(18.dp))
@@ -235,7 +244,7 @@ private fun FeedEmpty(message: String, onExplore: () -> Unit) {
 private fun ArtistSpotlight(track: Track, onPlay: () -> Unit, onArtist: () -> Unit) {
     SongActionTarget(track, onPlay, Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surface)) {
         TrackArtwork(track, null, Modifier.matchParentSize(), sizePx = 768)
-        Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(Color(0xD9222222), Color(0xFC222222)))))
+        Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.surface.copy(alpha = .88f), MaterialTheme.colorScheme.surface.copy(alpha = .98f)))))
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Surface(color = Color.White.copy(alpha = .16f), shape = CircleShape) {
                 Text("✦ ARTIST SPOTLIGHT", Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -257,7 +266,7 @@ private fun ArtistSpotlight(track: Track, onPlay: () -> Unit, onArtist: () -> Un
 
 @Composable
 private fun HomeShortcut(title:String,subtitle:String,track:Track?,modifier:Modifier,onClick:()->Unit) {
-    ReferenceSurface(modifier.clickable(onClick=onClick),shape=RoundedCornerShape(20.dp)) {
+    ReferenceSurface(modifier.motionClickable(onClick=onClick),shape=RoundedCornerShape(20.dp)) {
         Row(Modifier.fillMaxWidth().height(64.dp),verticalAlignment=Alignment.CenterVertically) {
             if(track!=null) TrackArtwork(track,null,Modifier.size(64.dp))
             else Box(Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer),contentAlignment=Alignment.Center) {
@@ -374,21 +383,22 @@ internal fun LibraryScreen(
     onAddToPlaylist:(String,String)->Unit, onRemoveFromPlaylist:(String,String)->Unit,
     onDownloadAll:(List<Track>)->Unit,
     onDownloads:()->Unit,
+    active: Boolean = true,
 ) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
-    var sort by remember { mutableStateOf("Newest first") }
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sort by rememberSaveable { mutableStateOf("Newest first") }
     var sortOpen by remember { mutableStateOf(false) }
     var create by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<Playlist?>(null) }
     var delete by remember { mutableStateOf<Playlist?>(null) }
     var menu by remember { mutableStateOf<String?>(null) }
     var addTrack by remember { mutableStateOf<Track?>(null) }
-    var browseBy by remember { mutableStateOf("Tracks") }
-    var group by remember { mutableStateOf<String?>(null) }
+    var browseBy by rememberSaveable { mutableStateOf("Tracks") }
+    var group by rememberSaveable { mutableStateOf<String?>(null) }
     val playlist=playlists.firstOrNull { it.id==selectedId }
     val selected = when(selectedId) { "__liked" -> tracks.filter(Track::isFavorite); "__all" -> tracks; else -> playlist?.trackUris.orEmpty().mapNotNull { uri->tracks.firstOrNull {it.uri==uri} } }
     val grouped = when(browseBy) { "Artists" -> selected.groupBy {it.artist}; "Albums" -> selected.groupBy{it.album}; "Folders" -> selected.groupBy{it.folder}; else -> emptyMap() }
-    BackHandler(selectedId!=null) { if(group!=null) group=null else selectedId=null }
+    BackHandler(active && selectedId!=null) { if(group!=null) group=null else selectedId=null }
     Column(Modifier.fillMaxSize()) {
         ReferenceHeader(
             title=when(selectedId) { null->"Playlist"; "__liked"->"Liked Songs"; "__all"->"My Library"; else->playlist?.name.orEmpty() },
@@ -407,7 +417,7 @@ internal fun LibraryScreen(
                 }
             } else IconButton(onClick=onChooseFile) { Icon(Icons.Default.Add,"Add audio file") }
         }
-        Box(Modifier.weight(1f)) {
+        MotionScene("$selectedId:$browseBy:$group", Modifier.weight(1f)) {
             LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=12.dp,bottom=padding.calculateBottomPadding()+72.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
                 if(selectedId==null) {
                     item { ReferenceRow("Downloads","Saved songs, progress & storage","download",onClick=onDownloads) }
@@ -483,7 +493,7 @@ internal fun LibraryScreen(
 
 @Composable
 private fun PlaylistTile(title:String,subtitle:String,track:Track?,index:Int,count:Int,onClick:()->Unit,actions:@Composable ()->Unit) {
-    ReferenceSurface(Modifier.fillMaxWidth().clickable(onClick=onClick),groupShape(index,count)) {
+    ReferenceSurface(Modifier.fillMaxWidth().motionClickable(onClick=onClick),groupShape(index,count)) {
         Row(Modifier.fillMaxWidth().padding(14.dp).heightIn(min=60.dp),verticalAlignment=Alignment.CenterVertically) {
             if(track!=null) TrackArtwork(track,null,Modifier.size(60.dp).clip(RoundedCornerShape(14.dp)))
             else Surface(color=MaterialTheme.colorScheme.surfaceVariant,shape=RoundedCornerShape(14.dp)) {

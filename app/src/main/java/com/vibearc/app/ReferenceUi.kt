@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,16 +40,19 @@ internal fun ReferenceSurface(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(28.dp),
     highlighted: Boolean = false,
+    floating: Boolean = false,
+    interactionSource: MutableInteractionSource? = null,
     content: @Composable () -> Unit,
 ) {
     val glass = LocalGlass.current
     val base = if (highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-    Surface(modifier, shape = shape, color = if (glass) base.copy(alpha = .92f) else base,
-        border = if (glass) BorderStroke(0.7.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .23f), Color.Transparent))) else null,
+    Surface(modifier, shape = shape, color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = if (glass) BorderStroke(0.7.dp, Brush.linearGradient(listOf(
+            Color.White.copy(alpha = if (floating) .42f else .20f),
+            Color.White.copy(alpha = .035f), Color.White.copy(alpha = if (floating) .18f else .06f)))) else null,
     ) {
-        Box(Modifier.background(Brush.verticalGradient(
-            if (glass) listOf(Color.White.copy(alpha = .045f), Color.Transparent) else listOf(Color.Transparent, Color.Transparent),
-        ))) { content() }
+        Box(Modifier.glassMaterial(base, floating, interactionSource)) { content() }
     }
 }
 
@@ -153,8 +157,9 @@ internal fun Glyph(name: String, modifier: Modifier = Modifier, color: Color = M
 
 @Composable
 internal fun RoundAction(label: String, onClick: () -> Unit, content: @Composable () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = .8f), shape = CircleShape) {
-        IconButton(onClick, Modifier.size(44.dp).semantics { contentDescription = label }) { content() }
+    val source = remember { MutableInteractionSource() }
+    ReferenceSurface(Modifier.motionPress(source), shape = CircleShape, floating = true, interactionSource = source) {
+        IconButton(onClick, Modifier.size(44.dp).semantics { contentDescription = label }, interactionSource = source) { content() }
     }
 }
 
@@ -170,7 +175,7 @@ internal fun ReferenceRow(
     onClick: () -> Unit,
 ) {
     ReferenceSurface(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick),
+        modifier = Modifier.fillMaxWidth().motionClickable(enabled = enabled, onClick = onClick),
         shape = groupShape(index, count),
     ) {
         Row(Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -199,7 +204,7 @@ internal fun ReferenceHeader(title: String, subtitle: String? = null, onBack: ((
                 Spacer(Modifier.width(16.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text(title, style=if(onBack == null) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium, maxLines=1,overflow=TextOverflow.Ellipsis)
+                MotionSwap(title) { Text(it, style=if(onBack == null) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium, maxLines=1,overflow=TextOverflow.Ellipsis) }
                 if(subtitle!=null) Text(subtitle, color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=2,overflow=TextOverflow.Ellipsis)
             }
             actions()

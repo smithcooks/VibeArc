@@ -5,6 +5,26 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class AppearanceSettingsTest {
+    @Test fun `theme choices follow system only when requested and retain old dark default`() {
+        assertEquals(true, ThemeMode.Dark.isDark(false))
+        assertEquals(false, ThemeMode.Light.isDark(true))
+        assertEquals(true, ThemeMode.System.isDark(true))
+        assertEquals(false, ThemeMode.System.isDark(false))
+        assertEquals(ThemeMode.Dark, parseThemeMode(null))
+        assertEquals(ThemeMode.Dark, parseThemeMode("invalid"))
+        ThemeMode.entries.forEach { assertEquals(it, parseThemeMode(it.name)) }
+        assertEquals(ThemeMode.Dark, AppearanceConfig().themeMode)
+    }
+    @Test
+    fun `UI motion stops when reduced motion system animations or foreground state disallow it`() {
+        assertEquals(true, uiMotionEnabled(false, true, true))
+        assertEquals(false, uiMotionEnabled(true, true, true))
+        assertEquals(false, uiMotionEnabled(false, false, true))
+        assertEquals(false, uiMotionEnabled(false, true, false))
+        assertEquals(false, AppearanceConfig().reduceMotion)
+        assertEquals(true, AppearanceConfig().copy(reduceMotion = true).reduceMotion)
+    }
+
     @Test
     fun `lyrics animation can be turned off without changing the theme`() {
         val original = AppearanceConfig()

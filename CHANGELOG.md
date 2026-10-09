@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.0] - 2026-10-09
+
+- Added Dark, Light and Follow system appearance modes, with clearer light-mode glass controls.
+- Redesigned the seek bar as one cached wave with independently interpolated progress and reduced-motion support.
+- Extended short online queues toward 30 unique songs while preserving manual Play next ordering.
+- Included tab swiping, lightweight player/artwork motion and adaptive launcher icons developed since v1.4.0.
+- Enabled optimized release code and packaged an ART profile; APK size is approximately 6.6 MB.
+- Verified 138 passing unit tests, zero lint errors, release signature and 16 KiB alignment. Existing lint warnings remain.
+- Updated website and README APK links. New APK installation, streaming after optimization and frame timing still require physical-phone testing.
+
 ## [1.4.0] - 2026-10-06
 
 ### Added

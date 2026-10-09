@@ -33,11 +33,14 @@ internal object ArtworkCache {
 
     suspend fun load(uri: String, target: Int): Artwork? {
         val key = "$uri@$target"
-        cache.get(key)?.let { return it }
+        fun cached(): Artwork? = cache.get(key) ?: cache.snapshot().entries.firstOrNull { (candidate) ->
+            candidate.startsWith("$uri@") && (candidate.substringAfterLast('@').toIntOrNull() ?: 0) >= target
+        }?.let { cache.get(it.key) }
+        cached()?.let { return it }
         // Loads waiting for a slot cancel when their row leaves composition.
         return withContext(Dispatchers.IO) {
             permits.withPermit {
-                cache.get(key) ?: fetch(uri, target)?.also { cache.put(key, it) }
+                cached() ?: fetch(uri, target)?.also { cache.put(key, it) }
             }
         }
     }

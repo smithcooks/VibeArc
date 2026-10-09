@@ -8,10 +8,10 @@ not branding, mascot, copy, or distribution links.
 ## Content and scope
 
 Hero → click-to-play promo → Search → Library/playlists → Appearance → Settings → screenshot rail →
-open source → download → footer. Android v1.4.0 has a direct official APK link.
+open source → download → footer. Android v1.7.0 has a direct official APK link.
 Windows and Linux are clearly disabled, labeled Coming soon. No invented
 package distributions, testimonials, plugin support, or playback guarantees.
-The v1.4.0 download links use the signed GitHub release asset. The optional
+The v1.7.0 download links use the signed GitHub release asset. The optional
 Buy Me a Chai support button uses the user-provided URL and external image. CSP
 permits that additional image host and the GitHub release media hosts; the text fallback survives image failure.
 The support button also appears beside the logo in the initial header, with a

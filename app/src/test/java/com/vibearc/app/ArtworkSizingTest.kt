@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ArtworkSizingTest {
+    @Test fun prefetchUsesActualNextThenPreviousWithoutCurrentOrDuplicates() {
+        assertEquals(listOf("shuffled-next", "previous"), nearbyArtworkUris("current", "shuffled-next", "previous"))
+        assertEquals(listOf("next"), nearbyArtworkUris("current", "next", "next"))
+        assertEquals(emptyList<String>(), nearbyArtworkUris("current", "current", null))
+        assertEquals(emptyList<String>(), nearbyArtworkUris(null, "", " "))
+        assertEquals(listOf("previous"), nearbyArtworkUris("current", null, "previous"))
+    }
     @Test fun thumbnailsUseSixteenTimesLessDecodedMemory() {
         val sample = artworkSampleSize(1024, 1024, 160)
         assertEquals(4, sample)

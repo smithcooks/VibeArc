@@ -1,7 +1,16 @@
 package com.vibearc.app
 
+import com.vibearc.app.GlassButton as Button
+import com.vibearc.app.GlassTextButton as OutlinedButton
+import com.vibearc.app.GlassTextButton as TextButton
+import com.vibearc.app.GlassButton as FilledTonalButton
+import com.vibearc.app.GlassIconButton as IconButton
+import com.vibearc.app.GlassFilledIconButton as FilledIconButton
+
 import android.text.format.DateUtils
-import android.animation.ValueAnimator
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.snap
@@ -27,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -49,6 +59,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+
 @Composable
 internal fun PlayerScreen(
     padding: PaddingValues, player: Player, track: Track, isPlaying: Boolean,
@@ -69,10 +80,13 @@ internal fun PlayerScreen(
     val wavy = remember { context.wavySeekbarEnabled() }
     val background = MaterialTheme.colorScheme.background
     val tint = if (dynamicArtworkColor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    val animatedTint = animateColorAsState(tint,
+        if (LocalMotionEnabled.current) tween(450) else snap(), label = "Artwork tint")
     BackHandler(page != "player") { page = "player" }
-    BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(
-        listOf(lerp(background, tint, .20f), lerp(background, tint, .10f), background),
-    )).padding(padding)) {
+    BoxWithConstraints(Modifier.fillMaxSize().drawBehind {
+        drawRect(Brush.verticalGradient(listOf(
+            lerp(background, animatedTint.value, .20f), lerp(background, animatedTint.value, .10f), background)))
+    }.padding(padding)) {
         val artworkSize = minOf(maxWidth - 48.dp, maxHeight * .45f, 420.dp).coerceAtLeast(160.dp)
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -96,30 +110,15 @@ internal fun PlayerScreen(
                     }
                 }
             }
+            MotionScene(page, Modifier.weight(1f).fillMaxWidth()) {
             when (page) {
                 "queue" -> PlayingQueueScreen(player, queue)
                 "lyrics" -> LyricsScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled)
                 else -> {
-                    LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 18.dp),
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         item {
-                            TrackArtwork(track, "Artwork for ${track.title}. Swipe left for next track, right for previous track.",
-                                Modifier.size(artworkSize).clip(RoundedCornerShape(28.dp)).pointerInput(player, track.catalogUri) {
-                                    var distance = 0f
-                                    val threshold = 56.dp.toPx()
-                                    detectHorizontalDragGestures(
-                                        onDragStart = { distance = 0f },
-                                        onDragCancel = { distance = 0f },
-                                        onDragEnd = {
-                                            when (artworkSwipeStep(distance, threshold)) {
-                                                1 -> if (player.hasNextMediaItem()) player.seekToNextMediaItem()
-                                                -1 -> if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
-                                            }
-                                            distance = 0f
-                                        },
-                                        onHorizontalDrag = { change, amount -> change.consume(); distance += amount },
-                                    )
-                                }, sizePx = 768)
+                            SlidingArtwork(player, track, Modifier.size(artworkSize))
                         }
                         item {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -158,9 +157,63 @@ internal fun PlayerScreen(
             }
         }
     }
+    }
     if(audioInfo) AlertDialog(onDismissRequest = { audioInfo = false }, title = { Text("Audio information") },
         text = { Text("${if(track.uri.startsWith("https:")) "Online stream" else "Local audio"}\n${player.currentAudioDetails()?.label() ?: "Format not reported by source"}\nRequested source selection: ${if(context.prefersHighestAudioQuality()) "highest available" else "balanced"}.\n\nValues are reported by the active stream; VibeArc does not claim bit-perfect, lossless, or Hi-Res output.") },
         confirmButton = { TextButton(onClick = { audioInfo = false }) { Text("Done") } })
+}
+
+@Composable
+private fun SlidingArtwork(player: Player, track: Track, modifier: Modifier = Modifier) {
+    val motion = LocalMotionEnabled.current
+    var distance by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    var swipeDirection by remember { mutableIntStateOf(0) }
+    val offset = animateFloatAsState(if (motion) distance * .65f else 0f,
+        if (dragging || !motion) snap() else spring(dampingRatio = .8f, stiffness = 500f),
+        label = "Artwork drag")
+    LaunchedEffect(track.catalogUri) {
+        delay(350)
+        swipeDirection = 0
+    }
+    Box(modifier.graphicsLayer {
+        translationX = offset.value
+        rotationZ = (offset.value / size.width * 6f).coerceIn(-4f, 4f)
+        scaleX = 1f - (kotlin.math.abs(offset.value) / size.width * .08f).coerceAtMost(.06f)
+        scaleY = scaleX
+    }.clip(RoundedCornerShape(28.dp)).pointerInput(player, track.catalogUri) {
+        detectHorizontalDragGestures(
+            onDragStart = { distance = 0f; dragging = true },
+            onDragCancel = { distance = 0f; dragging = false },
+            onDragEnd = {
+                val step = artworkSwipeStep(distance, 56.dp.toPx())
+                if (step == 1 && player.hasNextMediaItem()) {
+                    swipeDirection = 1
+                    player.seekToNextMediaItem()
+                } else if (step == -1 && player.hasPreviousMediaItem()) {
+                    swipeDirection = -1
+                    player.seekToPreviousMediaItem()
+                }
+                distance = 0f
+                dragging = false
+            },
+            onHorizontalDrag = { change, amount -> change.consume(); distance += amount },
+        )
+    }) {
+        val description = "Artwork for ${track.title}. Swipe left for next track, right for previous track."
+        if (!motion) TrackArtwork(track, description, Modifier.fillMaxSize(), sizePx = 768)
+        else AnimatedContent(
+            targetState = Triple(track, player.currentMediaItemIndex, swipeDirection),
+            contentKey = { it.first.catalogUri }, label = "Album change",
+            transitionSpec = {
+                val direction = targetState.third.takeIf { it != 0 }
+                    ?: if (targetState.second < initialState.second) -1 else 1
+                ((slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it * direction / 3 } + fadeIn(tween(220)))
+                    togetherWith (slideOutHorizontally(tween(250)) { -it * direction / 3 } + fadeOut(tween(180))))
+                    .using(null)
+            },
+        ) { shown -> TrackArtwork(shown.first, description, Modifier.fillMaxSize(), sizePx = 768) }
+    }
 }
 
 @Composable
@@ -182,7 +235,7 @@ private fun PlayingQueueScreen(player: Player, queue: List<Track>) {
             val current = index == player.currentMediaItemIndex
             ReferenceSurface(Modifier.fillMaxWidth(), RoundedCornerShape(22.dp), highlighted = current) {
                 Row(Modifier.fillMaxWidth().padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Row(Modifier.weight(1f).clickable { player.seekTo(index, 0L); player.play() }, verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f).motionClickable { player.seekTo(index, 0L); player.play() }, verticalAlignment = Alignment.CenterVertically) {
                         TrackArtwork(queued, null, Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)))
                         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                             Text(queued.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -217,7 +270,7 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
     var offsetText by remember(track.uri) { mutableStateOf("0") }
     val overrideStore = remember(context) { LyricsOverrideStore(context) }
     val listState = rememberLazyListState()
-    val motionEnabled = animationEnabled && ValueAnimator.areAnimatorsEnabled()
+    val motionEnabled = animationEnabled && LocalMotionEnabled.current
     val saveLyrics = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val lines = lyrics?.syncedLines.orEmpty()
         if (uri != null && lines.isNotEmpty()) scope.launch {
@@ -317,13 +370,13 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
                             }
                         }
                         val target=lyricMotionTarget(index==activeLine,motionEnabled)
-                        val scale by animateFloatAsState(target.first,if(motionEnabled) spring(dampingRatio=.62f,stiffness=380f) else snap(),label="lyric scale")
-                        val lift by animateFloatAsState(target.second,if(motionEnabled) spring(dampingRatio=.62f,stiffness=380f) else snap(),label="lyric lift")
+                        val scale = animateFloatAsState(target.first,if(motionEnabled) spring(dampingRatio=.62f,stiffness=380f) else snap(),label="lyric scale")
+                        val lift = animateFloatAsState(target.second,if(motionEnabled) spring(dampingRatio=.62f,stiffness=380f) else snap(),label="lyric lift")
                         val density=LocalDensity.current.density
                         Text(
                             animatedText ?: androidx.compose.ui.text.AnnotatedString(line.text),
                             modifier=Modifier.fillMaxWidth().padding(end=12.dp).graphicsLayer {
-                                scaleX=scale;scaleY=scale;translationY=lift*density
+                                scaleX=scale.value;scaleY=scale.value;translationY=lift.value*density
                                 transformOrigin=TransformOrigin(0f,.5f)
                             },
                             color = if(index == activeLine) MaterialTheme.colorScheme.onSurface else MutedText.copy(alpha = .45f),
@@ -386,17 +439,18 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
 
 @Composable
 private fun PlayerAction(label: String, glyph: String, size: androidx.compose.ui.unit.Dp = 48.dp, enabled: Boolean = true, busy: Boolean = false, onClick: () -> Unit) {
-    ReferenceSurface(shape = CircleShape) {
-        IconButton(onClick, Modifier.size(size).semantics { contentDescription = label }, enabled = enabled) {
+    val source = remember { MutableInteractionSource() }
+      ReferenceSurface(Modifier.motionPress(source), shape = CircleShape, floating = true, interactionSource = source) {
+            androidx.compose.material3.IconButton(onClick, Modifier.size(size).semantics { contentDescription = label }, enabled = enabled, interactionSource = source) {
             if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onSurface, strokeWidth = 2.dp)
-            else Glyph(glyph, Modifier.size(25.dp), if(enabled) MaterialTheme.colorScheme.onSurface else MutedText.copy(alpha = .45f))
+            else MotionSwap(glyph) { Glyph(it, Modifier.size(25.dp), if(enabled) MaterialTheme.colorScheme.onSurface else MutedText.copy(alpha = .45f)) }
         }
     }
 }
 
 @Composable
 private fun PlayerPill(label: String, glyph: String, modifier: Modifier, selected: Boolean, onClick: () -> Unit, showText: Boolean = false) {
-    ReferenceSurface(modifier.clip(CircleShape).clickable(onClick = onClick).semantics { contentDescription = label }, CircleShape, highlighted = selected) {
+        ReferenceSurface(modifier.clip(CircleShape).motionClickable(onClick = onClick).semantics { contentDescription = label }, CircleShape, highlighted = selected, floating = true) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Glyph(glyph, Modifier.size(22.dp), if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             if(showText) { Spacer(Modifier.width(6.dp)); Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
@@ -411,8 +465,7 @@ private fun PlayerTimeControls(player: Player, track: Track, isPlaying: Boolean,
     var position by remember(track.uri) { mutableLongStateOf(0L) }
     var duration by remember(track.uri) { mutableLongStateOf(track.durationMs.coerceAtLeast(1L)) }
     var dragging by remember(track.uri) { mutableStateOf(false) }
-    val accent = MaterialTheme.colorScheme.primary
-    val inactive = MaterialTheme.colorScheme.onSurface.copy(alpha = .16f)
+    val playSource = remember { MutableInteractionSource() }
     LaunchedEffect(player, track.uri, isPlaying) {
         while(isActive) {
             if(!dragging) position = player.currentPosition.coerceAtLeast(0L)
@@ -421,33 +474,9 @@ private fun PlayerTimeControls(player: Player, track: Track, isPlaying: Boolean,
         }
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(if(compact) 8.dp else 16.dp)) {
-        Slider(value = position.coerceAtMost(duration).toFloat(), onValueChange = { dragging = true; position = it.toLong() },
-            onValueChangeFinished = { player.seekTo(position); dragging = false }, valueRange = 0f..duration.toFloat(),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Playback position" },
-            thumb = { Box(Modifier.size(18.dp).background(accent, CircleShape)) },
-            track = { state ->
-                Canvas(Modifier.fillMaxWidth().height(30.dp)) {
-                    val end = size.width * (state.value / duration.toFloat()).coerceIn(0f, 1f)
-                    drawLine(inactive, Offset(0f, center.y), Offset(size.width, center.y), 4.dp.toPx(), StrokeCap.Round)
-                    if(wavy && isPlaying && end > 0f) {
-                        val path = Path()
-                        val wavelength = 22.dp.toPx()
-                        val amplitude = 6.dp.toPx()
-                        val edgeLength = 10.dp.toPx()
-                        val phase = (position % 1_200L) / 1_200f * (Math.PI * 2).toFloat()
-                        val points = (end / 2.dp.toPx()).toInt().coerceAtLeast(1)
-                        for(i in 0..points) {
-                            val x = end * i / points
-                            val edge = minOf(1f, x / edgeLength, (end - x) / edgeLength).coerceAtLeast(0f)
-                            val y = center.y + kotlin.math.sin((x / wavelength * Math.PI * 2).toFloat() + phase) * amplitude * edge
-                            if(i == 0) path.moveTo(x,y) else path.lineTo(x,y)
-                        }
-                        drawPath(path, accent, style = Stroke(4.dp.toPx(), cap = StrokeCap.Round))
-                    } else {
-                        drawLine(accent, Offset(0f, center.y), Offset(end, center.y), 4.dp.toPx(), StrokeCap.Round)
-                    }
-                }
-            })
+        key(track.catalogUri) { PlaybackSeekBar(position, duration, isPlaying, dragging, wavy,
+            onChange = { dragging = true; position = it.toLong() },
+            onFinish = { player.seekTo(position); dragging = false }) }
         if(!compact) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(DateUtils.formatElapsedTime(position / 1_000), color = MutedText, fontWeight = FontWeight.Bold)
             Text("−" + DateUtils.formatElapsedTime((duration - position).coerceAtLeast(0L) / 1_000), color = MutedText, fontWeight = FontWeight.Bold)
@@ -455,9 +484,12 @@ private fun PlayerTimeControls(player: Player, track: Track, isPlaying: Boolean,
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             if(compact) Text(DateUtils.formatElapsedTime(position / 1_000), fontSize = 12.sp, color = MutedText)
             PlayerAction("Previous track", "previous", if(compact) 46.dp else 60.dp, player.hasPreviousMediaItem()) { player.seekToPreviousMediaItem() }
-            FilledIconButton(onClick = { if(player.isPlaying) player.pause() else player.play() }, modifier = Modifier.size(if(compact) 56.dp else 78.dp).semantics { contentDescription = if(isPlaying) "Pause" else "Play" }) {
-                if(isPlaying) Glyph("pause", Modifier.size(30.dp), MaterialTheme.colorScheme.onPrimary)
+            FilledIconButton(onClick = { if(player.isPlaying) player.pause() else player.play() }, interactionSource = playSource,
+                modifier = Modifier.size(if(compact) 56.dp else 78.dp).motionPress(playSource).semantics { contentDescription = if(isPlaying) "Pause" else "Play" }) {
+                MotionSwap(isPlaying) { playing ->
+                if(playing) Glyph("pause", Modifier.size(30.dp), MaterialTheme.colorScheme.onPrimary)
                 else Icon(Icons.Default.PlayArrow, "Play", Modifier.size(34.dp))
+                }
             }
             PlayerAction("Next track", "next", if(compact) 46.dp else 60.dp, player.hasNextMediaItem()) { player.seekToNextMediaItem() }
             if(compact) Text("−" + DateUtils.formatElapsedTime((duration - position).coerceAtLeast(0L) / 1_000), fontSize = 12.sp, color = MutedText)

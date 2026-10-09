@@ -5,6 +5,9 @@ import java.io.ByteArrayOutputStream
 
 private val GoogleArtworkDimensions = Regex("=w\\d+-h\\d+")
 
+internal fun nearbyArtworkUris(current: String?, next: String?, previous: String?): List<String> =
+    listOfNotNull(next, previous).filter { it.isNotBlank() && it != current }.distinct()
+
 internal fun artworkUrlForTarget(url: String, target: Int): String =
     if ("googleusercontent.com" in url) {
         url.replace(GoogleArtworkDimensions, "=w$target-h$target")

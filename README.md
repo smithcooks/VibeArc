@@ -17,13 +17,13 @@ A native Android music player with liquid glass, artwork-driven colors, synchron
 </p>
 
 <p align="center">
-  <a href="https://github.com/smithcooks/VibeArc/releases/tag/v1.4.0"><img src="https://img.shields.io/badge/Release-v1.4.0-A7D8C7?style=for-the-badge&labelColor=242424" alt="Release v1.4.0"></a>
+  <a href="https://github.com/smithcooks/VibeArc/releases/tag/v1.7.0"><img src="https://img.shields.io/badge/Release-v1.7.0-A7D8C7?style=for-the-badge&labelColor=242424" alt="Release v1.7.0"></a>
   <a href="#tech-stack--architecture"><img src="https://img.shields.io/badge/UI-Kotlin%20%2B%20Compose-C4B5FD?style=for-the-badge&logo=kotlin&logoColor=white&labelColor=242424" alt="Kotlin and Jetpack Compose"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-F4BACB?style=for-the-badge&labelColor=242424" alt="GPL v3 license"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/smithcooks/VibeArc/releases/download/v1.4.0/VibeArc-v1.4.0.apk"><img src="https://img.shields.io/badge/Download-Android%20APK-3548D5?style=for-the-badge&logo=android&logoColor=white" alt="Download the Android APK"></a>
+  <a href="https://github.com/smithcooks/VibeArc/releases/download/v1.7.0/VibeArc-v1.7.0.apk"><img src="https://img.shields.io/badge/Download-Android%20APK-3548D5?style=for-the-badge&logo=android&logoColor=white" alt="Download the Android APK"></a>
   <a href="https://smithcooks.github.io/VibeArc/"><img src="https://img.shields.io/badge/Website-Explore%20VibeArc-242424?style=for-the-badge&logo=githubpages&logoColor=A7D8C7" alt="Visit the VibeArc website"></a>
   <a href="https://github.com/smithcooks/VibeArc/issues"><img src="https://img.shields.io/badge/Feedback-Report%20an%20issue-242424?style=for-the-badge&logo=github&logoColor=F4BACB" alt="Report an issue"></a>
 </p>
@@ -59,7 +59,7 @@ A 30-second cinematic look at the real app. [Watch in your browser](https://smit
   <br><br>
   <a href="docs/screenshots/accounts.jpg"><img src="docs/screenshots/accounts.jpg" width="31%" alt="VibeArc connected account and playlist settings"></a>
   <a href="docs/screenshots/about.jpg"><img src="docs/screenshots/about.jpg" width="31%" alt="VibeArc About screen showing version 0.9.0 beta"></a>
-  <p><sub>Screenshots captured from VibeArc v0.9 beta. Unaltered app UI; the current download is v1.4.0. Click a screenshot to view it in full.</sub></p>
+  <p><sub>Screenshots captured from VibeArc v0.9 beta. Unaltered app UI; the current download is v1.7.0. Click a screenshot to view it in full.</sub></p>
 </div>
 
 <br>
@@ -128,12 +128,12 @@ Built with **Kotlin, Jetpack Compose, Material 3, and Media3**, it gives you a p
 
 ## <img src="https://api.iconify.design/lucide:rocket.svg?color=%23A7D8C7" width="20" height="20" alt=""> Getting Started
 
-1. Download [**VibeArc-v1.4.0.apk**](https://github.com/smithcooks/VibeArc/releases/download/v1.4.0/VibeArc-v1.4.0.apk) from the [official release](https://github.com/smithcooks/VibeArc/releases/tag/v1.4.0).
+1. Download [**VibeArc-v1.4.0.apk**](https://github.com/smithcooks/VibeArc/releases/download/v1.7.0/VibeArc-v1.7.0.apk) from the [official release](https://github.com/smithcooks/VibeArc/releases/tag/v1.7.0).
 2. Allow installation for the browser or file manager you used, then install on **Android 8.0+ (API 26)**.
 3. Add local music or explore compatible online sources. Configure Last.fm separately if you want it.
 4. Choose your accent, build your queue, and press play.
 
-Export a JSON backup before updating. Version code **18** and the existing release certificate support updates over earlier main-app releases; do not uninstall or clear data first. Downloads in the separate test app stay in that app’s storage. Check the [APK SHA-256 checksum](https://github.com/smithcooks/VibeArc/releases/download/v1.4.0/VibeArc-v1.4.0.apk.sha256). Sideloading warnings may appear; VibeArc is not a Google Play listing or Play Protect certification.
+Export a JSON backup before updating. Version code **18** and the existing release certificate support updates over earlier main-app releases; do not uninstall or clear data first. Downloads in the separate test app stay in that app’s storage. Check the [APK SHA-256 checksum](https://github.com/smithcooks/VibeArc/releases/download/v1.7.0/VibeArc-v1.7.0.apk.sha256). Sideloading warnings may appear; VibeArc is not a Google Play listing or Play Protect certification.
 
 **Android is available now. Windows and Linux are coming soon.**
 

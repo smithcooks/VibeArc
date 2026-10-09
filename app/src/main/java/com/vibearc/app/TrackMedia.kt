@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,7 +22,34 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.media3.common.Player
 import java.io.File
+
+@Composable
+internal fun PrefetchPlayerArtwork(player: Player?) {
+    var nearby by remember(player) { mutableStateOf(emptyList<String>()) }
+    DisposableEffect(player) {
+        fun update() {
+            fun art(index: Int?): String? = index?.takeIf { player != null && it in 0 until player.mediaItemCount }
+                ?.let { player?.getMediaItemAt(it)?.mediaMetadata?.artworkUri?.toString() }
+            nearby = nearbyArtworkUris(art(player?.currentMediaItemIndex),
+                art(player?.nextMediaItemIndex), art(player?.previousMediaItemIndex))
+        }
+        val listener = object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_TIMELINE_CHANGED,
+                        Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED)) update()
+            }
+        }
+        player?.addListener(listener)
+        update()
+        onDispose { player?.removeListener(listener) }
+    }
+    LaunchedEffect(nearby) {
+        // Only the two actual neighbours, not the entire queue or a guessed shuffle order.
+        nearby.forEach { ArtworkCache.load(it, 768) }
+    }
+}
 
 @Composable
 internal fun TrackArtwork(
@@ -43,7 +71,8 @@ internal fun TrackArtwork(
         val loaded = track.artworkUri.takeIf(String::isNotBlank)?.let {
             ArtworkCache.load(it, sizePx)
         }
-        artwork = loaded?.bitmap?.asImageBitmap()
+        // A failed full-size upgrade must not erase an already cached thumbnail.
+        if (loaded != null) artwork = loaded.bitmap.asImageBitmap()
         loaded?.let { accentCallback(it.accent) }
     }
     val loadedArtwork = artwork

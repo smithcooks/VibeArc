@@ -1,5 +1,12 @@
 package com.vibearc.app
 
+import com.vibearc.app.GlassButton as Button
+import com.vibearc.app.GlassTextButton as OutlinedButton
+import com.vibearc.app.GlassTextButton as TextButton
+import com.vibearc.app.GlassButton as FilledTonalButton
+import com.vibearc.app.GlassIconButton as IconButton
+import com.vibearc.app.GlassFilledIconButton as FilledIconButton
+
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
@@ -14,6 +21,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -54,14 +68,11 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
@@ -74,13 +85,15 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -125,12 +138,14 @@ import kotlinx.coroutines.isActive
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
+
 private val Ink = Color(0xFF101010)
 private val Panel = Color(0xFF242424)
 private val PanelRaised = Color(0xFF303030)
 private val Peach = Color(0xFFE5B963)
 private val Paper = Color(0xFFE6E6E6)
-internal val MutedText = Color(0xFFC2C2C2)
+internal val MutedText: Color
+    @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
 private val FaintText = Color(0xFFB5B5B5)
 private val BodyFont = FontFamily(
     Font(R.font.manrope_regular, weight = FontWeight.Normal),
@@ -169,6 +184,12 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             var appearance by remember { mutableStateOf(this@MainActivity.loadAppearanceConfig()) }
+            val dark = appearance.themeMode.isDark(isSystemInDarkTheme())
+            SideEffect {
+                val bars = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
+            }
             VibeArcApp(appearance) { updated ->
                 appearance = updated
                 this@MainActivity.saveAppearanceConfig(updated)
@@ -184,17 +205,30 @@ private fun VibeArcTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val accent = Color(appearance.activeAccentArgb(artworkAccentArgb))
+    val dark = appearance.themeMode.isDark(isSystemInDarkTheme())
+    val rawAccent = Color(appearance.activeAccentArgb(artworkAccentArgb)).copy(alpha = 1f)
+    val accent = readableAccent(rawAccent, if (dark) Panel else Color(0xFFFAFAFC))
     val artworkColorsActive = appearance.dynamicNowPlayingEnabled && artworkAccentArgb != null
     val neutral = appearance.accentPreset == AccentPreset.Mono && !artworkColorsActive
     val configuredScheme = if (
         appearance.dynamicColorEnabled && !artworkColorsActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     ) {
-        dynamicDarkColorScheme(context)
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else if (!dark) {
+        lightColorScheme(
+            primary = accent, onPrimary = Color.White,
+            primaryContainer = lerp(Color(0xFFE8EBF0), rawAccent, .08f),
+            onPrimaryContainer = Color(0xFF17191E),
+            secondary = accent, onSecondary = Color.White,
+            background = Color(0xFFF2F3F7), onBackground = Color(0xFF17191E),
+            surface = Color(0xFFFAFAFC), onSurface = Color(0xFF17191E),
+            surfaceVariant = Color(0xFFE4E7ED), onSurfaceVariant = Color(0xFF494D57),
+            outline = Color(0xFF727783),
+        )
     } else {
         darkColorScheme(
             primary = accent,
-            onPrimary = if (accent.luminance() > 0.45f) Color(0xFF171006) else Paper,
+            onPrimary = if (accent.luminance() > .179f) Color.Black else Color.White,
             primaryContainer = if (neutral) Color(0xFF484848) else lerp(Panel, accent, 0.30f),
             onPrimaryContainer = Paper,
             secondary = accent,
@@ -204,11 +238,11 @@ private fun VibeArcTheme(
             surface = if (neutral) Panel else lerp(Panel, accent, 0.08f),
             onSurface = Paper,
             surfaceVariant = if (neutral) PanelRaised else lerp(PanelRaised, accent, 0.10f),
-            onSurfaceVariant = MutedText,
+            onSurfaceVariant = Color(0xFFC2C2C2),
             outline = lerp(Color(0xFF4B4947), accent, 0.22f),
         )
     }
-    val colorScheme = if (appearance.amoledMode) configuredScheme.copy(
+    val colorScheme = if (dark && appearance.amoledMode) configuredScheme.copy(
         background = Color.Black,
         surface = lerp(Color.Black, accent, 0.06f),
         surfaceVariant = lerp(Color(0xFF101012), accent, 0.10f),
@@ -455,8 +489,11 @@ private fun VibeArcApp(
     }
 
     val activePlayer = player
+    PrefetchPlayerArtwork(activePlayer)
 
     var currentTab by remember { mutableStateOf(Tab.Home) }
+    val motionEnabled = rememberUiMotionEnabled(appearance.reduceMotion)
+    val mainPager = rememberPagerState(initialPage = 0, pageCount = { MainTabs.size })
     var lastContentTab by remember { mutableStateOf(Tab.Home) }
     var playerBackTab by remember { mutableStateOf(Tab.Home) }
     var library by remember { mutableStateOf(context.loadLibrary()) }
@@ -498,7 +535,8 @@ private fun VibeArcApp(
         artworkAccentArgb = currentTrack?.artworkUri?.takeIf {
             appearance.dynamicNowPlayingEnabled && it.isNotBlank()
         }?.let {
-            ArtworkCache.load(it, 160)?.accent?.toArgb()?.toLong()?.and(0xFFFFFFFFL)
+            (ArtworkCache.peek(it, 160) ?: ArtworkCache.load(it, 160))
+                ?.accent?.toArgb()?.toLong()?.and(0xFFFFFFFFL)
         }
     }
     var isPlaying by remember { mutableStateOf(activePlayer?.isPlaying == true) }
@@ -518,7 +556,11 @@ private fun VibeArcApp(
     BackHandler(enabled = currentTab !in MainTabs, onBack = navigateBack)
     val navigate: (Tab) -> Unit = { tab ->
         if (currentTab in MainTabs) lastContentTab = currentTab
-        currentTab = tab
+        if (currentTab in MainTabs && tab in MainTabs) uiScope.launch {
+            val page = MainTabs.indexOf(tab)
+            if (motionEnabled) mainPager.animateScrollToPage(page, animationSpec = tween(260))
+            else mainPager.scrollToPage(page)
+        } else currentTab = tab
     }
 
     LaunchedEffect(activePlayer, library) {
@@ -747,10 +789,10 @@ private fun VibeArcApp(
             activePlayer == null -> android.widget.Toast.makeText(context, "Player is not ready", android.widget.Toast.LENGTH_SHORT).show()
             !isAllowedMediaUri(track.uri) -> android.widget.Toast.makeText(context, "This song is not ready to queue", android.widget.Toast.LENGTH_SHORT).show()
             else -> {
-                activePlayer.addMediaItem(track.toMediaItem())
+                activePlayer.addMediaItem(nextQueueInsertionIndex(activePlayer.currentMediaItemIndex, activePlayer.mediaItemCount), track.toMediaItem())
                 if (activePlayer.playbackState == Player.STATE_IDLE) activePlayer.prepare()
                 queueTracks = activePlayer.queueTracks()
-                android.widget.Toast.makeText(context, "Added to queue", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, "Queued to play next", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -907,28 +949,40 @@ private fun VibeArcApp(
         startArtistRadio = { startRadio(it, artistOnly = true) },
     )
 
+    LaunchedEffect(currentTab in MainTabs) {
+        if (currentTab in MainTabs) {
+            mainPager.scrollToPage(MainTabs.indexOf(currentTab))
+            snapshotFlow { mainPager.settledPage }.collect { page ->
+                if (currentTab in MainTabs) currentTab = MainTabs[page]
+            }
+        }
+    }
+    val glassBackdrop = rememberGlassBackdrop(appearance.liquidGlassEnabled && currentTab in MainTabs)
     VibeArcTheme(appearance, artworkAccentArgb) {
     CompositionLocalProvider(
         LocalGlass provides appearance.liquidGlassEnabled,
         LocalTrackActions provides trackActions,
+        LocalMotionEnabled provides motionEnabled,
+        LocalGlassBackdrop provides glassBackdrop,
     ) {
-    Scaffold(
-        topBar = {
-            if (currentTab !in listOf(Tab.Player, Tab.Search, Tab.Library, Tab.Downloads)) ReferenceHeader(
-                title = when(currentTab) { Tab.Home -> "Home"; Tab.Stats -> "Stats"; else -> currentTab.label },
-                onBack = if (currentTab !in MainTabs) navigateBack else null,
+    val screenHeader: @Composable (Tab) -> Unit = { tab ->
+            if (tab !in listOf(Tab.Player, Tab.Search, Tab.Library, Tab.Downloads)) ReferenceHeader(
+                title = when(tab) { Tab.Home -> "Home"; Tab.Stats -> "Stats"; else -> tab.label },
+                onBack = if (tab !in MainTabs) navigateBack else null,
             ) {
-                if (currentTab in MainTabs) {
+                if (tab in MainTabs) {
                     RoundAction("Discover", { navigate(Tab.Discover) }) { Glyph("discover") }
                     Spacer(Modifier.width(8.dp))
                     RoundAction("Search", { searchSeed = ""; navigate(Tab.Search) }) { Icon(Icons.Default.Search, null) }
                     Spacer(Modifier.width(8.dp))
                     RoundAction("Settings", { navigate(Tab.Settings) }) {
-                        if(currentTab == Tab.Stats) Glyph("account") else Icon(Icons.Default.Settings, null)
+                        if(tab == Tab.Stats) Glyph("account") else Icon(Icons.Default.Settings, null)
                     }
                 }
             }
-        },
+    }
+    Scaffold(
+        topBar = { if (currentTab !in MainTabs) screenHeader(currentTab) },
         bottomBar = {
             if (currentTab in MainTabs) Column(
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp),
@@ -941,30 +995,15 @@ private fun VibeArcApp(
                     onToggle = activePlayer::toggle,
                     onNext = activePlayer::seekToNextMediaItem,
                 )
-                ReferenceSurface(Modifier.widthIn(max = 340.dp).padding(horizontal = 28.dp), shape = CircleShape) {
-                    Row(Modifier.padding(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        MainTabs.forEach { tab ->
-                            val selected = currentTab == tab
-                            Surface(
-                                modifier = Modifier.clickable { currentTab = tab },
-                                color = if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
-                                shape = CircleShape,
-                            ) {
-                                Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (tab == Tab.Home) Icon(Icons.Default.Home, if(selected) null else "Feed")
-                                    else Glyph(if(tab == Tab.Stats) "stats" else "playlist", Modifier.semantics { contentDescription = tab.label })
-                                    if(selected) Text(if(tab == Tab.Home) "Feed" else tab.label, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
+                MainTabBar(mainPager) { page -> navigate(MainTabs[page]) }
             }
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        when (currentTab) {
+        GlassContent(glassBackdrop) {
+        MainTabContent(currentTab, mainPager, padding, screenHeader) { shownTab, pagePadding ->
+        val padding = pagePadding
+        when (shownTab) {
             Tab.Home -> HomeScreen(
                 padding = padding,
                 recentTracks = recentTracks,
@@ -1027,6 +1066,7 @@ private fun VibeArcApp(
                 onRemoveFromPlaylist = { id, uri -> updatePlaylists(playlists.removeTrackFromPlaylist(id, uri)) },
                 onDownloadAll = { copyTracksOffline(it) },
                 onDownloads = { navigate(Tab.Downloads) },
+                active = currentTab == Tab.Library && !mainPager.isScrollInProgress,
             )
             Tab.Downloads -> OfflineDownloadsScreen(
                 padding = padding,
@@ -1139,6 +1179,8 @@ private fun VibeArcApp(
                 onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
             )
         }
+        }
+    }
     }
     youtubeSyncPreview?.let { previews ->
         val additions = previews.sumOf { it.plan.addVideoIds.size }
@@ -1215,7 +1257,7 @@ internal enum class Tab(val label: String, val icon: androidx.compose.ui.graphic
 
 internal fun playerReturnTab(candidate: Tab): Tab = if (candidate == Tab.Player) Tab.Home else candidate
 
-private val MainTabs = listOf(Tab.Home, Tab.Stats, Tab.Library)
+internal val MainTabs = listOf(Tab.Home, Tab.Stats, Tab.Library)
 
 @Composable
 private fun DownloadsScreen(
@@ -1362,33 +1404,34 @@ private fun MiniPlayer(
     onToggle: () -> Unit,
     onNext: () -> Unit,
 ) {
-    Surface(
+    val playSource = remember { MutableInteractionSource() }
+    ReferenceSurface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(30.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shadowElevation = 0.dp,
+        floating = true,
     ) {
         Row(
-            Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(10.dp),
+            Modifier.fillMaxWidth().motionClickable(onClick = onOpen).padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TrackArtwork(track, null, Modifier.size(58.dp).clip(RoundedCornerShape(20.dp)))
+            MotionSwap(track, contentKey = { it.catalogUri }) { TrackArtwork(it, null, Modifier.size(58.dp).clip(RoundedCornerShape(20.dp))) }
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(track.artist, color = MutedText, fontSize = 12.sp, maxLines = 1)
+            MotionSwap(track, Modifier.weight(1f), contentKey = { it.catalogUri }) { shown ->
+                Column {
+                    Text(shown.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(shown.artist, color = MutedText, fontSize = 12.sp, maxLines = 1)
+                }
             }
             FilledIconButton(
                 onClick = onToggle,
-                modifier = Modifier.size(48.dp).clearAndSetSemantics {
+                interactionSource = playSource,
+                modifier = Modifier.size(48.dp).motionPress(playSource).clearAndSetSemantics {
                     contentDescription = if (isPlaying) "Pause" else "Play"
                 },
             ) {
-                if (isPlaying) {
-                    Text("Ⅱ", fontSize = 20.sp)
-                } else {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                MotionSwap(isPlaying) { playing ->
+                    if (playing) Text("Ⅱ", fontSize = 20.sp)
+                    else Icon(Icons.Default.PlayArrow, contentDescription = null)
                 }
             }
             IconButton(onClick = onNext, modifier = Modifier.size(44.dp)) {
@@ -1413,8 +1456,10 @@ internal fun TrackRow(
 ) {
     val actions = LocalTrackActions.current
     var showActions by remember(track.uri) { mutableStateOf(false) }
+    val pressSource = remember { MutableInteractionSource() }
     Surface(
-        modifier = Modifier.fillMaxWidth().combinedClickable(
+        modifier = Modifier.fillMaxWidth().motionPress(pressSource).combinedClickable(
+            interactionSource = pressSource, indication = LocalIndication.current,
             enabled = enabled || actions != null,
             onClick = { if (enabled) onPlay() },
             onLongClick = actions?.let { { showActions = true } },
@@ -1469,7 +1514,8 @@ internal fun SongActionTarget(track: Track?, onClick: () -> Unit, modifier: Modi
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
     val actions = LocalTrackActions.current
     var showActions by remember(track?.catalogUri) { mutableStateOf(false) }
-    Box(modifier.combinedClickable(onClick = onClick,
+    val pressSource = remember { MutableInteractionSource() }
+    Box(modifier.motionPress(pressSource).combinedClickable(interactionSource = pressSource, indication = LocalIndication.current, onClick = onClick,
         onLongClick = if (track != null && actions != null) ({ showActions = true }) else null,
         onLongClickLabel = "Song options"), content = content)
     if (showActions && track != null) SongOptionsSheet(track, track) { showActions = false }
@@ -1511,7 +1557,7 @@ private fun SongOptionsSheet(track: Track, playableTrack: Track?, onDismiss: () 
                         }
                     }
                 } else {
-                    ReferenceRow("Add to queue", "Play after the current queue", "music", 0, 6, enabled = playableTrack != null) {
+                    ReferenceRow("Add to queue", "Play after the current song", "music", 0, 6, enabled = playableTrack != null) {
                         playableTrack?.let(actions.addToQueue)
                         onDismiss()
                     }
@@ -1577,7 +1623,7 @@ private fun Player.toggle() {
 private fun Player.queueTracks(): List<Track> =
     (0 until mediaItemCount).map { index -> getMediaItemAt(index).track }
 
-private fun Track.toMediaItem(): MediaItem {
+internal fun Track.toMediaItem(): MediaItem {
     require(isAllowedMediaUri(uri)) { "Unsupported media URI" }
     val metadata = MediaMetadata.Builder()
         .setTitle(cleanRecordingLabel(title))
@@ -1599,7 +1645,7 @@ private fun Track.toMediaItem(): MediaItem {
         .build()
 }
 
-private val MediaItem.track: Track
+internal val MediaItem.track: Track
     get() = Track(
         title = mediaMetadata.title?.toString() ?: "Unknown track",
         artist = mediaMetadata.artist?.toString() ?: "On this device",

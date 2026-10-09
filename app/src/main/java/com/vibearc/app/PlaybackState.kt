@@ -5,6 +5,22 @@ import java.util.Base64
 
 private const val RecentLimit = 20
 
+internal fun nextQueueInsertionIndex(currentIndex: Int, itemCount: Int): Int =
+    if (currentIndex in 0 until itemCount) currentIndex + 1 else 0
+
+internal fun isNextQueueInsertion(previous: List<Any>, updated: List<Any>, currentIndex: Int): Boolean {
+    if (currentIndex !in previous.indices || updated.size != previous.size + 1) return false
+    val insertedIndex = currentIndex + 1
+    return updated.take(insertedIndex) + updated.drop(insertedIndex + 1) == previous
+}
+
+internal fun prioritizeNextInShuffle(order: List<Int>, currentIndex: Int, nextIndex: Int): List<Int> {
+    if (currentIndex !in order || nextIndex !in order || currentIndex == nextIndex) return order
+    return order.filterNot { it == nextIndex }.toMutableList().apply {
+        add(indexOf(currentIndex) + 1, nextIndex)
+    }
+}
+
 internal fun artworkSwipeStep(distancePx: Float, thresholdPx: Float): Int = when {
     !distancePx.isFinite() || !thresholdPx.isFinite() || thresholdPx <= 0f -> 0
     distancePx <= -thresholdPx -> 1

@@ -30,8 +30,8 @@ android {
         applicationId = "com.vibearc.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.4.0"
+        versionCode = 23
+        versionName = "1.7.0"
         buildConfigField("String", "LASTFM_API_KEY", "\"$escapedLastFmApiKey\"")
         buildConfigField("String", "LASTFM_SIGNER_URL", "\"${configValue("LASTFM_SIGNER_URL")}\"")
         buildConfigField("String", "LASTFM_SIGNER_TOKEN", "\"${configValue("LASTFM_SIGNER_TOKEN")}\"")
@@ -51,7 +51,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

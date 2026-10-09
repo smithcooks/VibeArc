@@ -6,9 +6,11 @@ import android.os.Looper
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -29,6 +31,9 @@ class PlaybackService : MediaSessionService() {
     private lateinit var bitPerfect: BitPerfectController
     private val handler = Handler(Looper.getMainLooper())
     private val lastFmExecutor = Executors.newSingleThreadExecutor()
+    private val automaticQueueExecutor = Executors.newSingleThreadExecutor()
+    private var automaticQueueBusy = false
+    @Volatile private var destroyed = false
     private var trackedMediaId = ""
     private var listenedMs = 0L
     private var lastPollMs = 0L
@@ -42,7 +47,29 @@ class PlaybackService : MediaSessionService() {
     private var crossfadeNextIndex = C.INDEX_UNSET
     private var lastAudioRefreshMs = 0L
     private var refreshedMediaId: String? = null
+    private var queueWindowUids: List<Any> = emptyList()
     private val playerListener = object : Player.Listener {
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+            val window = Timeline.Window()
+            val updatedUids = List(timeline.windowCount) { timeline.getWindow(it, window).uid }
+            val insertedNext = isNextQueueInsertion(queueWindowUids, updatedUids, player.currentMediaItemIndex)
+            queueWindowUids = updatedUids
+            if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
+            // Queue edits invalidate the next item already prepared for crossfade.
+            cancelCrossfade()
+            if (!insertedNext || !player.shuffleModeEnabled) return
+            val order = mutableListOf<Int>()
+            var index = timeline.getFirstWindowIndex(true)
+            repeat(timeline.windowCount) {
+                if (index == C.INDEX_UNSET) return
+                order.add(index)
+                index = timeline.getNextWindowIndex(index, Player.REPEAT_MODE_OFF, true)
+            }
+            val next = player.currentMediaItemIndex + 1
+            val prioritized = prioritizeNextInShuffle(order, player.currentMediaItemIndex, next)
+            if (prioritized != order) player.setShuffleOrder(DefaultShuffleOrder(prioritized.toIntArray(), 0L))
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             val source = player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
             val mediaId = player.currentMediaItem?.mediaId
@@ -89,6 +116,7 @@ class PlaybackService : MediaSessionService() {
             scrobbleAttempts = 0
             scrobbleRetryAtMs = 0L
             nowPlayingSession = null
+            fillAutomaticQueue()
         }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) = audioEffects.attach(audioSessionId)
@@ -159,17 +187,55 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onDestroy() {
+        destroyed = true
         handler.removeCallbacks(sleepTimerCheck)
         player.removeListener(playerListener)
         cancelCrossfade()
         bitPerfect.clear()
         audioEffects.release()
         lastFmExecutor.shutdownNow()
+        automaticQueueExecutor.shutdownNow()
         mediaSession?.release()
         mediaSession = null
         player.release()
         crossfadePlayer.release()
         super.onDestroy()
+    }
+
+    private fun fillAutomaticQueue() {
+        if (destroyed || automaticQueueBusy || player.mediaItemCount >= AutomaticQueueSize) return
+        val seed = player.currentMediaItem?.track ?: return
+        if (!isYouTubeWatchUri(seed.catalogUri)) return
+        val firstWindow = queueWindowUids.firstOrNull() ?: return
+        val queued = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).track }
+        automaticQueueBusy = true
+        automaticQueueExecutor.execute {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            val candidates = mutableListOf<Track>()
+            fun needsMore() = !destroyed && !Thread.currentThread().isInterrupted &&
+                queued.size + automaticQueueAdditions(queued, candidates).size < AutomaticQueueSize
+            if (YouTubeWebSession.isAuthenticated()) {
+                candidates += runCatching { YouTubeMusicSessionApi.loadRadio(seed) }.getOrDefault(emptyList())
+            }
+            if (needsMore()) candidates += runCatching { OnlineMusic.search(seed.artist) }.getOrDefault(emptyList())
+            if (needsMore() && YouTubeWebSession.isAuthenticated()) {
+                candidates += runCatching { YouTubeMusicSessionApi.loadHomeFeed().flatMap(YouTubeFeedSection::tracks) }
+                    .getOrDefault(emptyList())
+            }
+            if (needsMore()) candidates += runCatching { OnlineMusic.search("${seed.artist} radio") }.getOrDefault(emptyList())
+            handler.post {
+                if (destroyed) return@post
+                automaticQueueBusy = false
+                // A replaced queue must never receive the previous song's recommendations.
+                if (queueWindowUids.firstOrNull() != firstWindow) {
+                    fillAutomaticQueue()
+                    return@post
+                }
+                val current = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).track }
+                val additions = automaticQueueAdditions(current, candidates)
+                if (additions.isNotEmpty()) player.addMediaItems(additions.map(Track::toMediaItem))
+            }
+        }
     }
 
     private fun updateCrossfade() {

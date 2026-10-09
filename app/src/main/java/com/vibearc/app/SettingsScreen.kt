@@ -1,5 +1,12 @@
 package com.vibearc.app
 
+import com.vibearc.app.GlassButton as Button
+import com.vibearc.app.GlassTextButton as OutlinedButton
+import com.vibearc.app.GlassTextButton as TextButton
+import com.vibearc.app.GlassButton as FilledTonalButton
+import com.vibearc.app.GlassIconButton as IconButton
+import com.vibearc.app.GlassFilledIconButton as FilledIconButton
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -27,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,7 +96,7 @@ internal fun SettingsScreen(
         item { ReferenceRow("Sync Playback to YouTube Music History","Not enabled yet","clock",5,6,onClick={syncInfo()}) }
         item {
             Spacer(Modifier.height(24.dp))
-            ReferenceSurface(Modifier.fillMaxWidth().clickable(onClick=onDownloads),highlighted=true) {
+            ReferenceSurface(Modifier.fillMaxWidth().motionClickable(onClick=onDownloads),highlighted=true) {
                 Row(Modifier.padding(20.dp),verticalAlignment=Alignment.CenterVertically) {
                     Surface(shape=CircleShape,color=MaterialTheme.colorScheme.primary) {
                         Box(Modifier.size(48.dp),contentAlignment=Alignment.Center) { Glyph("download",color=MaterialTheme.colorScheme.onPrimary) }
@@ -102,10 +110,12 @@ internal fun SettingsScreen(
             }
         }
         item { SettingsHeading("Appearance") }
-        item { ReferenceRow("AMOLED Mode","Pure black background","amoled",0,4,appearance.amoledMode,onClick={onAppearanceChange(appearance.copy(amoledMode=!appearance.amoledMode))}) }
+        item { ReferenceRow("Theme",appearance.themeMode.label,"palette",onClick={sheet="Theme"}) }
+        item { ReferenceRow("AMOLED Mode","Pure black background in dark mode","amoled",0,4,appearance.amoledMode,onClick={onAppearanceChange(appearance.copy(amoledMode=!appearance.amoledMode))}) }
         item { ReferenceRow("Dynamic Color",if(Build.VERSION.SDK_INT>=31) "Use your wallpaper's colors" else "Requires Android 12 or later","palette",1,4,appearance.dynamicColorEnabled,enabled=Build.VERSION.SDK_INT>=31,onClick={onAppearanceChange(appearance.copy(dynamicColorEnabled=!appearance.dynamicColorEnabled))}) }
         item { ReferenceRow("Dynamic Now Playing","Match the app to playing artwork","album",2,4,appearance.dynamicNowPlayingEnabled,onClick={onAppearanceChange(appearance.copy(dynamicNowPlayingEnabled=!appearance.dynamicNowPlayingEnabled))}) }
         item { ReferenceRow("Use Application Font","A custom look across the whole app","font",3,4,appearance.applicationFontEnabled,onClick={onAppearanceChange(appearance.copy(applicationFontEnabled=!appearance.applicationFontEnabled))}) }
+        item { ReferenceRow("Reduce motion","Simpler transitions and a still seek bar","wave",checked=appearance.reduceMotion,onClick={onAppearanceChange(appearance.copy(reduceMotion=!appearance.reduceMotion))}) }
         item { SettingsHeading("Accent") }
         item {
             ReferenceSurface {
@@ -114,7 +124,7 @@ internal fun SettingsScreen(
                         Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                             row.forEach { preset ->
                                 val selected=appearance.accentPreset==preset
-                                Column(Modifier.weight(1f).clickable(role=Role.RadioButton) {
+                                Column(Modifier.weight(1f).motionClickable(role=Role.RadioButton) {
                                     if(preset==AccentPreset.Custom) sheet="Custom accent"
                                     else onAppearanceChange(appearance.copy(accentPreset=preset))
                                 }.semantics { this.selected=selected },horizontalAlignment=Alignment.CenterHorizontally) {
@@ -123,7 +133,7 @@ internal fun SettingsScreen(
                                         .border(if(selected) 2.dp else 0.dp,if(selected) MaterialTheme.colorScheme.primary else Color.Transparent,RoundedCornerShape(20.dp))) {
                                         if(preset==AccentPreset.Custom) Box(Modifier.matchParentSize().background(Brush.sweepGradient(listOf(Color.Red,Color.Yellow,Color.Green,Color.Cyan,Color.Blue,Color.Magenta,Color.Red))))
                                         else if(preset==AccentPreset.Mono) {
-                                            Box(Modifier.matchParentSize().background(Color(0xFF363636)),contentAlignment=Alignment.Center) { Glyph("amoled") }
+                                            Box(Modifier.matchParentSize().background(Color(0xFF363636)),contentAlignment=Alignment.Center) { Glyph("amoled", color=Color.White) }
                                         } else Column {
                                             Row(Modifier.weight(1f)) { Box(Modifier.weight(1f).fillMaxHeight().background(lerp(accent,Color.Black,.35f))); Box(Modifier.weight(1f).fillMaxHeight().background(lerp(accent,Color.White,.12f))) }
                                             Row(Modifier.weight(1f)) { Box(Modifier.weight(1f).fillMaxHeight().background(lerp(accent,Color.White,.50f))); Box(Modifier.weight(1f).fillMaxHeight().background(accent)) }
@@ -214,6 +224,17 @@ internal fun SettingsScreen(
                     }
                 }
                 when(title) {
+                    "Theme" -> items(ThemeMode.entries.size) { index ->
+                        val mode = ThemeMode.entries[index]
+                        QualityChoice(mode.label, if(appearance.themeMode == mode) "Selected" else "Appearance",
+                            when(mode) {
+                                ThemeMode.Dark -> "Dark surfaces and light text."
+                                ThemeMode.Light -> "Light surfaces and clearer glass controls."
+                                ThemeMode.System -> "Changes automatically with your phone's appearance."
+                            }, appearance.themeMode == mode) {
+                            onAppearanceChange(appearance.copy(themeMode=mode)); sheet=null
+                        }
+                    }
                     "Equalizer" -> {
                         item {
                             ReferenceRow("15-band equalizer","Android native DSP · ±12 dB","equalizer",checked=audioTuning.equalizerEnabled,onClick={
@@ -355,7 +376,7 @@ private fun SettingsHeading(title:String) {
 private fun QualityChoice(title:String,badge:String,description:String,selected:Boolean,onClick:()->Unit) {
     ReferenceSurface(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
         .border(if(selected) 1.5.dp else 0.dp,if(selected) MaterialTheme.colorScheme.primary else Color.Transparent,RoundedCornerShape(24.dp))
-        .clickable(role=Role.RadioButton,onClick=onClick).semantics { this.selected=selected },highlighted=selected) {
+        .motionClickable(role=Role.RadioButton,onClick=onClick).semantics { this.selected=selected },highlighted=selected) {
         Row(Modifier.padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                 Text(title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleLarge)
