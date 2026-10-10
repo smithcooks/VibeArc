@@ -8,3 +8,5 @@ HSLcom/vibearc/app/UiMotionKt;->**(**)**
 HSLcom/vibearc/app/PlayerScreensKt;->**(**)**
 HSLcom/vibearc/app/PlaybackSeekBarKt;->**(**)**
 HSLcom/vibearc/app/GlassButtonsKt;->**(**)**
+HSLcom/vibearc/app/CatalogScreensKt;->**(**)**
+HSLcom/vibearc/app/StandbyScreenKt;->**(**)**

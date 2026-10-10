@@ -49,6 +49,8 @@ internal fun HomeScreen(
     onlineSections: List<YouTubeFeedSection>, onlineBusy: Boolean,
     onPlay: (Track, List<Track>) -> Unit, onExplore: () -> Unit,
     onLibrary: () -> Unit, onDiscover: () -> Unit, onSearch: (String) -> Unit,
+    onArtist: (String) -> Unit,
+    onAlbum: (String) -> Unit,
 ) {
     val now = LocalDateTime.now()
     val onlineTracks = remember(onlineSections) { onlineSections.flatMap(YouTubeFeedSection::tracks) }
@@ -128,14 +130,14 @@ internal fun HomeScreen(
                 }
             }
         }
-        if(hero != null) item { ArtistSpotlight(hero, { onPlay(hero, artists[hero.artist].orEmpty()) }, { onSearch(hero.artist) }) }
+        if(hero != null) item { ArtistSpotlight(hero, { onPlay(hero, artists[hero.artist].orEmpty()) }, { onArtist(hero.artist) }) }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 ShelfHeading("Artists for you", "Worth another listen")
                 if(artists.isEmpty()) FeedEmpty("Find artists by searching for a song you love.", onExplore)
                 else androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     items(artists.keys.toList(), key = { it }) { artist ->
-                        Column(Modifier.width(92.dp).motionClickable { onSearch(artist) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(Modifier.width(92.dp).motionClickable { onArtist(artist) }, horizontalAlignment = Alignment.CenterHorizontally) {
                             TrackArtwork(artists.getValue(artist).first(), null, Modifier.size(88.dp).clip(CircleShape), sizePx = 240)
                             Spacer(Modifier.height(10.dp))
                             Text(artist, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -152,8 +154,7 @@ internal fun HomeScreen(
                 else androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(albums, key = Track::uri) { album ->
                         ShelfCard(album, album.album, album.artist) {
-                            val songs = pool.filter { it.artist == album.artist && it.album == album.album }
-                            onPlay(album, songs)
+                            onAlbum(album.album)
                         }
                     }
                 }
@@ -437,6 +438,7 @@ internal fun LibraryScreen(
                     }
                     item { PlaylistTile("My Library","${tracks.size} tracks · On this device",tracks.firstOrNull(),1,2,{selectedId="__all"}) {} }
                 } else {
+                    if(playlist != null) item { PlaylistArtworkHeader(playlist.name, selected, onPlay) }
                     if(selectedId=="__all") item {
                         Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             listOf("Tracks","Artists","Albums","Folders").forEach { label ->
@@ -463,11 +465,15 @@ internal fun LibraryScreen(
                                 TextButton(onClick=onChooseFile) { Text("Add audio file") }
                             }
                         }
-                        items(visible,key=Track::uri) { track ->
-                            TrackRow(track,{onPlay(track,visible)},onFavorite={onToggleFavorite(track)},isFavorite=track.isFavorite,
-                                trailingIcon=if(playlist!=null) Icons.Default.Delete else Icons.AutoMirrored.Filled.List,
-                                trailingDescription=if(playlist!=null) "Remove from playlist" else "Add to playlist",
-                                onTrailingAction={if(playlist!=null) onRemoveFromPlaylist(playlist.id,track.uri) else addTrack=track})
+                        items(visible.size,key={visible[it].uri}) { index ->
+                            val track = visible[index]
+                            if(playlist != null) Row(verticalAlignment=Alignment.CenterVertically) {
+                                Text("${index+1}",Modifier.width(24.dp),color=MutedText,style=MaterialTheme.typography.bodySmall)
+                                Box(Modifier.weight(1f)) { CatalogSongRow(track,onRemove={onRemoveFromPlaylist(playlist.id,track.uri)}) { onPlay(track,visible) } }
+                            } else TrackRow(track,{onPlay(track,visible)},onFavorite={onToggleFavorite(track)},isFavorite=track.isFavorite,
+                                trailingIcon=Icons.AutoMirrored.Filled.List,
+                                trailingDescription="Add to playlist",
+                                onTrailingAction={addTrack=track})
                         }
                     }
                 }

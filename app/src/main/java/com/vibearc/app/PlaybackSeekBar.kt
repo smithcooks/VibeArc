@@ -45,7 +45,7 @@ private fun SeekWaveTrack(state: SliderState, duration: Float, wavy: Boolean, mo
     Box(Modifier.fillMaxWidth().height(30.dp).drawWithCache {
         val wavelength = 28.dp.toPx()
         val amplitude = 3.dp.toPx()
-        val stroke = Stroke(3.dp.toPx(), cap = StrokeCap.Round)
+        val stroke = Stroke(5.dp.toPx(), cap = StrokeCap.Round)
         val gap = 11.dp.toPx()
         val path = Path()
         // One cached curve; animation only translates it, never rebuilds overlapping waves.

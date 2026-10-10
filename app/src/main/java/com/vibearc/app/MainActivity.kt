@@ -177,6 +177,7 @@ private val LocalTrackActions = staticCompositionLocalOf<TrackActionsHost?> { nu
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        upgradeHighestQualityDefaults()
         ArtworkCache.initialize(cacheDir)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -529,6 +530,7 @@ private fun VibeArcApp(
         }
     }
     var searchSeed by remember { mutableStateOf("") }
+    var searchKind by remember { mutableStateOf<CatalogKind?>(null) }
     var currentTrack by remember { mutableStateOf<Track?>(null) }
     var artworkAccentArgb by remember(currentTrack?.uri) { mutableStateOf<Long?>(null) }
     LaunchedEffect(currentTrack?.uri, currentTrack?.artworkUri, appearance.dynamicNowPlayingEnabled) {
@@ -966,14 +968,14 @@ private fun VibeArcApp(
         LocalGlassBackdrop provides glassBackdrop,
     ) {
     val screenHeader: @Composable (Tab) -> Unit = { tab ->
-            if (tab !in listOf(Tab.Player, Tab.Search, Tab.Library, Tab.Downloads)) ReferenceHeader(
+            if (tab !in listOf(Tab.Player, Tab.Search, Tab.Library, Tab.Downloads, Tab.Settings)) ReferenceHeader(
                 title = when(tab) { Tab.Home -> "Home"; Tab.Stats -> "Stats"; else -> tab.label },
                 onBack = if (tab !in MainTabs) navigateBack else null,
             ) {
                 if (tab in MainTabs) {
                     RoundAction("Discover", { navigate(Tab.Discover) }) { Glyph("discover") }
                     Spacer(Modifier.width(8.dp))
-                    RoundAction("Search", { searchSeed = ""; navigate(Tab.Search) }) { Icon(Icons.Default.Search, null) }
+                    RoundAction("Search", { searchSeed = ""; searchKind = null; navigate(Tab.Search) }) { Icon(Icons.Default.Search, null) }
                     Spacer(Modifier.width(8.dp))
                     RoundAction("Settings", { navigate(Tab.Settings) }) {
                         if(tab == Tab.Stats) Glyph("account") else Icon(Icons.Default.Settings, null)
@@ -984,7 +986,7 @@ private fun VibeArcApp(
     Scaffold(
         topBar = { if (currentTab !in MainTabs) screenHeader(currentTab) },
         bottomBar = {
-            if (currentTab in MainTabs) Column(
+            if (currentTab in MainTabs || currentTab in listOf(Tab.Search, Tab.Library, Tab.Discover)) Column(
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -995,7 +997,7 @@ private fun VibeArcApp(
                     onToggle = activePlayer::toggle,
                     onNext = activePlayer::seekToNextMediaItem,
                 )
-                MainTabBar(mainPager) { page -> navigate(MainTabs[page]) }
+                if(currentTab in MainTabs) MainTabBar(mainPager) { page -> navigate(MainTabs[page]) }
             }
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -1012,13 +1014,18 @@ private fun VibeArcApp(
                 onlineSections = youtubeFeedSections,
                 onlineBusy = youtubeFeedBusy,
                 onPlay = playTrack,
-                onExplore = { searchSeed = ""; navigate(Tab.Search) },
+                onExplore = { searchSeed = ""; searchKind = null; navigate(Tab.Search) },
                 onLibrary = { navigate(Tab.Library) },
                 onDiscover = { navigate(Tab.Discover) },
-                onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
+                onSearch = { query -> searchSeed = query; searchKind = null; navigate(Tab.Search) },
+                onArtist = { artist -> searchSeed = artist; searchKind = CatalogKind.Artist; navigate(Tab.Search) },
+                onAlbum = { album -> searchSeed = album; searchKind = CatalogKind.Album; navigate(Tab.Search) },
             )
             Tab.Search -> {
-                SearchScreen(padding, library, searchSeed, navigateBack) { track -> playTrack(track, listOf(track)) }
+                SearchScreen(padding, library, searchSeed,
+                    initialCategory = when(searchKind) { CatalogKind.Artist -> "Artists"; CatalogKind.Album -> "Albums"; else -> "Tracks" },
+                    openResult = searchKind != null,
+                    onBack = navigateBack, onPlayQueue = playTrack) { track -> playTrack(track, listOf(track)) }
             }
             Tab.Library -> LibraryScreen(
                 padding = padding,
@@ -1105,9 +1112,11 @@ private fun VibeArcApp(
                 },
                 dynamicArtworkColor = appearance.dynamicNowPlayingEnabled,
                 lyricsAnimationEnabled = appearance.lyricsAnimationEnabled,
+                onArtist = { artist -> searchSeed = artist; searchKind = CatalogKind.Artist; navigate(Tab.Search) },
             ) else EmptyPlayer(padding) { currentTab = Tab.Search }
             Tab.Settings -> SettingsScreen(
                 padding, appearance, onAppearanceChange,
+                onBack = navigateBack,
                 youtubeAccountData = youtubeAccountData,
                 youtubeAccountBusy = youtubeAccountBusy,
                 youtubeSyncBusy = youtubeSyncBusy,
@@ -1164,19 +1173,19 @@ private fun VibeArcApp(
                 padding, library, recentTracks, lastFmSnapshot, lastFmBusy, lastFmError,
                 onLastFmRefresh = { lastFmRefresh++ },
                 onPlay = { track -> playTrack(track, recentTracks) },
-                onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
+                onSearch = { query -> searchSeed = query; searchKind = null; navigate(Tab.Search) },
             )
             Tab.Discover -> DiscoverScreen(
                 padding, discoveryTracks, lastFmSnapshot?.topTracks?.firstOrNull(),
                 lastFmPlayable, lastFmRecommendationsBusy,
                 onPlay = { track -> playTrack(track, discoveryTracks) },
-                onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
+                onSearch = { query -> searchSeed = query; searchKind = null; navigate(Tab.Search) },
             )
             Tab.Generator -> GeneratorScreen(
                 padding, library, recentTracks, discoveryTracks, radioTracks, currentTrack, radioBusy,
                 onPlay = { queue -> playTrack(queue.first(), queue) },
                 onRadio = { currentTrack?.let { startRadio(it, artistOnly = false) } },
-                onSearch = { query -> searchSeed = query; navigate(Tab.Search) },
+                onSearch = { query -> searchSeed = query; searchKind = null; navigate(Tab.Search) },
             )
         }
         }
@@ -1523,7 +1532,7 @@ internal fun SongActionTarget(track: Track?, onClick: () -> Unit, modifier: Modi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SongOptionsSheet(track: Track, playableTrack: Track?, onDismiss: () -> Unit) {
+internal fun SongOptionsSheet(track: Track, playableTrack: Track?, onDismiss: () -> Unit) {
     val actions = LocalTrackActions.current ?: return
     val downloadContext=LocalContext.current
     val downloadStore=remember(downloadContext) { OfflineDownloads.get(downloadContext) }

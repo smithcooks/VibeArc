@@ -68,6 +68,7 @@ internal fun PlayerScreen(
     onCycleRepeat: () -> Unit, onCycleSleepTimer: () -> Unit,
     dynamicArtworkColor: Boolean,
     lyricsAnimationEnabled: Boolean,
+    onArtist: (String) -> Unit,
 ) {
     var page by rememberSaveable { mutableStateOf("player") }
     var menu by remember { mutableStateOf(false) }
@@ -94,7 +95,7 @@ internal fun PlayerScreen(
                     if (page == "player") onBack() else page = "player"
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(when(page) { "queue" -> "PLAYING QUEUE"; "lyrics" -> "LYRICS"; else -> "NOW PLAYING" },
+                    Text(when(page) { "queue" -> "PLAYING QUEUE"; "lyrics" -> "LYRICS"; "standby" -> "STANDBY MODE"; else -> "NOW PLAYING" },
                         fontSize = 12.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold)
                     Text(if(page == "lyrics") "${track.title} · ${track.artist}" else track.album.ifBlank { "Your music" },
                         maxLines = 1, overflow = TextOverflow.Ellipsis, color = MutedText, fontSize = 14.sp)
@@ -104,6 +105,8 @@ internal fun PlayerScreen(
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem(text = { Text("Playing queue") }, onClick = { menu = false; page = "queue" })
                         DropdownMenuItem(text = { Text("Lyrics") }, onClick = { menu = false; page = "lyrics" })
+                        DropdownMenuItem(text = { Text("Standby Mode") }, onClick = { menu = false; page = "standby" })
+                        DropdownMenuItem(text = { Text("View artist") }, onClick = { menu = false; onArtist(track.artist) })
                         DropdownMenuItem(text = { Text(if(sleepRemainingMillis == 0L) "Sleep timer: off" else "Sleep timer: ${(sleepRemainingMillis + 59_999) / 60_000} min") },
                             onClick = { menu = false; onCycleSleepTimer() })
                         DropdownMenuItem(text = { Text("Audio information") }, onClick = { menu = false; audioInfo = true })
@@ -114,6 +117,7 @@ internal fun PlayerScreen(
             when (page) {
                 "queue" -> PlayingQueueScreen(player, queue)
                 "lyrics" -> LyricsScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled)
+                "standby" -> StandbyScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled)
                 else -> {
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -125,7 +129,8 @@ internal fun PlayerScreen(
                                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                                     Text(track.title, fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     Spacer(Modifier.height(4.dp))
-                                    Text(track.artist, style = MaterialTheme.typography.titleLarge, color = MutedText, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text(track.artist, modifier = Modifier.motionClickable { onArtist(track.artist) },
+                                        style = MaterialTheme.typography.titleLarge, color = MutedText, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
                                 PlayerAction(if(track.isFavorite) "Remove from favorites" else "Add to favorites", if(track.isFavorite) "heartFilled" else "heart", enabled = onFavorite != null) { onFavorite?.invoke() }
                                 Spacer(Modifier.width(8.dp))
@@ -147,7 +152,7 @@ internal fun PlayerScreen(
                         item {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 PlayerPill("Shuffle ${if(shuffleEnabled) "on" else "off"}", "shuffle", Modifier.weight(1f), shuffleEnabled, onToggleShuffle)
-                                PlayerPill("AUDIO", "quality", Modifier.weight(1.4f), false, { audioInfo = true }, showText = true)
+                                PlayerPill(player.currentAudioDetails()?.label() ?: "AUDIO", "quality", Modifier.weight(1.8f), false, { audioInfo = true }, showText = true)
                                 PlayerPill(when(repeatMode) { Player.REPEAT_MODE_ONE -> "Repeat one"; Player.REPEAT_MODE_ALL -> "Repeat all"; else -> "Repeat off" }, "repeat", Modifier.weight(1f), repeatMode != Player.REPEAT_MODE_OFF, onCycleRepeat)
                             }
                         }
@@ -164,7 +169,7 @@ internal fun PlayerScreen(
 }
 
 @Composable
-private fun SlidingArtwork(player: Player, track: Track, modifier: Modifier = Modifier) {
+internal fun SlidingArtwork(player: Player, track: Track, modifier: Modifier = Modifier) {
     val motion = LocalMotionEnabled.current
     var distance by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
@@ -254,7 +259,7 @@ private fun PlayingQueueScreen(player: Player, queue: List<Track>) {
 }
 
 @Composable
-private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy: Boolean, animationEnabled: Boolean) {
+internal fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy: Boolean, animationEnabled: Boolean, embedded: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var expanded by remember { mutableStateOf(false) }
@@ -407,7 +412,7 @@ private fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy:
                 PlayerAction(if(expanded) "Show playback controls" else "Expand lyrics", "expand") { expanded = !expanded }
             }
         }
-        if(!expanded) PlayerTimeControls(player, track, isPlaying, wavy, compact = true)
+        if(!expanded && !embedded) PlayerTimeControls(player, track, isPlaying, wavy, compact = true)
     }
     if(editor) AlertDialog(
         onDismissRequest={editor=false},
@@ -453,7 +458,8 @@ private fun PlayerPill(label: String, glyph: String, modifier: Modifier, selecte
         ReferenceSurface(modifier.clip(CircleShape).motionClickable(onClick = onClick).semantics { contentDescription = label }, CircleShape, highlighted = selected, floating = true) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Glyph(glyph, Modifier.size(22.dp), if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-            if(showText) { Spacer(Modifier.width(6.dp)); Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+            if(showText) { Spacer(Modifier.width(6.dp)); Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis) }
             if(label == "Repeat one") Text("1", fontSize = 11.sp)
         }
     }
@@ -461,7 +467,7 @@ private fun PlayerPill(label: String, glyph: String, modifier: Modifier, selecte
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlayerTimeControls(player: Player, track: Track, isPlaying: Boolean, wavy: Boolean, compact: Boolean = false) {
+internal fun PlayerTimeControls(player: Player, track: Track, isPlaying: Boolean, wavy: Boolean, compact: Boolean = false, timeLabels: Boolean = true) {
     var position by remember(track.uri) { mutableLongStateOf(0L) }
     var duration by remember(track.uri) { mutableLongStateOf(track.durationMs.coerceAtLeast(1L)) }
     var dragging by remember(track.uri) { mutableStateOf(false) }
@@ -482,17 +488,19 @@ private fun PlayerTimeControls(player: Player, track: Track, isPlaying: Boolean,
             Text("−" + DateUtils.formatElapsedTime((duration - position).coerceAtLeast(0L) / 1_000), color = MutedText, fontWeight = FontWeight.Bold)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            if(compact) Text(DateUtils.formatElapsedTime(position / 1_000), fontSize = 12.sp, color = MutedText)
+            if(compact && timeLabels) Text(DateUtils.formatElapsedTime(position / 1_000), fontSize = 12.sp, color = MutedText)
             PlayerAction("Previous track", "previous", if(compact) 46.dp else 60.dp, player.hasPreviousMediaItem()) { player.seekToPreviousMediaItem() }
-            FilledIconButton(onClick = { if(player.isPlaying) player.pause() else player.play() }, interactionSource = playSource,
-                modifier = Modifier.size(if(compact) 56.dp else 78.dp).motionPress(playSource).semantics { contentDescription = if(isPlaying) "Pause" else "Play" }) {
+            Button(onClick = { if(player.isPlaying) player.pause() else player.play() }, interactionSource = playSource,
+                modifier = Modifier.weight(1f).padding(horizontal = 16.dp).height(if(compact) 56.dp else 64.dp).motionPress(playSource)
+                    .semantics { contentDescription = if(isPlaying) "Pause" else "Play" }, shape = CircleShape) {
                 MotionSwap(isPlaying) { playing ->
                 if(playing) Glyph("pause", Modifier.size(30.dp), MaterialTheme.colorScheme.onPrimary)
                 else Icon(Icons.Default.PlayArrow, "Play", Modifier.size(34.dp))
                 }
+                if(!compact) { Spacer(Modifier.width(8.dp)); Text(if(isPlaying) "Pause" else "Play", fontWeight = FontWeight.Bold) }
             }
             PlayerAction("Next track", "next", if(compact) 46.dp else 60.dp, player.hasNextMediaItem()) { player.seekToNextMediaItem() }
-            if(compact) Text("−" + DateUtils.formatElapsedTime((duration - position).coerceAtLeast(0L) / 1_000), fontSize = 12.sp, color = MutedText)
+            if(compact && timeLabels) Text("−" + DateUtils.formatElapsedTime((duration - position).coerceAtLeast(0L) / 1_000), fontSize = 12.sp, color = MutedText)
         }
     }
 }

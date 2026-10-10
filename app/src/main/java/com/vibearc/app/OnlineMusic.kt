@@ -59,8 +59,10 @@ internal fun selectAudioCandidate(
 ): AudioCandidate? {
     val matching = candidates.filter { it.url.isNotBlank() && (format == AudioFormat.ANY || it.format == format) }
     val withinLimit = quality.maxBitrateKbps?.let { limit -> matching.filter { it.bitrate in 1..limit } }.orEmpty()
-    return (if (quality.maxBitrateKbps == null) matching else withinLimit.ifEmpty { matching })
-        .maxByOrNull(AudioCandidate::bitrate)
+    val eligible = if (quality.maxBitrateKbps == null) matching else withinLimit.ifEmpty { matching }
+    return if(quality == AudioQuality.HIGHEST) eligible.maxWithOrNull(
+        compareBy<AudioCandidate> { it.isLossless }.thenBy { it.bitrate }.thenBy { it.format == AudioFormat.OPUS })
+        else eligible.maxByOrNull(AudioCandidate::bitrate)
 }
 
 internal fun selectAudioUrl(candidates: List<AudioCandidate>, preferHighestQuality: Boolean = true): String? {
@@ -156,7 +158,7 @@ internal fun parseInnertubeSearch(json: String): List<Track> {
                 .orEmpty(),
             folder = "YouTube Music",
         ).withoutPlayCounts()
-    }.distinctBy(Track::uri).take(20)
+    }.distinctBy(Track::uri).take(100)
 }
 
 private val DurationPattern = Regex("^(?:\\d+:)?\\d{1,2}:\\d{2}$")
@@ -219,7 +221,26 @@ internal object OnlineMusic {
         }
     }
 
-    private fun searchInnertube(query: String): List<Track> {
+    fun searchCatalog(query: String, kind: CatalogKind): List<CatalogItem> {
+        // Music filters from the bundled NewPipe music extractor, not its generic URL helper.
+        val params = when(kind) {
+            CatalogKind.Artist -> "Eg-KAQwIABAAGAAgASgAMABqChAEEAUQAxAKEAk%3D"
+            CatalogKind.Album -> "Eg-KAQwIABAAGAEgACgAMABqChAEEAUQAxAKEAk%3D"
+            CatalogKind.Playlist -> "Eg-KAQwIABAAGAAgACgBMABqChAEEAUQAxAKEAk%3D"
+        }
+        return parseCatalogSearch(catalogRequest("search", query = query.trim(), params = params), kind)
+    }
+
+    fun browseCatalog(item: CatalogItem): CatalogPage {
+        require(item.id.matches(Regex("[A-Za-z0-9_-]{2,160}"))) { "Invalid catalog identity" }
+        return parseCatalogPage(catalogRequest("browse", browseId = item.id), item)
+    }
+
+    private fun searchInnertube(query: String): List<Track> =
+        parseInnertubeSearch(catalogRequest("search", query = query,
+            params = "Eg-KAQwIARAAGAAgACgAMABqChAEEAUQAxAKEAk%3D")).ifEmpty { error("InnerTube returned no playable songs") }
+
+    private fun catalogRequest(endpoint: String, query: String = "", params: String = "", browseId: String = ""): String {
         val version = getYoutubeMusicClientVersion()
         val requestBody = JsonWriter.string()
             .`object`()
@@ -236,19 +257,18 @@ internal object OnlineMusic {
                     .`object`("user").value("lockedSafetyMode", false).end()
                 .end()
                 .value("query", query.trim())
-                .value("params", "Eg-KAQwIARAAGAAgACgAMABqChAEEAUQAxAKEAk%3D")
+                .value("params", params)
+                .value("browseId", browseId)
             .end()
             .done()
             .toByteArray(Charsets.UTF_8)
         val response = NewPipe.getDownloader().postWithContentTypeJson(
-            "https://music.youtube.com/youtubei/v1/search?prettyPrint=false",
+            "https://music.youtube.com/youtubei/v1/$endpoint?prettyPrint=false",
             getYoutubeMusicHeaders(),
             requestBody,
         )
         check(response.responseCode() in 200..299) { "InnerTube search failed (${response.responseCode()})" }
-        return parseInnertubeSearch(response.responseBody()).ifEmpty {
-            error("InnerTube returned no playable songs")
-        }
+        return response.responseBody()
     }
 
     private fun searchWithNewPipe(query: String): List<Track> {
@@ -336,7 +356,9 @@ private fun audioCandidate(stream: org.schabi.newpipe.extractor.stream.AudioStre
         else -> AudioFormat.ANY
     }
     return AudioCandidate(
-        stream.content.takeIf { stream.isUrl }.orEmpty(), stream.averageBitrate, format,
+        stream.content.takeIf { stream.isUrl }.orEmpty(),
+        maxOf(stream.averageBitrate.let { if(it >= 10_000) it / 1_000 else it },
+            stream.bitrate.let { if(it >= 10_000) it / 1_000 else it }), format,
         stream.format?.mimeType ?: format.mimeType, stream.format?.suffix ?: format.extension,
         codec, stream.itagItem?.sampleRate ?: 0, stream.itagItem?.contentLength ?: -1,
     )

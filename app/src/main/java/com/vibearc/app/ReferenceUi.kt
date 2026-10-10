@@ -70,6 +70,7 @@ internal fun Glyph(name: String, modifier: Modifier = Modifier, color: Color = M
             "down" -> { line(6f,9f,12f,15f); line(12f,15f,18f,9f) }
             "up" -> { line(6f,15f,12f,9f); line(12f,9f,18f,15f) }
             "pause" -> { rect(6f,4f,4f,16f); rect(14f,4f,4f,16f) }
+            "play" -> drawPath(Path().apply { moveTo(7*u,4*u); lineTo(20*u,12*u); lineTo(7*u,20*u); close() },color)
             "previous", "next" -> {
                 val next = name == "next"
                 rect(if(next) 18f else 3f,5f,3f,14f)

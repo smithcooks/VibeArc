@@ -1,0 +1,12 @@
+// Explicitly opt-in provider traffic; separate from deterministic unit tests.
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.project(':app')
+    app.tasks.register('probeCatalog', JavaExec) {
+        dependsOn app.tasks.named('compileReleaseUnitTestJavaWithJavac')
+        classpath = app.tasks.named('testReleaseUnitTest').get().classpath
+        mainClass = 'com.vibearc.app.CatalogProbe'
+        doFirst {
+            if (app.findProperty('liveCatalogProbe') != 'true') throw new GradleException('Requires -PliveCatalogProbe=true')
+        }
+    }
+}

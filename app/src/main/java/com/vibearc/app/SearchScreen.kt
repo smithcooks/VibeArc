@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -72,9 +73,15 @@ internal fun playableOnlineTrack(track: Track, resolvedTracks: Map<String, Track
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQuery: String = "", onBack: () -> Unit = {}, onPlay: (Track) -> Unit) {
+internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQuery: String = "", initialCategory: String = "Tracks",
+    openResult: Boolean = false, onBack: () -> Unit = {}, onPlayQueue: (Track, List<Track>) -> Unit,
+    onPlay: (Track) -> Unit) {
     var query by remember { mutableStateOf(initialQuery) }
-    var category by remember { mutableStateOf("Tracks") }
+    var category by remember { mutableStateOf(initialCategory) }
+    var catalogResults by remember { mutableStateOf(emptyList<CatalogItem>()) }
+    val catalogPages = remember { mutableStateListOf<CatalogItem>() }
+    var autoOpened by remember { mutableStateOf(false) }
+    var attempt by remember { mutableIntStateOf(0) }
     var onlineResults by remember { mutableStateOf(emptyList<Track>()) }
     var onlineError by remember { mutableStateOf<String?>(null) }
     var searching by remember { mutableStateOf(false) }
@@ -93,15 +100,16 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
     val localResults = tracks.filter { track ->
         query.isBlank() || listOf(track.title, track.artist, track.album).any { it.contains(query, true) }
     }
-    LaunchedEffect(query, category) {
+    LaunchedEffect(query, category, attempt) {
         val requestedQuery = query.trim()
         onlineResults = emptyList()
+        catalogResults = emptyList()
         onlineError = null
         hasSearched = false
         resolvedOnlineTracks.clear()
         resolvingOnlineUris.clear()
         unavailableOnlineUris.clear()
-        if (requestedQuery.isBlank() || category == "Playlists") {
+        if (requestedQuery.isBlank()) {
             searching = false
         } else {
             delay(250)
@@ -109,7 +117,14 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
             hasSearched = true
             try {
                 if(!networkAllowsDownload(context,false)) onlineError="You're offline. Saved and phone music are still available in Library and Downloads."
-                else onlineResults = withContext(Dispatchers.IO) { OnlineMusic.search(requestedQuery) }
+                else if(category == "Tracks") onlineResults = withContext(Dispatchers.IO) { OnlineMusic.search(requestedQuery) }
+                else {
+                    val kind = when(category) { "Artists" -> CatalogKind.Artist; "Albums" -> CatalogKind.Album; else -> CatalogKind.Playlist }
+                    catalogResults = withContext(Dispatchers.IO) { OnlineMusic.searchCatalog(requestedQuery, kind) }
+                    if(openResult && !autoOpened && category == initialCategory && query == initialQuery) {
+                        catalogResults.firstOrNull { it.title.equals(initialQuery, true) }?.let { catalogPages.add(it); autoOpened = true }
+                    }
+                }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 onlineResults = emptyList()
@@ -150,6 +165,12 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
                 }
             }
         }
+    }
+    if(catalogPages.isNotEmpty()) {
+        val back = { catalogPages.removeAt(catalogPages.lastIndex); Unit }
+        androidx.activity.compose.BackHandler(onBack = back)
+        CatalogDetailScreen(catalogPages.last(), padding, back, { catalogPages.add(it) }, onPlayQueue)
+        return
     }
     Column(Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(bottomStart=24.dp,bottomEnd=24.dp)) {
@@ -203,8 +224,13 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
             }
         }
         onlineError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
-        if (hasSearched && !searching && onlineResults.isEmpty() && onlineError == null) {
-            item { Text("No public tracks found for “$query”.", color = MutedText) }
+        if (hasSearched && !searching && onlineResults.isEmpty() && catalogResults.isEmpty() && onlineError == null) {
+            item { Text("No matching ${category.lowercase()} found for “$query”.", color = MutedText) }
+        }
+        onlineError?.let { item { TextButton(onClick = { attempt++ }) { Text("Retry") } } }
+        if(category != "Tracks") {
+            catalogResults.firstOrNull()?.let { result -> item { CatalogResultRow(result, true) { catalogPages.add(result) } } }
+            items(catalogResults.drop(1), key = { "catalog:${it.id}" }) { result -> CatalogResultRow(result) { catalogPages.add(result) } }
         }
         if(category == "Playlists") {
             val matches = playlists.filter { it.name.contains(query, true) }
@@ -220,21 +246,18 @@ internal fun SearchScreen(padding: PaddingValues, tracks: List<Track>, initialQu
             }
         }
         if(category in listOf("Artists", "Albums") && query.isNotBlank()) {
-            val groups=(onlineResults+localResults).groupBy { if(category=="Artists") it.artist else it.album }
+            val groups=localResults.groupBy { if(category=="Artists") it.artist else it.album }
             items(groups.keys.sorted(),key={ "group:$it" }) { name ->
                 ReferenceRow(name,"${groups[name]?.size} matching tracks",if(category=="Artists") "account" else "album",onClick={ query=name; category="Tracks" })
             }
         }
         if(category=="Tracks") {
         if (onlineResults.isNotEmpty()) item { Text("Songs",fontWeight=FontWeight.Bold,modifier=Modifier.padding(vertical=12.dp)) }
-        items(onlineResults, key = { "online:${it.uri}" }) { track ->
+        onlineResults.firstOrNull()?.let { track -> item(key = "online:${track.uri}") { CatalogSongRow(track, true) { onPlayQueue(track, onlineResults) } } }
+        items(onlineResults.drop(1), key = { "online:${it.uri}" }) { track ->
             val playableTrack = playableOnlineTrack(track, resolvedOnlineTracks)
             val unavailable = track.uri in unavailableOnlineUris
-            TrackRow(
-                track,
-                playableTrack = playableTrack,
-                onPlay = { onPlay(playableTrack) },
-            )
+            CatalogSongRow(track) { onPlayQueue(playableTrack, onlineResults) }
             if (unavailable) Text(
                 "Unavailable on this connection",
                 color = MaterialTheme.colorScheme.error,

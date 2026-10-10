@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 internal fun SettingsScreen(
     padding: PaddingValues, appearance: AppearanceConfig,
     onAppearanceChange: (AppearanceConfig) -> Unit, onDownloads: () -> Unit,
+    onBack: () -> Unit,
     youtubeAccountData: YouTubeAccountData?, youtubeAccountBusy: Boolean, youtubeSyncBusy: Boolean,
     youtubeSelectedPlaylistIds: Set<String>,
     onConnectYouTube: () -> Unit, onDisconnectYouTube: () -> Unit,
@@ -59,6 +60,8 @@ internal fun SettingsScreen(
     onImportPlaylist: () -> Unit,
 ) {
     val context=LocalContext.current
+    var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    androidx.activity.compose.BackHandler(section != null) { section = null }
     var info by remember { mutableStateOf<Pair<String,String>?>(null) }
     var sheet by remember { mutableStateOf<String?>(null) }
     var streamFormat by remember { mutableStateOf(context.streamAudioFormat()) }
@@ -85,7 +88,18 @@ internal fun SettingsScreen(
         context.saveAudioTuning(value)
     }
     fun syncInfo() { unavailable("YouTube Music history","Google does not provide a supported YouTube Data API method for writing listening history, so VibeArc cannot safely enable this switch.") }
-    LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=22.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+    Column(Modifier.fillMaxSize()) {
+    ReferenceHeader(section ?: "Settings", onBack = { if(section != null) section = null else onBack() }) {}
+    LazyColumn(Modifier.weight(1f).padding(bottom=padding.calculateBottomPadding()),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=22.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+        if(section == null) {
+            item { ReferenceRow("Appearance","Theme, colors and motion","palette",onClick={section="Appearance"}) }
+            item { ReferenceRow("Playback & Downloads","Quality, equalizer and mobile data","quality",onClick={section="Playback"}) }
+            item { ReferenceRow("Accounts","YouTube Music and Last.fm","account",onClick={section="Accounts"}) }
+            item { ReferenceRow("Library & Backup","Imports, backup and restore","playlist",onClick={section="Library"}) }
+            item { ReferenceRow("About & Support","Updates, privacy and app information","code",onClick={section="About"}) }
+            item { ReferenceRow("Buy Me a Chai","Support Smith","heart",onClick={runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://buymeachai.ezee.li/Smith_cooks"))) }}) }
+        }
+        if(section == "Accounts") {
         item { ReferenceRow("VibeArc","Local listening profile","account",onClick={unavailable("Your profile","Your library and appearance choices are stored on this device.")}) }
         item { SettingsHeading("YouTube Music") }
         item { ReferenceRow("YouTube Music Account",when { youtubeAccountData != null -> youtubeAccountData.account.displayName; youtubeAccountBusy -> "Refreshing account…"; else -> "Tap to connect Google" },"account",0,6,onClick=if(youtubeAccountData == null) onConnectYouTube else ({sheet="YouTube Account"})) }
@@ -109,6 +123,8 @@ internal fun SettingsScreen(
                 }
             }
         }
+        }
+        if(section == "Appearance") {
         item { SettingsHeading("Appearance") }
         item { ReferenceRow("Theme",appearance.themeMode.label,"palette",onClick={sheet="Theme"}) }
         item { ReferenceRow("AMOLED Mode","Pure black background in dark mode","amoled",0,4,appearance.amoledMode,onClick={onAppearanceChange(appearance.copy(amoledMode=!appearance.amoledMode))}) }
@@ -159,6 +175,8 @@ internal fun SettingsScreen(
         item { ReferenceRow("Studio Master Clarity","Native clarity EQ and peak limiter","spark",4,5,audioTuning.studioMasterEnabled,enabled=Build.VERSION.SDK_INT>=28,onClick={
             updateAudioTuning(audioTuning.copy(studioMasterEnabled=!audioTuning.studioMasterEnabled,bitPerfectEnabled=false))
         }) }
+        }
+        if(section == "Playback") {
         item { SettingsHeading("Audio & Streaming") }
         item { ReferenceRow("Streaming Quality","${streamFormat.label} · ${streamQuality.label}","quality",0,7,onClick={sheet="Streaming Quality"}) }
         item { ReferenceRow("Offline Downloads","Save original playback audio · no format conversion","download",1,7,onClick=onDownloads) }
@@ -176,17 +194,27 @@ internal fun SettingsScreen(
             runCatching {context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:${context.packageName}")))}
                 .onFailure {unavailable("Background Playback","Open Android Settings → Apps → VibeArc → Battery.")}
         }) }
+        }
+        if(section == "Library") {
         item { SettingsHeading("Library & Playlist Imports") }
         item { ReferenceRow("Import Playlist from File","CSV, TSV, M3U/M3U8, or TXT","download",onClick=onImportPlaylist) }
+        }
+        if(section == "Accounts") {
         item { SettingsHeading("Scrobbler") }
         item { ReferenceRow("Last.fm Account",when { lastFmBusy -> "Loading…"; lastFmAuthenticated -> lastFmUsername.orEmpty(); lastFmAuthorizationPending -> "Authorization waiting to finish"; lastFmUsername != null && lastFmConfiguration.profileConfigured -> "$lastFmUsername · public profile only"; else -> "Tap to set up Last.fm" },"stats",0,3,onClick={sheet="Last.fm"}) }
         item { ReferenceRow("Scrobbling & Now Playing",when { !lastFmAuthenticated -> "Sign in to Last.fm first"; scrobblingEnabled -> "Automatic scrobbling is on"; else -> "Scrobbling is off" },"clock",1,3,scrobblingEnabled,enabled=lastFmAuthenticated,onClick={scrobblingEnabled=!scrobblingEnabled;context.saveLastFmScrobblingEnabled(scrobblingEnabled)}) }
         item { ReferenceRow("Scrobble Exclusions","${excludedScrobbleUris.size} excluded tracks","playlist",2,3,enabled=lastFmAuthenticated,onClick={sheet="Scrobble Exclusions"}) }
+        }
+        if(section == "Library") {
         item { SettingsHeading("Backup & Restore") }
         item { ReferenceRow("Backup","Save library and playlists to JSON","backup",0,2,onClick=onBackup) }
         item { ReferenceRow("Restore","Merge a VibeArc JSON backup","restore",1,2,onClick=onRestore) }
+        }
+        if(section == "Appearance") {
         item { SettingsHeading("App icon") }
         item { ReferenceRow("Launcher Icon",selectedIcon.label,"album",onClick={sheet="App icon"}) }
+        }
+        if(section == "About") {
         item { SettingsHeading("About") }
         item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, KuGou, LRCLIB, Lyrics.ovh, Last.fm, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
         item { ReferenceRow("Updates & Support","VibeArc on GitHub","spark",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/$UpdateRepository")))}}) }
@@ -206,6 +234,8 @@ internal fun SettingsScreen(
             }
         }
         item { Spacer(Modifier.height(8.dp)); ReferenceRow("Source Code","github.com/$UpdateRepository","code",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/$UpdateRepository")))}}) }
+        }
+    }
     }
     info?.let { (title,message) ->
         AlertDialog(onDismissRequest={info=null},title={Text(title)},text={Text(message)},confirmButton={TextButton(onClick={info=null}){Text("Got it")}})
@@ -400,6 +430,15 @@ private fun Context.saveHighestAudioQuality(enabled:Boolean) {
 
 internal fun Context.streamAudioFormat():AudioFormat = enumPreference("stream_audio_format",AudioFormat.ANY)
 internal fun Context.streamAudioQuality():AudioQuality = enumPreference("stream_audio_quality",if(getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getBoolean(HighestAudioQualityKey,true)) AudioQuality.HIGHEST else AudioQuality.BALANCED)
+
+internal fun Context.upgradeHighestQualityDefaults() {
+    val preferences = getSharedPreferences(SettingsPreferencesName, Context.MODE_PRIVATE)
+    // Smith requested highest audio on upgrading; do this once, not over later explicit choices.
+    if(preferences.getInt("highest_audio_policy", 0) < 1) preferences.edit()
+        .putString("stream_audio_format", AudioFormat.ANY.name)
+        .putString("stream_audio_quality", AudioQuality.HIGHEST.name)
+        .putBoolean(HighestAudioQualityKey, true).putInt("highest_audio_policy", 1).apply()
+}
 
 private inline fun <reified T:Enum<T>> Context.enumPreference(key:String,fallback:T):T =
     runCatching { enumValueOf<T>(getSharedPreferences(SettingsPreferencesName,Context.MODE_PRIVATE).getString(key,fallback.name)!!) }.getOrDefault(fallback)
