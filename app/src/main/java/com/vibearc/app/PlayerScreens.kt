@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,6 +45,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +61,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
+import kotlin.math.roundToInt
 
 
 @Composable
@@ -71,6 +76,7 @@ internal fun PlayerScreen(
     onArtist: (String) -> Unit,
 ) {
     var page by rememberSaveable { mutableStateOf("player") }
+    var standbyLyrics by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var audioInfo by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -97,15 +103,18 @@ internal fun PlayerScreen(
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(when(page) { "queue" -> "PLAYING QUEUE"; "lyrics" -> "LYRICS"; "standby" -> "STANDBY MODE"; else -> "NOW PLAYING" },
                         fontSize = 12.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold)
-                    Text(if(page == "lyrics") "${track.title} · ${track.artist}" else track.album.ifBlank { "Your music" },
+                    if(page != "standby") Text(if(page == "lyrics") "${track.title} · ${track.artist}" else track.album.ifBlank { "Your music" },
                         maxLines = 1, overflow = TextOverflow.Ellipsis, color = MutedText, fontSize = 14.sp)
+                }
+                if(page == "standby") TextButton({ standbyLyrics = !standbyLyrics }) {
+                    Glyph("lyrics"); Spacer(Modifier.width(8.dp)); Text(if(standbyLyrics) "Hide lyrics" else "Show lyrics")
                 }
                 Box {
                     PlayerAction("Player options", "more") { menu = true }
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem(text = { Text("Playing queue") }, onClick = { menu = false; page = "queue" })
                         DropdownMenuItem(text = { Text("Lyrics") }, onClick = { menu = false; page = "lyrics" })
-                        DropdownMenuItem(text = { Text("Standby Mode") }, onClick = { menu = false; page = "standby" })
+                        DropdownMenuItem(text = { Text("Standby Mode") }, onClick = { menu = false; standbyLyrics = false; page = "standby" })
                         DropdownMenuItem(text = { Text("View artist") }, onClick = { menu = false; onArtist(track.artist) })
                         DropdownMenuItem(text = { Text(if(sleepRemainingMillis == 0L) "Sleep timer: off" else "Sleep timer: ${(sleepRemainingMillis + 59_999) / 60_000} min") },
                             onClick = { menu = false; onCycleSleepTimer() })
@@ -117,7 +126,7 @@ internal fun PlayerScreen(
             when (page) {
                 "queue" -> PlayingQueueScreen(player, queue)
                 "lyrics" -> LyricsScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled)
-                "standby" -> StandbyScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled)
+                "standby" -> StandbyScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled, standbyLyrics)
                 else -> {
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -275,6 +284,8 @@ internal fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy
     var offsetText by remember(track.uri) { mutableStateOf("0") }
     val overrideStore = remember(context) { LyricsOverrideStore(context) }
     val listState = rememberLazyListState()
+    var lyricViewportHeight by remember { mutableIntStateOf(0) }
+    val lyricPadding = with(LocalDensity.current) { (lyricViewportHeight / 2f).toDp() }
     val motionEnabled = animationEnabled && LocalMotionEnabled.current
     val saveLyrics = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val lines = lyrics?.syncedLines.orEmpty()
@@ -318,13 +329,20 @@ internal fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy
         }
     }
     val activeLine = activeLyricIndex(lyrics?.syncedLines.orEmpty(), position)
-    LaunchedEffect(activeLine, motionEnabled) {
-        if(activeLine >= 0) {
-            if(motionEnabled) listState.animateScrollToItem((activeLine - 1).coerceAtLeast(0))
-            else listState.scrollToItem((activeLine - 1).coerceAtLeast(0))
+    LaunchedEffect(activeLine, lyricViewportHeight, motionEnabled, lyrics?.syncedLines) {
+        if(activeLine >= 0 && lyricViewportHeight > 0) {
+            // Wait for the half-viewport padding to be measured before centering the first verse.
+            snapshotFlow { listState.layoutInfo }.first {
+                it.viewportSize.height == lyricViewportHeight && it.beforeContentPadding == (lyricViewportHeight / 2f).roundToInt()
+            }
+            if(listState.layoutInfo.visibleItemsInfo.none { it.index == activeLine }) listState.scrollToItem(activeLine)
+            val line = snapshotFlow { listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeLine } }.first { it != null }!!
+            val layout = listState.layoutInfo
+            val correction = lyricCenterScrollDelta(layout.viewportStartOffset, layout.viewportEndOffset, line.offset, line.size)
+            if(motionEnabled) listState.animateScrollBy(correction) else listState.scrollBy(correction)
         }
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxSize().padding(horizontal = if(embedded) 8.dp else 20.dp, vertical = if(embedded) 0.dp else 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape) {
             Text(
                 when {
@@ -357,8 +375,8 @@ internal fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy
                 lyrics?.syncedLines?.isEmpty() == true && lyrics?.plainLines?.isEmpty() == true ->
                     Text("No lyrics found.", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 lyrics?.syncedLines?.isNotEmpty() == true -> LazyColumn(
-                    Modifier.fillMaxSize(), state = listState,
-                    contentPadding = PaddingValues(vertical = 80.dp),
+                    Modifier.fillMaxSize().onSizeChanged { lyricViewportHeight = it.height }, state = listState,
+                    contentPadding = PaddingValues(vertical = lyricPadding),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
                     items(lyrics!!.syncedLines.size) { index ->
@@ -400,7 +418,8 @@ internal fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy
                     }
                 }
             }
-            Row(Modifier.align(Alignment.BottomEnd).padding(bottom = 12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 PlayerAction("Search or edit lyrics", "more") {
                     manualRaw=lyrics?.syncedLines?.takeIf(List<LyricLine>::isNotEmpty)?.let(::encodeEnhancedLrc)
                         ?: lyrics?.plainLines?.joinToString("\n").orEmpty()
@@ -409,9 +428,8 @@ internal fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy
                 if(lyrics?.syncedLines?.isNotEmpty() == true) PlayerAction("Save synchronized lyrics", "download") {
                     saveLyrics.launch(lyricsFileName(track.title))
                 }
-                PlayerAction(if(expanded) "Show playback controls" else "Expand lyrics", "expand") { expanded = !expanded }
+                if(!embedded) PlayerAction(if(expanded) "Show playback controls" else "Expand lyrics", "expand") { expanded = !expanded }
             }
-        }
         if(!expanded && !embedded) PlayerTimeControls(player, track, isPlaying, wavy, compact = true)
     }
     if(editor) AlertDialog(
@@ -443,7 +461,7 @@ internal fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy
 }
 
 @Composable
-private fun PlayerAction(label: String, glyph: String, size: androidx.compose.ui.unit.Dp = 48.dp, enabled: Boolean = true, busy: Boolean = false, onClick: () -> Unit) {
+internal fun PlayerAction(label: String, glyph: String, size: androidx.compose.ui.unit.Dp = 48.dp, enabled: Boolean = true, busy: Boolean = false, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
       ReferenceSurface(Modifier.motionPress(source), shape = CircleShape, floating = true, interactionSource = source) {
             androidx.compose.material3.IconButton(onClick, Modifier.size(size).semantics { contentDescription = label }, enabled = enabled, interactionSource = source) {
