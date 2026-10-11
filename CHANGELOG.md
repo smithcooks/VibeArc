@@ -1,10 +1,10 @@
 # Changelog
 
-## 1.8.2 — Local Standby test
+## [1.8.2] - 2026-10-11
 
 - Standby now uses a screen-filling glass panel, with Back, the mode title, Show/Hide lyrics and the player menu inside it.
 - Removed outer card margins; controls retain system-bar safe areas.
-- Playback, downloads and active-lyric centering are unchanged. Not published pending phone testing.
+- Includes the v1.8 catalog browsing and highest-available source selection changes. See the release notes for provider and device-testing limits.
 
 ## [1.7.0] - 2026-10-09
 
