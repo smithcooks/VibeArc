@@ -30,16 +30,18 @@ private fun Context.standbyActivity(): Activity? = when(this) {
 
 @Composable
 internal fun StandbyScreen(player: Player, track: Track, playing: Boolean, wavy: Boolean, lyricMotion: Boolean,
-    showLyrics: Boolean) {
+    showLyrics: Boolean, safePadding: PaddingValues, header: @Composable () -> Unit) {
     val window = LocalContext.current.standbyActivity()?.window
     DisposableEffect(window) {
         val alreadyAwake = (window?.attributes?.flags ?: 0).and(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { if(!alreadyAwake) window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
-    ReferenceSurface(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+    ReferenceSurface(Modifier.fillMaxSize(),
         RoundedCornerShape(32.dp), floating = true) {
-        BoxWithConstraints(Modifier.fillMaxSize().padding(16.dp)) {
+        Column(Modifier.fillMaxSize().padding(safePadding)) {
+            header()
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
             val wide = maxWidth > maxHeight
             if(wide && !showLyrics) {
                 val coverSize = standbyCoverSize((maxWidth * .45f).value, maxHeight.value, false).dp
@@ -93,6 +95,7 @@ internal fun StandbyScreen(player: Player, track: Track, playing: Boolean, wavy:
                     }
                 }
             }
+        }
         }
     }
 }

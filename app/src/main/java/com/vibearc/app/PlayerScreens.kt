@@ -93,9 +93,9 @@ internal fun PlayerScreen(
     BoxWithConstraints(Modifier.fillMaxSize().drawBehind {
         drawRect(Brush.verticalGradient(listOf(
             lerp(background, animatedTint.value, .20f), lerp(background, animatedTint.value, .10f), background)))
-    }.padding(padding)) {
+    }.padding(if (page == "standby") PaddingValues(0.dp) else padding)) {
         val artworkSize = minOf(maxWidth - 48.dp, maxHeight * .45f, 420.dp).coerceAtLeast(160.dp)
-        Column(Modifier.fillMaxSize()) {
+        val playerHeader: @Composable () -> Unit = {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 PlayerAction(if (page == "player") "Close player" else "Back to player", if (page == "player") "down" else "back") {
                     if (page == "player") onBack() else page = "player"
@@ -122,11 +122,14 @@ internal fun PlayerScreen(
                     }
                 }
             }
+        }
+        Column(Modifier.fillMaxSize()) {
+            if (page != "standby") playerHeader()
             MotionScene(page, Modifier.weight(1f).fillMaxWidth()) {
             when (page) {
                 "queue" -> PlayingQueueScreen(player, queue)
                 "lyrics" -> LyricsScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled)
-                "standby" -> StandbyScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled, standbyLyrics)
+                "standby" -> StandbyScreen(player, track, isPlaying, wavy, lyricsAnimationEnabled, standbyLyrics, padding, playerHeader)
                 else -> {
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(26.dp), horizontalAlignment = Alignment.CenterHorizontally) {

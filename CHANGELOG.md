@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.2 — Local Standby test
+
+- Standby now uses a screen-filling glass panel, with Back, the mode title, Show/Hide lyrics and the player menu inside it.
+- Removed outer card margins; controls retain system-bar safe areas.
+- Playback, downloads and active-lyric centering are unchanged. Not published pending phone testing.
+
 ## [1.7.0] - 2026-10-09
 
 - Added Dark, Light and Follow system appearance modes, with clearer light-mode glass controls.
