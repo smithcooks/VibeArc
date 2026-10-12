@@ -5,6 +5,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UpdateCheckerTest {
+    @Test fun `draft releases are not offered for installation`() {
+        val json = """{
+            "tag_name":"v2.0.0","draft":true,
+            "html_url":"https://github.com/smithcooks/VibeArc/releases/tag/v2.0.0",
+            "assets":[
+              {"name":"VibeArc.apk","browser_download_url":"https://github.com/smithcooks/VibeArc/releases/download/v2.0.0/VibeArc.apk"},
+              {"name":"VibeArc.apk.sha256","browser_download_url":"https://github.com/smithcooks/VibeArc/releases/download/v2.0.0/VibeArc.apk.sha256"}
+            ]
+        }"""
+        assertEquals(null, parseAppUpdate(json))
+        assertEquals(null, parseAppUpdate(json.replace("\"draft\":true", "\"prerelease\":true")))
+    }
     @Test
     fun `semantic versions compare numerically`() {
         assertTrue(isNewerVersion("0.10.0", "0.9.9"))
