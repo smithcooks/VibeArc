@@ -20,10 +20,15 @@ for (const image of html.matchAll(/<img\b[^>]+>/g)) {
 }
 const downloadLinks = [...html.matchAll(/href="([^"]+\/releases\/download\/[^\"]+\.apk)"/g)].map(match => match[1]);
 assert.equal(downloadLinks.length, 2);
-for (const link of downloadLinks) assert.equal(link, 'https://github.com/smithcooks/VibeArc/releases/download/v1.8.2/VibeArc-v1.8.2.apk');
+for (const link of downloadLinks) assert.equal(link, 'https://github.com/smithcooks/VibeArc/releases/download/v1.10.0/VibeArc-v1.10.0.apk');
 assert.doesNotMatch(html, /v1\.0\.0/);
-assert.match(html, /v1\.8\.2 · 6\.6 MB/);
-assert.match(html, /releases\/tag\/v1\.8\.2/);
+assert.match(html, /v1\.10\.0 · 6\.7 MB/);
+assert.match(html, /releases\/tag\/v1\.10\.0/);
+assert.doesNotMatch(html, /v1\.8\.2|v1\.9\.0/);
+assert.match(html, /Seven compact home-screen widgets/);
+assert.match(html, /download updates inside Vibe Arc/);
+assert.match(html, /update reminders/);
+assert.match(html, /Android still asks you to approve installation/);
 assert.match(html, /disabled[^>]*>Windows/);
 assert.match(html, /disabled[^>]*>Linux/);
 assert.doesNotMatch(html, /Nuclear|Nuki|Discord|macOS|Flathub|Snapcraft|winget|Homebrew|lorem ipsum/i);

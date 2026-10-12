@@ -8,14 +8,22 @@ not branding, mascot, copy, or distribution links.
 ## Content and scope
 
 Hero → click-to-play promo → Search → Library/playlists → Appearance → Settings → screenshot rail →
-open source → download → footer. Android v1.8.2 has a direct official APK link.
+open source → download → footer. Android v1.10.0 has a direct official APK link.
 Windows and Linux are clearly disabled, labeled Coming soon. No invented
 package distributions, testimonials, plugin support, or playback guarantees.
-The v1.8.2 download links use the signed GitHub release asset. The optional
+The v1.10.0 download links use the signed GitHub release asset (6,660,923 bytes,
+displayed as 6.7 MB). Release-note links point to the same version. The optional
 Buy Me a Chai support button uses the user-provided URL and external image. CSP
 permits that additional image host and the GitHub release media hosts; the text fallback survives image failure.
 The support button also appears beside the logo in the initial header, with a
 compact mobile layout so it is visible before scrolling.
+
+Current feature copy introduces seven compact glass-inspired home-screen widgets
+and in-app update downloads with optional reminders in Settings → About & Support.
+Android still requires installation approval. Existing widgets may need removal
+and re-adding for the new default footprint. This is not a promise of live
+wallpaper refraction or identical sizing on every launcher. The older screenshots
+remain clearly labeled; no new native launcher or update-install testing is claimed.
 
 Eight user-provided JPEG captures are copied unchanged into `screenshots/`.
 They show v0.9 beta, explicitly labeled on the website, rather than pretending
