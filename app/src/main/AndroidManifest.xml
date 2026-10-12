@@ -60,6 +60,35 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+        <receiver android:name=".GlassPlayerWidget" android:exported="false" android:label="@string/widget_player_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_player_info" />
+        </receiver>
+        <receiver android:name=".GlassAlbumWidget" android:exported="false" android:label="@string/widget_album_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_album_info" />
+        </receiver>
+        <receiver android:name=".GlassVinylWidget" android:exported="false" android:label="@string/widget_vinyl_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_vinyl_info" />
+        </receiver>
+        <receiver android:name=".GlassConsoleWidget" android:exported="false" android:label="@string/widget_console_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_console_info" />
+        </receiver>
+        <receiver android:name=".GlassLyricsWidget" android:exported="false" android:label="@string/widget_lyrics_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_lyrics_info" />
+        </receiver>
+        <receiver android:name=".GlassMiniWidget" android:exported="false" android:label="@string/widget_mini_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_mini_info" />
+        </receiver>
+        <receiver android:name=".GlassAuroraWidget" android:exported="false" android:label="@string/widget_aurora_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_aurora_info" />
+        </receiver>
+        <receiver android:name=".WidgetControlReceiver" android:exported="false" />
         <service
             android:name=".DownloadService"
             android:exported="false"

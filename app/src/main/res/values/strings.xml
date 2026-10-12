@@ -1,5 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">VibeArc</string>
+    <string name="widget_player_name">VibeArc Glass Player</string>
+    <string name="widget_album_name">VibeArc Glass Album</string>
+    <string name="widget_player_description">Compact music controls with a translucent glass surface.</string>
+    <string name="widget_album_description">Album artwork and music controls with a translucent glass surface.</string>
+    <string name="widget_empty">Tap to choose your music</string>
+    <string name="widget_open">Open VibeArc</string>
+    <string name="widget_artwork">Current album artwork</string>
+    <string name="widget_previous">Previous track</string>
+    <string name="widget_play">Play</string>
+    <string name="widget_next">Next track</string>
+    <string name="widget_vinyl_name">VibeArc Glass Vinyl</string>
+    <string name="widget_console_name">VibeArc Glass Console</string>
+    <string name="widget_lyrics_name">VibeArc Glass Lyrics</string>
+    <string name="widget_mini_name">VibeArc Glass Mini</string>
+    <string name="widget_aurora_name">VibeArc Glass Aurora</string>
+    <string name="widget_vinyl_description">A translucent vinyl record with artwork and playback controls.</string>
+    <string name="widget_console_description">A glass control console with artwork and real playback progress.</string>
+    <string name="widget_lyrics_description">Current synchronized lyrics with glass music controls.</string>
+    <string name="widget_mini_description">A compact glass player with circular album artwork.</string>
+    <string name="widget_aurora_description">A wide ocean-tinted glass player with album artwork and progress.</string>
+    <string name="widget_lyrics_empty">Open VibeArc for lyrics</string>
 </resources>
 

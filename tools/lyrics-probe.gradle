@@ -1,0 +1,16 @@
+// Opt-in live-provider verification; deliberately separate from unit tests.
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.project(':app')
+    app.tasks.register('probeLyrics', JavaExec) {
+        dependsOn app.tasks.named('compileReleaseUnitTestJavaWithJavac')
+        classpath = app.tasks.named('testReleaseUnitTest').get().classpath
+        mainClass = 'com.vibearc.app.LyricsProbe'
+        args '--live'
+        doFirst {
+            if (app.findProperty('liveLyricsProbe') != 'true') {
+                throw new GradleException('Live provider calls require -PliveLyricsProbe=true')
+            }
+            app.layout.buildDirectory.file('lyrics-probe.classpath').get().asFile.text = classpath.asPath
+        }
+    }
+}

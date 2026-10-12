@@ -6,7 +6,7 @@ Distributing a build
 that includes NewPipeExtractor requires a GPL-compatible VibeArc source release
 and the corresponding source obligations to be met.
 
-Network features access YouTube/YouTube Music, KuGou, LRCLIB, Lyrics.ovh,
+Network features access YouTube/YouTube Music, KuGou, LRCLIB, Lyrics.ovh, SimpMusic,
 Last.fm, and GitHub.
 Their names, artwork, metadata, lyrics, and other content remain subject to the
 respective service terms and rights holders. VibeArc does not grant rights to

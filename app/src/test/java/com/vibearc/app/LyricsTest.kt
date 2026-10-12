@@ -4,6 +4,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LyricsTest {
+    @Test fun `Flatline lyric video packaging does not hide the song`() {
+        assertEquals("Flatline", lyricsSearchTitle("Flatline (Official Lyric Video) [HD]"))
+        val response = """[{"trackName":"Flatline","artistName":"Justin Bieber","duration":219,"syncedLyrics":"[00:01.00]Matched"}]"""
+        val track = Track("Justin Bieber - Flatline (Official Lyric Video)", "Justin Bieber - Topic", "YouTube Music", "https://music.youtube.com/watch?v=abcdefghijk", durationMs=219_000)
+        assertEquals("Matched", parseLyricsSearchResponse(response, track)?.syncedLines?.single()?.text)
+    }
+
     @Test
     fun `generic YouTube metadata finds unambiguous matching title and duration`() {
         val track = Track("Not Like Us", "YouTube Music", "YouTube Music", "https://music.youtube.com/watch?v=example", durationMs = 274_000)

@@ -372,7 +372,7 @@ internal fun LyricsScreen(player: Player, track: Track, isPlaying: Boolean, wavy
                 }
                 lyrics == null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("No lyrics found.", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    Text("No matching lyrics were found across KuGou, LRCLIB, or Lyrics.ovh.", color = MutedText)
+                    Text("No matching lyrics were found from the available providers.", color = MutedText)
                 }
                 lyrics?.instrumental == true -> Text("Instrumental", fontSize = 30.sp, fontWeight = FontWeight.Bold)
                 lyrics?.syncedLines?.isEmpty() == true && lyrics?.plainLines?.isEmpty() == true ->
