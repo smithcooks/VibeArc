@@ -82,7 +82,7 @@ internal object MusicWidgets {
         val app = context.applicationContext
         artworkJob = scope.launch {
             ArtworkCache.initialize(app.cacheDir)
-            val artwork = ArtworkCache.load(state.artwork, 256)
+            val artwork = ArtworkCache.load(state.artwork, 384)
             if (isActive && artwork != null) main.post {
                 val current = active
                 if (current != null && current.artwork == state.artwork) render(app, current, artwork.bitmap)
@@ -131,14 +131,14 @@ internal object MusicWidgets {
             artist = prefs.getString("artist", context.getString(R.string.widget_empty)).orEmpty(),
             artwork = prefs.getString("artwork", "").orEmpty(),
         )
-        render(context, state, ArtworkCache.peek(state.artwork, 256)?.bitmap)
+        render(context, state, ArtworkCache.peek(state.artwork, 384)?.bitmap)
     }
 
     private fun hasWidgets(): Boolean = placedWidgets
 
     private fun render(context: Context, state: WidgetPlayback, bitmap: android.graphics.Bitmap?) {
         val thumbnail = bitmap?.let {
-            if (it.width > 256 || it.height > 256) android.graphics.Bitmap.createScaledBitmap(it, 256, 256, true) else it
+            if (it.width > 384 || it.height > 384) android.graphics.Bitmap.createScaledBitmap(it, 384, 384, true) else it
         }
         val manager = AppWidgetManager.getInstance(context)
         val openIntent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
@@ -151,31 +151,46 @@ internal object MusicWidgets {
             if (ids.isEmpty()) continue
             placedWidgets = true
             if (provider == GlassLyricsWidget::class.java) placedLyrics = true
-            val views = RemoteViews(context.packageName, layout)
-            views.setTextViewText(R.id.widget_title, state.title)
-            views.setTextViewText(R.id.widget_artist, state.artist)
-            if (layout == R.layout.widget_lyrics) views.setTextViewText(R.id.widget_lyric, state.lyric.ifBlank { context.getString(R.string.widget_lyrics_empty) })
-            if (layout in listOf(R.layout.widget_console, R.layout.widget_lyrics, R.layout.widget_aurora)) {
-                views.setProgressBar(R.id.widget_progress, 100, state.progress, false)
+            fun viewFor(layout: Int): RemoteViews {
+                val views = RemoteViews(context.packageName, layout)
+                views.setTextViewText(R.id.widget_title, state.title)
+                views.setTextViewText(R.id.widget_artist, state.artist)
+                if (layout == R.layout.widget_lyrics) views.setTextViewText(R.id.widget_lyric, state.lyric.ifBlank { context.getString(R.string.widget_lyrics_empty) })
+                if (layout in listOf(R.layout.widget_console, R.layout.widget_lyrics, R.layout.widget_aurora)) {
+                    views.setProgressBar(R.id.widget_progress, 100, state.progress, false)
+                }
+                if (thumbnail != null) views.setImageViewBitmap(R.id.widget_art, thumbnail)
+                else views.setImageViewResource(R.id.widget_art, R.mipmap.vibearc_icon)
+                for (id in listOf(R.id.widget_open, R.id.widget_title, R.id.widget_artist, R.id.widget_art)) {
+                    views.setOnClickPendingIntent(id, open)
+                }
+                if (layout == R.layout.widget_lyrics) views.setOnClickPendingIntent(R.id.widget_lyric, open)
+                views.setImageViewResource(R.id.widget_play,
+                    if (state.playing) R.drawable.widget_pause else R.drawable.widget_play)
+                views.setContentDescription(R.id.widget_play, if (state.hasTrack) state.playLabel else context.getString(R.string.widget_open))
+                for ((id, action, enabled) in listOf(Triple(R.id.widget_previous, "previous", state.previous),
+                        Triple(R.id.widget_play, "play", true), Triple(R.id.widget_next, "next", state.next))) {
+                    views.setBoolean(id, "setEnabled", enabled)
+                    views.setFloat(id, "setAlpha", if (enabled) 1f else .35f)
+                    val command = PendingIntent.getBroadcast(context, id,
+                        Intent(context, WidgetControlReceiver::class.java).setAction("${context.packageName}.widget.$action"),
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                    views.setOnClickPendingIntent(id, if (state.hasTrack) command else open)
+                }
+                return views
             }
-            if (thumbnail != null) views.setImageViewBitmap(R.id.widget_art, thumbnail)
-            else views.setImageViewResource(R.id.widget_art, R.mipmap.vibearc_icon)
-            for (id in listOf(R.id.widget_open, R.id.widget_title, R.id.widget_artist, R.id.widget_art)) {
-                views.setOnClickPendingIntent(id, open)
+            val full = viewFor(layout)
+            val preferred = when (layout) {
+                R.layout.widget_vinyl -> android.util.SizeF(196f, 288f)
+                R.layout.widget_album -> android.util.SizeF(220f, 320f)
+                R.layout.widget_player -> android.util.SizeF(220f, 160f)
+                R.layout.widget_aurora -> android.util.SizeF(252f, 160f)
+                else -> android.util.SizeF(252f, 192f)
             }
-            if (layout == R.layout.widget_lyrics) views.setOnClickPendingIntent(R.id.widget_lyric, open)
-            views.setImageViewResource(R.id.widget_play,
-                if (state.playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
-            views.setContentDescription(R.id.widget_play, if (state.hasTrack) state.playLabel else context.getString(R.string.widget_open))
-            for ((id, action, enabled) in listOf(Triple(R.id.widget_previous, "previous", state.previous),
-                    Triple(R.id.widget_play, "play", true), Triple(R.id.widget_next, "next", state.next))) {
-                views.setBoolean(id, "setEnabled", enabled)
-                views.setFloat(id, "setAlpha", if (enabled) 1f else .35f)
-                val command = PendingIntent.getBroadcast(context, id,
-                    Intent(context, WidgetControlReceiver::class.java).setAction("${context.packageName}.widget.$action"),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                views.setOnClickPendingIntent(id, if (state.hasTrack) command else open)
-            }
+            val views = if (layout == R.layout.widget_mini) full
+                else if (android.os.Build.VERSION.SDK_INT >= 31) RemoteViews(mapOf(
+                    android.util.SizeF(196f, 112f) to viewFor(R.layout.widget_compact), preferred to full,
+                )) else RemoteViews(viewFor(R.layout.widget_compact), full)
             runCatching { manager.updateAppWidget(ids, views) }.onFailure {
                 android.util.Log.w("VibeArcWidget", "Widget update failed: ${it.javaClass.simpleName}")
             }
