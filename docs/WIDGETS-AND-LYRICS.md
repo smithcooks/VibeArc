@@ -1,6 +1,6 @@
 # Home-screen widgets and lyrics lookup
 
-Local source only. No APK or public release created for this work.
+Local v1.9.0 APK built for user testing on October 12, 2026. No public release or website update created for this work.
 
 ## Widgets
 
@@ -41,4 +41,5 @@ No provider guarantees every recording. Titles without song links do not establi
 - Metadata-only LRCLIB lookup confirmed synchronized entries for Tyga's 1 of 1; the user's exact recording was not identified.
 - All seven widget XML layouts parsed; each contains three labelled 48 dp controls. Calculated worst bright-wallpaper white-text contrast is 4.69:1 for neutral, 5.24:1 for warm and 5.87:1 for ocean. No frame animation is added.
 - SimpMusic parsing, duration checks, path validation and network-failure handling have synthetic unit coverage; a live SimpMusic result for the user's exact video was not verified.
-- No connected phone, launcher, TalkBack or widget-action runtime test; no APK assembly, installation or publication. The existing v1.8.2 APK is unchanged.
+- Local v1.9.0 APK (version code 27) assembled with the existing release certificate, verified APK signature and 16 KiB alignment. All seven widget receivers are packaged and 158 unit tests pass. The previous v1.8.2 APK is preserved.
+- No connected phone, launcher, TalkBack or widget-action runtime test; installation and publication were not performed.

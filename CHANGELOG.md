@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.9.0] - 2026-10-12
+
+### Added
+
+- Seven translucent glass-style Android home-screen music widgets, including vinyl, console, lyrics, compact artwork and wide tinted designs.
+- Real playback controls and progress, cached artwork and current synchronized lyrics without a frame animation loop.
+
+### Fixed
+
+- Lyrics matching now removes recognized lyric-video/HD title decorations and falls back to a validated YouTube video-ID lookup through SimpMusic.
+- Lyrics cache entries include recording identity to avoid mixing same-name videos.
+
+### Verification and limitations
+
+- 158 unit tests passed and lint reported zero errors; existing and widget compatibility/layout warnings remain.
+- Widget appearance, resizing and button taps require physical-launcher testing. Android widgets use translucent surfaces, not Apple's live wallpaper refraction.
+- Local APK for user testing only; no GitHub or website publication.
+
 ## [1.8.2] - 2026-10-11
 
 - Standby now uses a screen-filling glass panel, with Back, the mode title, Show/Hide lyrics and the player menu inside it.
