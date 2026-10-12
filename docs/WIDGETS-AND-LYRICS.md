@@ -1,6 +1,6 @@
 # Home-screen widgets and lyrics lookup
 
-Local v1.10.0 widget correction and in-app updates prepared for user testing on October 12, 2026. No public release or website update created for this work.
+VibeArc v1.10.0 widgets and in-app updates were released on GitHub on October 12, 2026. The README and website link to the signed release APK; physical launcher and update-install testing remain unverified.
 
 ## Widget layout correction
 
@@ -46,7 +46,7 @@ No provider guarantees every recording. Titles without song links do not establi
 - Old layouts reproduced three regression failures; the corrected eight layouts pass all five layout regression checks, including the RemoteViews supported-class allowlist.
 - The draft-release regression failed before the validation change and passes now. All 164 unit tests pass; lint reports zero errors, 87 warnings and one hint.
 - Source-derived HTML previews pass 64 width/height/font combinations at the declared minimum sizes after correcting two overflowing footprints. Fixture artwork and text are used; these are not Android launcher screenshots.
-- A read-only live GitHub check confirmed the public v1.8.2 release has both the APK and its matching checksum. No newer release was published for testing the installation path.
+- Before publication, a read-only GitHub check confirmed v1.8.2 had APK/checksum assets. The published v1.10.0 release now includes the verified APK and matching checksum; installation has not been tested on a phone.
 - Physical launcher, TalkBack, update download/installation and return from unknown-source settings are unverified: the user declined connecting a phone. No new dependency or permission was added.
 
 ## Baseline verification — v1.9.0
