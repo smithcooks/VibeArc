@@ -30,8 +30,8 @@ android {
         applicationId = "com.vibearc.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 27
-        versionName = "1.9.0"
+        versionCode = 28
+        versionName = "1.10.0"
         buildConfigField("String", "LASTFM_API_KEY", "\"$escapedLastFmApiKey\"")
         buildConfigField("String", "LASTFM_SIGNER_URL", "\"${configValue("LASTFM_SIGNER_URL")}\"")
         buildConfigField("String", "LASTFM_SIGNER_TOKEN", "\"${configValue("LASTFM_SIGNER_TOKEN")}\"")

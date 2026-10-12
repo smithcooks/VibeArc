@@ -41,6 +41,8 @@ No provider guarantees every recording. Titles without song links do not establi
 
 ## v1.10.0 verification — October 12, 2026
 
+- Signed v1.10.0 APK (code 28) assembled successfully with the existing release certificate. APK v2 signature and 16 KiB alignment verified; all seven widget receivers and the update FileProvider are packaged.
+
 - Old layouts reproduced three regression failures; the corrected eight layouts pass all five layout regression checks, including the RemoteViews supported-class allowlist.
 - The draft-release regression failed before the validation change and passes now. All 164 unit tests pass; lint reports zero errors, 87 warnings and one hint.
 - Source-derived HTML previews pass 64 width/height/font combinations at the declared minimum sizes after correcting two overflowing footprints. Fixture artwork and text are used; these are not Android launcher screenshots.

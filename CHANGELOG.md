@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.0 — Local widgets and in-app updates test
+
+- Widget glass panels now wrap their content instead of stretching to fill oversized launcher cells.
+- Rebuilt all seven arrangements with flat transport icons, tightly grouped metadata and labelled 48 dp controls.
+- Added compact fallback layouts for short slots on Android 12+ and landscape slots on older Android; increased bounded artwork thumbnails to 384 px.
+- Remove and re-add existing widgets for their corrected default grid footprints. Launcher placement remains under your control.
+- Local testing only; not published. Native launcher verification is still required.
+- Settings now checks for updates and downloads a verified APK without visiting the website; Android still asks for installation approval.
+- Added an enabled-by-default startup update reminder switch. Failed checks show an error, not an up-to-date result.
+
 ## [1.9.0] - 2026-10-12
 
 ### Added
