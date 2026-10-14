@@ -10,6 +10,9 @@ public final class LyricsProbe {
             System.out.println("Skipped: pass --live to contact the real lyrics providers.");
             return;
         }
+        probe("flatline", track("Flatline", "Justin Bieber", 219_000));
+        probe("flatline-lyric-video", track("Justin Bieber - Flatline (Official Lyric Video) [HD]", "Justin Bieber - Topic", 219_000));
+        probe("wine-pon-you", track("Wine Pon You", "Doja Cat", 220_000));
         probe("one-of-the-girls", track("One Of The Girls", "The Weeknd", 244_000));
         probe("not-like-us", track("Not Like Us", "Kendrick Lamar", 274_000));
         probe("generic-youtube-artist", track("Not Like Us", "YouTube Music", 274_000));

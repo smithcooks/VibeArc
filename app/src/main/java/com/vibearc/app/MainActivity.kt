@@ -319,9 +319,12 @@ private fun VibeArcApp(
     var radioBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        availableUpdate = withContext(Dispatchers.IO) {
+        val updatePrefs = context.getSharedPreferences(SettingsPreferencesName, android.content.Context.MODE_PRIVATE)
+        if (!updatePrefs.getBoolean("update_reminders", true)) return@LaunchedEffect
+        val checkedUpdate = withContext(Dispatchers.IO) {
             runCatching { AppUpdateChecker.available(BuildConfig.VERSION_NAME) }.getOrNull()
         }
+        if (updatePrefs.getBoolean("update_reminders", true) && availableUpdate == null) availableUpdate = checkedUpdate
     }
 
     LaunchedEffect(lastFmUsername, lastFmRefresh, lastFmConfiguration) {
@@ -1117,6 +1120,7 @@ private fun VibeArcApp(
             Tab.Settings -> SettingsScreen(
                 padding, appearance, onAppearanceChange,
                 onBack = navigateBack,
+                onUpdateAvailable = { availableUpdate = it },
                 youtubeAccountData = youtubeAccountData,
                 youtubeAccountBusy = youtubeAccountBusy,
                 youtubeSyncBusy = youtubeSyncBusy,

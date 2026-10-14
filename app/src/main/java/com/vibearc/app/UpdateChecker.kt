@@ -27,6 +27,7 @@ internal fun isNewerVersion(candidate: String, current: String): Boolean {
 
 internal fun parseAppUpdate(json: String): AppUpdate? = runCatching {
     val root = JsonParser.`object`().from(json)
+    require(!root.getBoolean("draft", false) && !root.getBoolean("prerelease", false))
     val version = root.getString("tag_name", "").removePrefix("v")
     val pageUrl = root.getString("html_url", "")
     val uri = URI(pageUrl)
@@ -73,9 +74,10 @@ internal object AppUpdateChecker {
             connection.readTimeout = 12_000
             connection.setRequestProperty("Accept", "application/vnd.github+json")
             connection.setRequestProperty("User-Agent", "VibeArc/${BuildConfig.VERSION_NAME}")
-            if (connection.responseCode !in 200..299) return null
+            require(connection.responseCode in 200..299) { "Update check failed" }
             val update = connection.inputStream.use { parseAppUpdate(it.readUtf8Limited(MaxResponseBytes)) }
-            return update?.takeIf { isNewerVersion(it.version, currentVersion) }
+                ?: error("The latest release does not contain a verified update")
+            return update.takeIf { isNewerVersion(it.version, currentVersion) }
         } finally {
             connection.disconnect()
         }

@@ -108,7 +108,7 @@ internal fun parseLyricsResponse(value: String): LyricsDocument =
     lyricsDocument(JsonParser.`object`().from(value))
 
 private val LyricsTitleSuffix = Regex(
-    "(?i)\\s*[\\[(](?:official\\s+)?(?:music\\s+)?(?:video|audio|lyrics?|visuali[sz]er)[\\])]\\s*$",
+    "(?i)\\s*[\\[(]\\s*(?:official\\s+)?(?:music\\s+)?(?:lyrics?\\s+video|video|audio|lyrics?|visuali[sz]er|hd|hq|4k|full\\s+song)\\s*[\\])]",
 )
 private val TopicArtistSuffix = Regex("(?i)\\s+-\\s+topic\\s*$")
 private val MetadataSeparator = Regex("[^\\p{L}\\p{N}]+")
@@ -202,11 +202,12 @@ internal object LyricsProvider {
     private val cache = LinkedHashMap<String, LyricsDocument>()
 
     fun fetch(track: Track, title: String = track.title, artist: String = track.artist): LyricsDocument? {
-        val key = "$title\n$artist\n${track.album}\n${track.durationMs}"
+        val key = "${track.catalogUri}\n$title\n$artist\n${track.album}\n${track.durationMs}"
         synchronized(cache) { cache[key] }?.let { return it }
         if (title.isBlank()) return null
         val queryTrack = track.copy(title = lyricsSearchTitle(title), artist = lyricsSearchArtist(artist))
-        val result = fetchLrclibLyrics(queryTrack, ::request) ?: fetchKrc(queryTrack) ?: fetchPlainLyrics(queryTrack)
+        val result = fetchLrclibLyrics(queryTrack, ::request) ?: fetchVideoLyrics(queryTrack, ::request)
+            ?: fetchKrc(queryTrack) ?: fetchPlainLyrics(queryTrack)
         return result?.let { remember(key, it) }
     }
 

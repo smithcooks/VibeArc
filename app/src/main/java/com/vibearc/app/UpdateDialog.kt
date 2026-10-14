@@ -7,8 +7,6 @@ import com.vibearc.app.GlassButton as FilledTonalButton
 import com.vibearc.app.GlassIconButton as IconButton
 import com.vibearc.app.GlassFilledIconButton as FilledIconButton
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,10 +38,12 @@ internal fun UpdateDialog(update: AppUpdate, onDismiss: () -> Unit) {
     var downloadedApk by remember(update) { mutableStateOf<File?>(null) }
 
     fun install(apk: File) {
-        when (VerifiedUpdateInstaller.launchInstaller(context, apk)) {
-            InstallLaunchResult.Started -> onDismiss()
-            InstallLaunchResult.PermissionRequired -> error = "Allow installs from VibeArc, return here, then tap Install again."
-        }
+        runCatching { VerifiedUpdateInstaller.launchInstaller(context, apk) }
+            .onSuccess { result -> when (result) {
+                InstallLaunchResult.Started -> onDismiss()
+                InstallLaunchResult.PermissionRequired -> error = "Allow installs from VibeArc, return here, then tap Install again."
+            } }
+            .onFailure { error = "Android's installer could not open. Please try again." }
     }
 
     AlertDialog(
@@ -68,12 +68,10 @@ internal fun UpdateDialog(update: AppUpdate, onDismiss: () -> Unit) {
                     verified.onSuccess { apk -> downloadedApk = apk; install(apk) }
                         .onFailure { error = it.message ?: "The update could not be verified." }
                 }
-            }) { Text(if (downloadedApk == null) "Verify & install" else "Install") }
+            }) { Text(if (downloadedApk == null) "Download update" else "Install update") }
         },
         dismissButton = {
-            TextButton(enabled = !busy, onClick = {
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.pageUrl))) }
-            }) { Text("Release page") }
+            TextButton(enabled = !busy, onClick = onDismiss) { Text("Later") }
         },
     )
 }

@@ -9,7 +9,11 @@ Android cloud backup, and excludes account credentials from JSON backups.
 
 When the user searches or plays online music, the app contacts YouTube Music
 and YouTube endpoints and may use NewPipeExtractor as a bounded fallback. When
-lyrics are opened, track metadata may be sent to KuGou, LRCLIB, or Lyrics.ovh.
+lyrics are opened or a lyrics widget is placed, track metadata may be sent to
+KuGou, LRCLIB, or Lyrics.ovh.
+If metadata lookup finds no match, the song's YouTube video ID and normal
+network information may be sent to the SimpMusic lyrics database. Home-screen
+widgets reuse artwork and playback metadata; they do not read your wallpaper.
 When Last.fm is connected, the username and playback metadata are sent to
 Last.fm through the configured VibeArc signer for profile data, Now Playing,
 radio, and scrobbling. On launch, the app asks GitHub for release metadata; an

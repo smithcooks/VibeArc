@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.10.0] - 2026-10-12
+
+- Widget glass panels now wrap their content instead of stretching to fill oversized launcher cells.
+- Rebuilt all seven arrangements with flat transport icons, tightly grouped metadata and labelled 48 dp controls.
+- Added compact fallback layouts for short slots on Android 12+ and landscape slots on older Android; increased bounded artwork thumbnails to 384 px.
+- Remove and re-add existing widgets for their corrected default grid footprints. Launcher placement remains under your control.
+- Native launcher and update-installation verification are still required; see the release notes for testing limits.
+- Settings now checks for updates and downloads a verified APK without visiting the website; Android still asks for installation approval.
+- Added an enabled-by-default startup update reminder switch. Failed checks show an error, not an up-to-date result.
+
+## [1.9.0] - 2026-10-12
+
+### Added
+
+- Seven translucent glass-style Android home-screen music widgets, including vinyl, console, lyrics, compact artwork and wide tinted designs.
+- Real playback controls and progress, cached artwork and current synchronized lyrics without a frame animation loop.
+
+### Fixed
+
+- Lyrics matching now removes recognized lyric-video/HD title decorations and falls back to a validated YouTube video-ID lookup through SimpMusic.
+- Lyrics cache entries include recording identity to avoid mixing same-name videos.
+
+### Verification and limitations
+
+- 158 unit tests passed and lint reported zero errors; existing and widget compatibility/layout warnings remain.
+- Widget appearance, resizing and button taps require physical-launcher testing. Android widgets use translucent surfaces, not Apple's live wallpaper refraction.
+- Local APK for user testing only; no GitHub or website publication.
+
 ## [1.8.2] - 2026-10-11
 
 - Standby now uses a screen-filling glass panel, with Back, the mode title, Show/Hide lyrics and the player menu inside it.

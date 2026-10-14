@@ -34,6 +34,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,8 +61,13 @@ internal fun SettingsScreen(
     onSaveLastFmSetup: (LastFmConfiguration, String?) -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
+    onUpdateAvailable: (AppUpdate) -> Unit,
 ) {
     val context=LocalContext.current
+    val updateScope = rememberCoroutineScope()
+    val updatePrefs = remember(context) { context.getSharedPreferences(SettingsPreferencesName, Context.MODE_PRIVATE) }
+    var updateReminders by remember { mutableStateOf(updatePrefs.getBoolean("update_reminders", true)) }
+    var checkingUpdate by remember { mutableStateOf(false) }
     var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     androidx.activity.compose.BackHandler(section != null) { section = null }
     var info by remember { mutableStateOf<Pair<String,String>?>(null) }
@@ -216,8 +224,22 @@ internal fun SettingsScreen(
         }
         if(section == "About") {
         item { SettingsHeading("About") }
-        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, KuGou, LRCLIB, Lyrics.ovh, Last.fm, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
-        item { ReferenceRow("Updates & Support","VibeArc on GitHub","spark",onClick={runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/$UpdateRepository")))}}) }
+        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, KuGou, LRCLIB, Lyrics.ovh, SimpMusic, Last.fm, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
+        item { ReferenceRow("Check for updates",if(checkingUpdate) "Checking GitHub…" else "Download and install inside VibeArc","download",enabled=!checkingUpdate,onClick={
+            checkingUpdate = true
+            updateScope.launch {
+                val result = withContext(Dispatchers.IO) { runCatching { AppUpdateChecker.available(BuildConfig.VERSION_NAME) } }
+                checkingUpdate = false
+                result.onSuccess { update ->
+                    if (update != null) onUpdateAvailable(update)
+                    else unavailable("You're up to date", "No newer published update is available for VibeArc ${BuildConfig.VERSION_NAME}.")
+                }.onFailure { unavailable("Could not check for updates", "Check your connection and try again. A release must include a verified APK and checksum.") }
+            }
+        }) }
+        item { ReferenceRow("Update reminders","Show a new-release reminder when VibeArc opens","spark",checked=updateReminders,onClick={
+            updateReminders = !updateReminders
+            updatePrefs.edit().putBoolean("update_reminders", updateReminders).apply()
+        }) }
         item { ReferenceRow("Buy Me a Chai","Support Smith · opens your browser","heart",onClick={
             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://buymeachai.ezee.li/Smith_cooks"))) }
                 .onFailure { unavailable("Buy Me a Chai","Open https://buymeachai.ezee.li/Smith_cooks in your browser to support Smith. Contributions are optional.") }
@@ -418,7 +440,7 @@ private fun QualityChoice(title:String,badge:String,description:String,selected:
     }
 }
 
-private const val SettingsPreferencesName="vibearc_settings"
+internal const val SettingsPreferencesName="vibearc_settings"
 private const val HighestAudioQualityKey="highest_audio_quality"
 internal fun Context.prefersHighestAudioQuality():Boolean =
     streamAudioQuality()==AudioQuality.HIGHEST

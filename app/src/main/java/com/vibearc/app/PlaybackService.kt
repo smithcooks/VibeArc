@@ -49,6 +49,14 @@ class PlaybackService : MediaSessionService() {
     private var refreshedMediaId: String? = null
     private var queueWindowUids: List<Any> = emptyList()
     private val playerListener = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_MEDIA_METADATA_CHANGED,
+                    Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAY_WHEN_READY_CHANGED,
+                    Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_TIMELINE_CHANGED,
+                    Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED)) {
+                MusicWidgets.publish(this@PlaybackService, player)
+            }
+        }
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
             val window = Timeline.Window()
             val updatedUids = List(timeline.windowCount) { timeline.getWindow(it, window).uid }
@@ -154,6 +162,7 @@ class PlaybackService : MediaSessionService() {
                 lastAudioRefreshMs = now
             }
             updateCrossfade()
+            MusicWidgets.tick(this@PlaybackService, player)
             handler.postDelayed(this, SleepTimerPollMillis)
         }
     }
@@ -180,6 +189,7 @@ class PlaybackService : MediaSessionService() {
         player = ExoPlayer.Builder(this).setMediaSourceFactory(mediaSources).build().also { it.addListener(playerListener) }
         crossfadePlayer = ExoPlayer.Builder(this).setMediaSourceFactory(mediaSources).build()
         mediaSession = MediaSession.Builder(this, player).build()
+        MusicWidgets.publish(this, player)
         lastPollMs = android.os.SystemClock.elapsedRealtime()
         handler.post(sleepTimerCheck)
     }
@@ -188,6 +198,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         destroyed = true
+        MusicWidgets.stopped(this)
         handler.removeCallbacks(sleepTimerCheck)
         player.removeListener(playerListener)
         cancelCrossfade()
