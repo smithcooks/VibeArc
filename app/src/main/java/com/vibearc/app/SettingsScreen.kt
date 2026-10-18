@@ -32,7 +32,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,12 +52,6 @@ internal fun SettingsScreen(
     onPullSelectedYouTubePlaylists: () -> Unit,
     onCreateYouTubePlaylist: (String) -> Unit,
     onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
-    lastFmUsername: String?, lastFmBusy: Boolean, lastFmConfiguration: LastFmConfiguration,
-    lastFmAuthenticated: Boolean, lastFmAuthorizationPending: Boolean, lastFmError: String?,
-    lastFmTracks: List<Track>,
-    onStartLastFmAuth: () -> Unit, onFinishLastFmAuth: () -> Unit,
-    onRefreshLastFm: () -> Unit, onDisconnectLastFm: () -> Unit,
-    onSaveLastFmSetup: (LastFmConfiguration, String?) -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
     onUpdateAvailable: (AppUpdate) -> Unit,
@@ -76,19 +69,12 @@ internal fun SettingsScreen(
     var streamQuality by remember { mutableStateOf(context.streamAudioQuality()) }
     val downloads=remember(context) { OfflineDownloads.get(context) }
     var wifiOnly by remember { mutableStateOf(downloads.wifiOnly) }
-    var scrobblingEnabled by remember { mutableStateOf(context.lastFmScrobblingEnabled()) }
-    var excludedScrobbleUris by remember { mutableStateOf(context.loadLastFmExcludedUris()) }
+    var downloadFormat by remember { mutableStateOf(downloads.downloadFormat) }
     var wavySeekbar by remember { mutableStateOf(context.wavySeekbarEnabled()) }
     var audioTuning by remember { mutableStateOf(context.loadAudioTuning()) }
     var selectedIcon by remember { mutableStateOf(context.selectedLauncherIcon()) }
     var custom by remember { mutableStateOf("#%06X".format(appearance.customAccentArgb and 0xFFFFFF)) }
     var youtubePlaylistTitle by remember { mutableStateOf("") }
-    var lastFmApiKey by remember(lastFmConfiguration) { mutableStateOf(lastFmConfiguration.apiKey) }
-    var lastFmSignerUrl by remember(lastFmConfiguration) { mutableStateOf(lastFmConfiguration.signerUrl) }
-    var lastFmClientToken by remember(lastFmConfiguration) { mutableStateOf(lastFmConfiguration.clientToken) }
-    var lastFmProfileName by remember(lastFmUsername) { mutableStateOf(lastFmUsername.orEmpty()) }
-    val lastFmSetup = LastFmConfiguration(lastFmApiKey.trim(), lastFmSignerUrl.trim().trimEnd('/'), lastFmClientToken.trim())
-    val lastFmSetupError = lastFmConfigurationError(lastFmSetup)
     var error by remember { mutableStateOf(false) }
     val unavailable: (String,String)->Unit = { title,description -> info=title to description }
     fun updateAudioTuning(value: AudioTuning) {
@@ -102,7 +88,7 @@ internal fun SettingsScreen(
         if(section == null) {
             item { ReferenceRow("Appearance","Theme, colors and motion","palette",onClick={section="Appearance"}) }
             item { ReferenceRow("Playback & Downloads","Quality, equalizer and mobile data","quality",onClick={section="Playback"}) }
-            item { ReferenceRow("Accounts","YouTube Music and Last.fm","account",onClick={section="Accounts"}) }
+            item { ReferenceRow("Accounts","YouTube Music","account",onClick={section="Accounts"}) }
             item { ReferenceRow("Library & Backup","Imports, backup and restore","playlist",onClick={section="Library"}) }
             item { ReferenceRow("About & Support","Updates, privacy and app information","code",onClick={section="About"}) }
             item { ReferenceRow("Buy Me a Chai","Support Smith","heart",onClick={runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://buymeachai.ezee.li/Smith_cooks"))) }}) }
@@ -187,7 +173,8 @@ internal fun SettingsScreen(
         if(section == "Playback") {
         item { SettingsHeading("Audio & Streaming") }
         item { ReferenceRow("Streaming Quality","${streamFormat.label} · ${streamQuality.label}","quality",0,7,onClick={sheet="Streaming Quality"}) }
-        item { ReferenceRow("Offline Downloads","Save original playback audio · no format conversion","download",1,7,onClick=onDownloads) }
+        item { ReferenceRow("Offline Downloads","Music/VibeArc · saved audio and lyrics","download",1,7,onClick=onDownloads) }
+        item { ReferenceRow("Download format",downloadFormat.label,"download",onClick={sheet="Download format"}) }
         item { ReferenceRow("Download on Wi-Fi only",if(wifiOnly) "Mobile data off for downloads" else "Wi-Fi + mobile data · charges may apply","download",2,7,checked=wifiOnly,onClick={
             wifiOnly=!wifiOnly;downloads.setWifiOnly(wifiOnly)
             if(downloads.entries.value.any { it.status==DownloadStatus.QUEUED || (it.status==DownloadStatus.PAUSED && it.autoResume) }) runCatching { DownloadService.start(context) }
@@ -207,12 +194,6 @@ internal fun SettingsScreen(
         item { SettingsHeading("Library & Playlist Imports") }
         item { ReferenceRow("Import Playlist from File","CSV, TSV, M3U/M3U8, or TXT","download",onClick=onImportPlaylist) }
         }
-        if(section == "Accounts") {
-        item { SettingsHeading("Scrobbler") }
-        item { ReferenceRow("Last.fm Account",when { lastFmBusy -> "Loading…"; lastFmAuthenticated -> lastFmUsername.orEmpty(); lastFmAuthorizationPending -> "Authorization waiting to finish"; lastFmUsername != null && lastFmConfiguration.profileConfigured -> "$lastFmUsername · public profile only"; else -> "Tap to set up Last.fm" },"stats",0,3,onClick={sheet="Last.fm"}) }
-        item { ReferenceRow("Scrobbling & Now Playing",when { !lastFmAuthenticated -> "Sign in to Last.fm first"; scrobblingEnabled -> "Automatic scrobbling is on"; else -> "Scrobbling is off" },"clock",1,3,scrobblingEnabled,enabled=lastFmAuthenticated,onClick={scrobblingEnabled=!scrobblingEnabled;context.saveLastFmScrobblingEnabled(scrobblingEnabled)}) }
-        item { ReferenceRow("Scrobble Exclusions","${excludedScrobbleUris.size} excluded tracks","playlist",2,3,enabled=lastFmAuthenticated,onClick={sheet="Scrobble Exclusions"}) }
-        }
         if(section == "Library") {
         item { SettingsHeading("Backup & Restore") }
         item { ReferenceRow("Backup","Save library and playlists to JSON","backup",0,2,onClick=onBackup) }
@@ -224,7 +205,7 @@ internal fun SettingsScreen(
         }
         if(section == "About") {
         item { SettingsHeading("About") }
-        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store; a Last.fm session key stays in private app storage. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, KuGou, LRCLIB, Lyrics.ovh, SimpMusic, Last.fm, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
+        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, KuGou, LRCLIB, Lyrics.ovh, SimpMusic, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. MP3 conversion runs on this device using native LAME, with no conversion server. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
         item { ReferenceRow("Check for updates",if(checkingUpdate) "Checking GitHub…" else "Download and install inside VibeArc","download",enabled=!checkingUpdate,onClick={
             checkingUpdate = true
             updateScope.launch {
@@ -268,7 +249,6 @@ internal fun SettingsScreen(
                 item {
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
                         Glyph(when {
-                            title == "Last.fm" -> "stats"
                             title.contains("Quality") -> "quality"
                             else -> "palette"
                         },Modifier.size(36.dp))
@@ -276,6 +256,17 @@ internal fun SettingsScreen(
                     }
                 }
                 when(title) {
+                    "Download format" -> {
+                        item { Text("Applies to new downloads. Saved WebM songs can be converted later from Downloads → song options → Create MP3 copy. Your original audio and lyrics stay in VibeArc.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        items(DownloadFormat.entries.size) { index ->
+                            val format=DownloadFormat.entries[index]
+                            QualityChoice(format.label,if(format==DownloadFormat.WEBM) "Default · no conversion" else "Optional · 320 kbps MP3",
+                                if(format==DownloadFormat.WEBM) "Highest available WebM/Opus source, saved without re-encoding."
+                                else "Convert on this device and embed cover art. Conversion takes extra time and does not improve source quality.",downloadFormat==format) {
+                                downloadFormat=format;downloads.setDownloadFormat(format);sheet=null
+                            }
+                        }
+                    }
                     "Theme" -> items(ThemeMode.entries.size) { index ->
                         val mode = ThemeMode.entries[index]
                         QualityChoice(mode.label, if(appearance.themeMode == mode) "Selected" else "Appearance",
@@ -320,39 +311,6 @@ internal fun SettingsScreen(
                             QualityChoice(if(seconds==0) "Off" else "$seconds seconds","Transition",if(seconds==0) "Gapless direct track changes." else "Equal-power overlap between consecutive tracks.",audioTuning.crossfadeSeconds==seconds) {
                                 updateAudioTuning(audioTuning.copy(crossfadeSeconds=seconds,bitPerfectEnabled=false))
                             }
-                        }
-                    }
-                    "Last.fm" -> {
-                        item { Text("Sign in through Last.fm. Now Playing and completed scrobbles are signed by the VibeArc server; the Last.fm shared secret is never stored in the app.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        item { OutlinedTextField(lastFmProfileName,{lastFmProfileName=it.take(64)},label={Text("Last.fm username")},singleLine=true,enabled=!lastFmBusy,modifier=Modifier.fillMaxWidth()) }
-                        item { OutlinedTextField(lastFmApiKey,{lastFmApiKey=it.take(32)},label={Text("Public API key (optional with signer)")},singleLine=true,enabled=!lastFmBusy,modifier=Modifier.fillMaxWidth()) }
-                        item { Text("An API key and username load public statistics. Login and scrobbling also require your deployed signer. Never enter the Last.fm shared secret here.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        item { OutlinedTextField(lastFmSignerUrl,{lastFmSignerUrl=it.take(2048)},label={Text("HTTPS signer URL")},singleLine=true,enabled=!lastFmBusy,modifier=Modifier.fillMaxWidth()) }
-                        item { OutlinedTextField(lastFmClientToken,{lastFmClientToken=it.take(512)},label={Text("Signer client token (not shared secret)")},visualTransformation=PasswordVisualTransformation(),singleLine=true,enabled=!lastFmBusy,modifier=Modifier.fillMaxWidth()) }
-                        lastFmSetupError?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error) } }
-                        item { Button(onClick={onSaveLastFmSetup(lastFmSetup,validLastFmUsername(lastFmProfileName))},enabled=!lastFmBusy && lastFmSetupError==null && (lastFmProfileName.isBlank() || validLastFmUsername(lastFmProfileName)!=null)) { Text("Save setup") } }
-                        if (!lastFmConfiguration.signerConfigured) item { Text("Authenticated sign-in needs a configured signer; public profiles do not enable scrobbling.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        lastFmError?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error) } }
-                        context.lastFmSubmissionStatus()?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.onSurfaceVariant) } }
-                        item {
-                            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                if (!lastFmAuthenticated) Button(onClick=onStartLastFmAuth,enabled=lastFmConfiguration.signerConfigured && !lastFmBusy) { Text("Authorize") }
-                                if (lastFmAuthorizationPending && !lastFmAuthenticated) Button(onClick=onFinishLastFmAuth,enabled=!lastFmBusy) { Text("Finish sign-in after browser approval") }
-                                if(lastFmUsername != null) OutlinedButton(onClick=onRefreshLastFm,enabled=lastFmConfiguration.profileConfigured && !lastFmBusy) { Text("Refresh profile") }
-                            }
-                        }
-                        if(lastFmUsername != null || lastFmAuthorizationPending) item { TextButton(onClick={onDisconnectLastFm();sheet=null},enabled=!lastFmBusy) { Text("Disconnect Last.fm") } }
-                    }
-                    "Scrobble Exclusions" -> {
-                        item { Text("Last.fm accepts tracks longer than 30 seconds after half the track or four minutes, whichever comes first. Excluded tracks never send Now Playing or scrobbles.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if(lastFmTracks.isEmpty()) item { Text("Your library is empty.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        else items(lastFmTracks.size,key={lastFmTracks[it].catalogUri}) { index ->
-                            val track=lastFmTracks[index]
-                            val excluded=track.catalogUri in excludedScrobbleUris
-                            ReferenceRow(track.title,track.artist,"lyrics",index,lastFmTracks.size,excluded,onClick={
-                                excludedScrobbleUris=if(excluded) excludedScrobbleUris-track.catalogUri else excludedScrobbleUris+track.catalogUri
-                                context.saveLastFmExcludedUris(excludedScrobbleUris)
-                            })
                         }
                     }
                     "YouTube Account" -> {

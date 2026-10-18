@@ -20,6 +20,11 @@ internal data class DownloadEntry(
     val error: String = "", val createdAt: Long = System.currentTimeMillis(), val completedAt: Long = 0,
     val ownsFile: Boolean = true, val autoResume: Boolean = false,
     val bitDepth: Int = 0,
+    val exportedUri: String = "",
+    val downloadFormat: DownloadFormat = DownloadFormat.WEBM,
+    val mp3CopyState: Mp3CopyState = Mp3CopyState.NONE,
+    val mp3CopyUri: String = "",
+    val mp3CopyMessage: String = "",
 ) {
     val id get() = downloadIdentity(track)
     val progress get() = if (total > 0) (bytes.toFloat()/total).coerceIn(0f,1f) else 0f
@@ -40,7 +45,9 @@ internal object DownloadCodec {
             .value("codec", e.codec).value("quality", e.quality?.name.orEmpty()).value("bitrate",e.bitrateKbps).value("sampleRate",e.sampleRateHz).value("bitDepth",e.bitDepth)
             .value("lossless",e.lossless).value("bytes",e.bytes).value("total",e.total).value("validator",e.validator)
             .value("local",e.localUri).value("art",e.artworkUri).value("error",e.error).value("created",e.createdAt)
-            .value("completed",e.completedAt).value("owned",e.ownsFile).value("autoResume",e.autoResume).end() }
+            .value("completed",e.completedAt).value("owned",e.ownsFile).value("autoResume",e.autoResume).value("exported",e.exportedUri)
+            .value("downloadFormat",e.downloadFormat.name).value("mp3CopyState",e.mp3CopyState.name)
+            .value("mp3CopyUri",e.mp3CopyUri).value("mp3CopyMessage",e.mp3CopyMessage).end() }
         return writer.end().done()
     }
     fun decode(text: String): List<DownloadEntry> = JsonParser.array().from(text).map { value ->
@@ -49,7 +56,8 @@ internal object DownloadCodec {
             r.getString("url",""), r.getString("provider",""), r.getString("permission",""), r.getString("codec",""),
             r.getString("quality","").takeIf(String::isNotBlank)?.let(DownloadQuality::valueOf),r.getInt("bitrate",0),r.getInt("sampleRate",0),
             r.getBoolean("lossless",false),r.getLong("bytes",0),r.getLong("total",0),r.getString("validator",""),r.getString("local",""),
-            r.getString("art",""),r.getString("error",""),r.getLong("created",0),r.getLong("completed",0),r.getBoolean("owned",true),r.getBoolean("autoResume",false),r.getInt("bitDepth",0))
+            r.getString("art",""),r.getString("error",""),r.getLong("created",0),r.getLong("completed",0),r.getBoolean("owned",true),r.getBoolean("autoResume",false),r.getInt("bitDepth",0),r.getString("exported",""),
+            DownloadFormat.fromPreference(r.getString("downloadFormat","")),Mp3CopyState.valueOf(r.getString("mp3CopyState","NONE")),r.getString("mp3CopyUri",""),r.getString("mp3CopyMessage",""))
     }.also { require(it.size <= 5_000) { "Too many download records" } }
 }
 
@@ -63,6 +71,8 @@ internal class OfflineDownloads private constructor(private val context: Context
     // New key replaces the old implicit Wi-Fi-only default, including on upgrades.
     val wifiOnly get() = settings.getBoolean("playback_wifi_only",DefaultDownloadWifiOnly)
     fun setWifiOnly(value: Boolean) { settings.edit().putBoolean("playback_wifi_only",value).apply() }
+    val downloadFormat get() = DownloadFormat.fromPreference(settings.getString("download_format",null))
+    fun setDownloadFormat(value: DownloadFormat) { settings.edit().putString("download_format",value.name).apply() }
     @Synchronized fun load() {
         if (loaded) return
         directory.mkdirs()
@@ -72,8 +82,12 @@ internal class OfflineDownloads private constructor(private val context: Context
             val library=context.loadLibrary()
             context.loadOfflineFiles().map { legacyOfflineEntry(it,library) }.distinctBy { it.id }
         }
-        val recovered = records.map { entry -> if (entry.status in setOf(DownloadStatus.DOWNLOADING,DownloadStatus.RESOLVING,DownloadStatus.QUEUED))
-            entry.copy(status=DownloadStatus.PAUSED,error="Interrupted. Tap Resume.",autoResume=false) else entry }
+        val recovered = records.map { entry ->
+            val recovered = if (entry.status in setOf(DownloadStatus.DOWNLOADING,DownloadStatus.RESOLVING,DownloadStatus.QUEUED))
+                entry.copy(status=DownloadStatus.PAUSED,error="Interrupted. Tap Resume.",autoResume=false) else entry
+            if(recovered.mp3CopyState in setOf(Mp3CopyState.QUEUED,Mp3CopyState.RUNNING))
+                recovered.copy(mp3CopyState=Mp3CopyState.FAILED,mp3CopyMessage="Conversion interrupted. Choose Create MP3 copy to retry.") else recovered
+        }
         persist(recovered)
         loaded = true
     }
@@ -83,14 +97,35 @@ internal class OfflineDownloads private constructor(private val context: Context
         if(next!=mutableEntries.value) persist(next)
     }
     /** Publish only while the job still owns the transfer. Pause/cancel use this same lock. */
-    @Synchronized fun complete(id: String, change: (DownloadEntry)->DownloadEntry): Boolean {
+    @Synchronized fun complete(id: String, mp3: File, change: (DownloadEntry)->DownloadEntry): Boolean {
         val entry=mutableEntries.value.firstOrNull { it.id==id } ?: return false
         if(entry.status!=DownloadStatus.DOWNLOADING) return false
-        val partial=file(id,"part")
         val audio=file(id,"audio")
-        check(partial.renameTo(audio)) { "Could not finalize audio" }
-        try { persist(mutableEntries.value.map { if(it.id==id) change(it) else it }) }
-        catch(e: Exception) { audio.renameTo(partial);throw e }
+        check(mp3.renameTo(audio)) { "Could not finalize MP3" }
+        var exported: Uri? = null
+        try {
+            exported = publishDownloadAudio(context, audio, entry.track, entry.downloadFormat)
+            persist(mutableEntries.value.map { if(it.id==id) change(it).copy(exportedUri=exported.toString()) else it })
+        } catch(e: Exception) {
+            exported?.let { runCatching { discardFreshMp3(context,it) } }
+            audio.renameTo(mp3); throw e
+        }
+        return true
+    }
+    @Synchronized fun enqueueMp3Copy(id: String) {
+        load()
+        val entry=mutableEntries.value.firstOrNull { it.id==id } ?: error("Download not found")
+        check(entry.canCreateMp3Copy() && offlineTrack(entry.track)!=null) { "This download cannot be converted" }
+        update(id) { it.copy(mp3CopyState=Mp3CopyState.QUEUED,mp3CopyMessage="Waiting to convert…") }
+    }
+    /** The original remains playable; only publish a new MP3 after successful conversion. */
+    @Synchronized fun completeMp3Copy(id: String, mp3: File): Boolean {
+        val entry=mutableEntries.value.firstOrNull { it.id==id } ?: return false
+        if(entry.status!=DownloadStatus.COMPLETED || entry.mp3CopyState!=Mp3CopyState.RUNNING) return false
+        val exported=publishDownloadAudio(context,mp3,entry.track,DownloadFormat.MP3)
+        try {
+            update(id) { it.copy(mp3CopyState=Mp3CopyState.COMPLETED,mp3CopyUri=exported.toString(),mp3CopyMessage="MP3 with cover art saved in Music/VibeArc") }
+        } catch(e: Exception) { runCatching { discardFreshMp3(context,exported) }; throw e }
         return true
     }
     @Synchronized private fun persist(next: List<DownloadEntry>) {
@@ -113,14 +148,14 @@ internal class OfflineDownloads private constructor(private val context: Context
             val local = track.canCopyOffline()
             val localBytes=if(local) runCatching { context.contentResolver.openAssetFileDescriptor(Uri.parse(track.uri),"r")?.use { it.length.coerceAtLeast(0) } ?: 0 }.getOrDefault(0) else 0
             val entry = if (local) DownloadEntry(track.withoutPlayCounts(),DownloadStatus.COMPLETED,bytes=localBytes,total=localBytes,localUri=track.uri,artworkUri=track.artworkUri,ownsFile=false,completedAt=System.currentTimeMillis())
-            else if(supportsPlaybackDownload(track)) DownloadEntry(track.copy(uri=track.catalogUri,sourceUri="").withoutPlayCounts(),provider="playback")
+            else if(supportsPlaybackDownload(track)) DownloadEntry(track.copy(uri=track.catalogUri,sourceUri="").withoutPlayCounts(),provider="playback",downloadFormat=existing?.downloadFormat ?: downloadFormat)
             else DownloadEntry(track,DownloadStatus.FAILED,error="Find this song in Search and download its playable YouTube entry.")
             next = next.filterNot { it.id==entry.id } + entry
         }
         persist(next)
     }
     fun file(id: String, extension: String): File {
-        require(id.matches(Regex("[a-f0-9]{64}")) && extension in setOf("part","audio","jpg","lrc"))
+        require(id.matches(Regex("[a-f0-9]{64}")) && extension in setOf("part","mp3","audio","jpg","lrc"))
         val folder = File(directory,if(extension=="jpg") "artwork" else "tracks").apply { mkdirs() }
         return File(folder,"$id.$extension").also { require(it.canonicalFile.parentFile==folder.canonicalFile) }
     }
@@ -134,7 +169,7 @@ internal class OfflineDownloads private constructor(private val context: Context
         load()
         val record = mutableEntries.value.firstOrNull { it.id==id } ?: return
         // Never delete local originals; only paths derived from this owned record under our root.
-        if (record.ownsFile) listOf("audio","part","jpg","lrc").forEach { extension ->
+        if (record.ownsFile) listOf("audio","part","mp3","jpg","lrc").forEach { extension ->
             val target = file(id,extension)
             if(target.exists()) check(target.delete()) { "Could not delete saved audio" }
         }

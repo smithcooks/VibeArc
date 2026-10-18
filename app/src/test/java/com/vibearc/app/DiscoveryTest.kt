@@ -13,8 +13,7 @@ class DiscoveryTest {
         assertEquals(
             listOf(online.uri, local.uri, liked.uri),
             blendDiscoveryTracks(
-                youtube = listOf(online),
-                lastFm = listOf(online.copy(title = "Duplicate"), local),
+                youtube = listOf(online, online.copy(title = "Duplicate")),
                 recent = listOf(local),
                 library = listOf(liked),
             ).map(Track::uri),

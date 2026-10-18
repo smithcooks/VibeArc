@@ -30,20 +30,11 @@ class PlaybackService : MediaSessionService() {
     private lateinit var audioEffects: AudioEffectsController
     private lateinit var bitPerfect: BitPerfectController
     private val handler = Handler(Looper.getMainLooper())
-    private val lastFmExecutor = Executors.newSingleThreadExecutor()
     private val automaticQueueExecutor = Executors.newSingleThreadExecutor()
     private var automaticQueueBusy = false
     @Volatile private var destroyed = false
     private var trackedMediaId = ""
-    private var listenedMs = 0L
-    private var lastPollMs = 0L
     private var startedAtSeconds = 0L
-    private var scrobbled = false
-    @Volatile private var playbackGeneration = 0L
-    private var scrobbleInFlight = false
-    private var scrobbleAttempts = 0
-    private var scrobbleRetryAtMs = 0L
-    private var nowPlayingSession: String? = null
     private var crossfadeNextIndex = C.INDEX_UNSET
     private var lastAudioRefreshMs = 0L
     private var refreshedMediaId: String? = null
@@ -115,15 +106,7 @@ class PlaybackService : MediaSessionService() {
             if (trackedMediaId != mediaId) refreshedMediaId = null
             saveRecentUris(loadRecentUris().recordRecentUri(mediaId))
             trackedMediaId = mediaId
-            listenedMs = 0L
-            lastPollMs = android.os.SystemClock.elapsedRealtime()
-            startedAtSeconds = 0L
-            scrobbled = false
-            playbackGeneration++
-            scrobbleInFlight = false
-            scrobbleAttempts = 0
-            scrobbleRetryAtMs = 0L
-            nowPlayingSession = null
+            startedAtSeconds = System.currentTimeMillis() / 1_000
             fillAutomaticQueue()
         }
 
@@ -146,17 +129,6 @@ class PlaybackService : MediaSessionService() {
                 }
             }
             val now = android.os.SystemClock.elapsedRealtime()
-            if (player.isPlaying && player.currentMediaItem?.mediaId == trackedMediaId) {
-                if (startedAtSeconds == 0L) startedAtSeconds = System.currentTimeMillis() / 1_000
-                player.currentMediaItem?.let(::submitNowPlaying)
-                listenedMs += (now - lastPollMs).coerceIn(0L, SleepTimerPollMillis * 2)
-                val track = player.currentMediaItem?.lastFmTrack(player.duration)
-                if (!scrobbled && !scrobbleInFlight && scrobbleAttempts < 3 && now >= scrobbleRetryAtMs && track != null &&
-                    shouldScrobble(track, listenedMs, loadLastFmExcludedUris(), lastFmScrobblingEnabled())) {
-                    submitScrobble(track, startedAtSeconds)
-                }
-            }
-            lastPollMs = now
             if (now - lastAudioRefreshMs >= 1_000L) {
                 audioEffects.refresh()
                 lastAudioRefreshMs = now
@@ -190,7 +162,6 @@ class PlaybackService : MediaSessionService() {
         crossfadePlayer = ExoPlayer.Builder(this).setMediaSourceFactory(mediaSources).build()
         mediaSession = MediaSession.Builder(this, player).build()
         MusicWidgets.publish(this, player)
-        lastPollMs = android.os.SystemClock.elapsedRealtime()
         handler.post(sleepTimerCheck)
     }
 
@@ -204,7 +175,6 @@ class PlaybackService : MediaSessionService() {
         cancelCrossfade()
         bitPerfect.clear()
         audioEffects.release()
-        lastFmExecutor.shutdownNow()
         automaticQueueExecutor.shutdownNow()
         mediaSession?.release()
         mediaSession = null
@@ -291,62 +261,6 @@ class PlaybackService : MediaSessionService() {
         crossfadeNextIndex = C.INDEX_UNSET
     }
 
-    private fun submitNowPlaying(mediaItem: MediaItem) {
-        if (!lastFmScrobblingEnabled()) { nowPlayingSession = null; return }
-        val session = loadLastFmSession() ?: return
-        if (nowPlayingSession == session.sessionKey) return
-        val track = mediaItem.lastFmTrack(player.duration) ?: return
-        if (track.catalogUri in loadLastFmExcludedUris()) return
-        val config = loadLastFmConfiguration()
-        if (!config.signerConfigured) return
-        val generation = playbackGeneration
-        nowPlayingSession = session.sessionKey
-        lastFmExecutor.execute {
-            if (playbackGeneration != generation || !lastFmScrobblingEnabled() || track.catalogUri in loadLastFmExcludedUris() || loadLastFmSession() != session) return@execute
-            val submitted = runCatching { LastFmSignerApi.updateNowPlaying(config.signerUrl, config.clientToken, session, track) }
-            saveLastFmSubmissionStatus(if (submitted.isSuccess) "Now Playing accepted by Last.fm" else "Now Playing failed. Check your signer and Last.fm session.")
-        }
-    }
-
-    private fun submitScrobble(track: Track, timestamp: Long) {
-        if (!lastFmScrobblingEnabled() || track.catalogUri in loadLastFmExcludedUris()) return
-        val session = loadLastFmSession() ?: return
-        val config = loadLastFmConfiguration()
-        if (!config.signerConfigured) return
-        val generation = playbackGeneration
-        scrobbleInFlight = true
-        scrobbleAttempts++
-        lastFmExecutor.execute {
-            val submitted = runCatching {
-                check(lastFmScrobblingEnabled() && track.catalogUri !in loadLastFmExcludedUris() && loadLastFmSession() == session)
-                LastFmSignerApi.scrobble(config.signerUrl, config.clientToken, session, track, timestamp)
-            }
-            saveLastFmSubmissionStatus(if (submitted.isSuccess) "Scrobble accepted by Last.fm" else "Scrobble not accepted. Check your signer and Last.fm session.")
-            handler.post {
-                if (playbackGeneration == generation) {
-                    scrobbleInFlight = false
-                    scrobbled = submitted.isSuccess
-                    scrobbleRetryAtMs = android.os.SystemClock.elapsedRealtime() + 60_000L
-                }
-            }
-        }
-    }
-}
-
-private fun MediaItem.lastFmTrack(playerDurationMs: Long): Track? {
-    val title = mediaMetadata.title?.toString().orEmpty()
-    val artist = mediaMetadata.artist?.toString().orEmpty()
-    if (title.isBlank() || artist.isBlank()) return null
-    return Track(
-        title = title,
-        artist = artist,
-        album = mediaMetadata.albumTitle?.toString().orEmpty(),
-        uri = localConfiguration?.uri?.toString().orEmpty().ifBlank { mediaId },
-        durationMs = playerDurationMs.takeIf { it > 0 }
-            ?: mediaMetadata.extras?.getLong("durationMs")?.takeIf { it > 0 }
-            ?: 0,
-        sourceUri = mediaMetadata.extras?.getString("sourceUri").orEmpty().ifBlank { mediaId },
-    )
 }
 
 private const val PlaybackPreferencesName = "vibearc_playback"

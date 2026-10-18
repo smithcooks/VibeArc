@@ -175,8 +175,14 @@ private data class TrackActionsHost(
 private val LocalTrackActions = staticCompositionLocalOf<TrackActionsHost?> { null }
 
 class MainActivity : ComponentActivity() {
+    private val downloadStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if(granted) DownloadService.start(this)
+    }
+    internal fun requestDownloadStorage() { downloadStoragePermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Retired integration: remove only its local credentials, never listening history.
+        deleteSharedPreferences("lastfm_profile")
         upgradeHighestQualityDefaults()
         ArtworkCache.initialize(cacheDir)
         enableEdgeToEdge(
@@ -300,18 +306,6 @@ private fun VibeArcApp(
     var youtubeSelectedPlaylistIds by remember {
         mutableStateOf(cachedYouTubeState?.selectedPlaylistIds.orEmpty())
     }
-    var lastFmConfiguration by remember { mutableStateOf(context.loadLastFmConfiguration()) }
-    var lastFmSession by remember { mutableStateOf(context.loadLastFmSession()) }
-    var lastFmUsername by remember { mutableStateOf(lastFmSession?.username ?: context.loadLastFmUsername()) }
-    var lastFmPendingToken by remember { mutableStateOf(context.loadLastFmPendingToken()) }
-    var lastFmSnapshot by remember { mutableStateOf<LastFmSnapshot?>(null) }
-    var lastFmRecommendations by remember { mutableStateOf<List<LastFmTrack>>(emptyList()) }
-    var lastFmPlayable by remember { mutableStateOf<List<Track>>(emptyList()) }
-    var lastFmRecommendationsBusy by remember { mutableStateOf(false) }
-    var lastFmRequests by remember { mutableIntStateOf(0) }
-    val lastFmBusy = lastFmRequests > 0
-    var lastFmError by remember { mutableStateOf<String?>(null) }
-    var lastFmRefresh by remember { mutableIntStateOf(0) }
     var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
     var youtubeFeedSections by remember { mutableStateOf(cachedYouTubeBrowse?.sections.orEmpty()) }
     var youtubeFeedBusy by remember { mutableStateOf(false) }
@@ -325,81 +319,6 @@ private fun VibeArcApp(
             runCatching { AppUpdateChecker.available(BuildConfig.VERSION_NAME) }.getOrNull()
         }
         if (updatePrefs.getBoolean("update_reminders", true) && availableUpdate == null) availableUpdate = checkedUpdate
-    }
-
-    LaunchedEffect(lastFmUsername, lastFmRefresh, lastFmConfiguration) {
-        val username = lastFmUsername ?: return@LaunchedEffect
-        val config = lastFmConfiguration
-        if (!config.profileConfigured) {
-            lastFmError = "Open Settings → Last.fm to enter your API key or signer configuration."
-            return@LaunchedEffect
-        }
-        lastFmRequests++
-        try {
-            lastFmError = null
-            val loaded = withContext(Dispatchers.IO) {
-                runCatching {
-                    if (config.apiKey.isNotBlank()) LastFmApi.load(username, config.apiKey)
-                    else LastFmSignerApi.load(config.signerUrl, config.clientToken, username)
-                }
-            }
-            lastFmSnapshot = loaded.getOrNull()
-            lastFmRecommendations = emptyList()
-            lastFmError = loaded.exceptionOrNull()?.let { it.message?.take(200) ?: "Could not load the Last.fm profile." }
-        } finally { lastFmRequests-- }
-    }
-
-    val startLastFmAuth: () -> Unit = {
-        val config = lastFmConfiguration
-        if (!config.signerConfigured) {
-            lastFmError = "Enter your HTTPS signer URL and client token in Last.fm settings first."
-        } else uiScope.launch {
-            lastFmRequests++
-            try {
-                lastFmError = null
-                val result = withContext(Dispatchers.IO) {
-                    runCatching { LastFmSignerApi.beginAuthorization(config.signerUrl, config.clientToken) }
-                }
-                result.getOrNull()?.let { authorization ->
-                    context.saveLastFmPendingToken(authorization.token)
-                    lastFmPendingToken = authorization.token
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authorization.authorizationUrl))) }
-                        .onFailure { lastFmError = "Could not open Last.fm authorization." }
-                }
-                result.exceptionOrNull()?.let { lastFmError = it.message ?: "Could not start Last.fm authorization." }
-            } finally { lastFmRequests-- }
-        }
-    }
-    val finishLastFmAuth: () -> Unit = finish@{
-        val token = lastFmPendingToken ?: return@finish
-        val config = lastFmConfiguration
-        uiScope.launch {
-            lastFmRequests++
-            try {
-                lastFmError = null
-                val result = withContext(Dispatchers.IO) {
-                    runCatching { LastFmSignerApi.completeAuthorization(config.signerUrl, config.clientToken, token) }
-                }
-                result.getOrNull()?.let { session ->
-                    context.saveLastFmSession(session)
-                    lastFmSession = session
-                    lastFmUsername = session.username
-                    lastFmPendingToken = null
-                    lastFmRefresh++
-                }
-                result.exceptionOrNull()?.let { lastFmError = it.message ?: "Finish authorization in the browser, then try again." }
-            } finally { lastFmRequests-- }
-        }
-    }
-    val disconnectLastFm: () -> Unit = {
-        context.saveLastFmSession(null)
-        context.saveLastFmUsername(null)
-        lastFmSession = null
-        lastFmPendingToken = null
-        lastFmUsername = null
-        lastFmSnapshot = null
-        lastFmRecommendations = emptyList()
-        lastFmError = null
     }
 
     fun loadYouTubeAccount(announce: Boolean) {
@@ -512,26 +431,6 @@ private fun VibeArcApp(
     val offlineDownloads = remember(context) { OfflineDownloads.get(context) }
     LaunchedEffect(offlineDownloads) { withContext(Dispatchers.IO) { runCatching { offlineDownloads.load() } } }
 
-    LaunchedEffect(lastFmSnapshot) {
-        if (lastFmRecommendations.isNotEmpty()) return@LaunchedEffect
-        val seed = lastFmSnapshot?.topTracks?.firstOrNull() ?: return@LaunchedEffect
-        lastFmRecommendationsBusy = true
-        lastFmRecommendations = withContext(Dispatchers.IO) {
-            runCatching {
-                if (lastFmConfiguration.apiKey.isNotBlank()) LastFmApi.similarTracks(seed, lastFmConfiguration.apiKey)
-                else LastFmSignerApi.similarTracks(lastFmConfiguration.signerUrl, lastFmConfiguration.clientToken, seed)
-            }.getOrDefault(emptyList())
-        }
-        lastFmRecommendationsBusy = false
-    }
-    LaunchedEffect(lastFmRecommendations) {
-        lastFmPlayable = withContext(Dispatchers.IO) {
-            lastFmRecommendations.take(4).mapNotNull { recommendation ->
-                runCatching { OnlineMusic.search("${recommendation.artist} ${recommendation.title}").firstOrNull() }
-                    .getOrNull()
-            }
-        }
-    }
     var searchSeed by remember { mutableStateOf("") }
     var searchKind by remember { mutableStateOf<CatalogKind?>(null) }
     var currentTrack by remember { mutableStateOf<Track?>(null) }
@@ -751,8 +650,8 @@ private fun VibeArcApp(
     }
     val recentTracks = recentUris.mapNotNull { mediaId -> library.firstOrNull { it.uri == mediaId } }
     val onlineHomeTracks = youtubeFeedSections.flatMap(YouTubeFeedSection::tracks)
-    val discoveryTracks = remember(onlineHomeTracks, lastFmPlayable, recentTracks, library) {
-        blendDiscoveryTracks(onlineHomeTracks, lastFmPlayable, recentTracks, library)
+    val discoveryTracks = remember(onlineHomeTracks, recentTracks, library) {
+        blendDiscoveryTracks(onlineHomeTracks, recentTracks, library)
     }
     fun startRadio(track: Track, artistOnly: Boolean) {
         if (radioBusy) return
@@ -1141,31 +1040,6 @@ private fun VibeArcApp(
                 onPullSelectedYouTubePlaylists = previewSelectedYouTubePlaylists,
                 onCreateYouTubePlaylist = createYouTubePlaylist,
                 onImportYouTubePlaylist = importYouTubePlaylist,
-                lastFmUsername = lastFmUsername,
-                lastFmBusy = lastFmBusy,
-                lastFmConfiguration = lastFmConfiguration,
-                lastFmAuthenticated = lastFmSession != null,
-                lastFmAuthorizationPending = lastFmPendingToken != null,
-                lastFmTracks = library,
-                lastFmError = lastFmError,
-                onStartLastFmAuth = startLastFmAuth,
-                onFinishLastFmAuth = finishLastFmAuth,
-                onRefreshLastFm = { lastFmRefresh++ },
-                onDisconnectLastFm = disconnectLastFm,
-                onSaveLastFmSetup = { config, username ->
-                    if (config != lastFmConfiguration || username != lastFmUsername) {
-                        context.saveLastFmSession(null)
-                        lastFmSession = null
-                        lastFmPendingToken = null
-                        lastFmSnapshot = null
-                        lastFmRecommendations = emptyList()
-                    }
-                    context.saveLastFmConfiguration(config)
-                    context.saveLastFmUsername(username)
-                    lastFmConfiguration = config
-                    lastFmUsername = username
-                    lastFmRefresh++
-                },
                 onDownloads = { navigate(Tab.Downloads) },
                 onBackup = { backupWriter.launch("VibeArc-backup.json") },
                 onRestore = { backupReader.launch(arrayOf("application/json", "text/plain")) },
@@ -1174,14 +1048,11 @@ private fun VibeArcApp(
                 },
             )
             Tab.Stats -> StatsScreen(
-                padding, library, recentTracks, lastFmSnapshot, lastFmBusy, lastFmError,
-                onLastFmRefresh = { lastFmRefresh++ },
+                padding, library, recentTracks,
                 onPlay = { track -> playTrack(track, recentTracks) },
-                onSearch = { query -> searchSeed = query; searchKind = null; navigate(Tab.Search) },
             )
             Tab.Discover -> DiscoverScreen(
-                padding, discoveryTracks, lastFmSnapshot?.topTracks?.firstOrNull(),
-                lastFmPlayable, lastFmRecommendationsBusy,
+                padding, discoveryTracks,
                 onPlay = { track -> playTrack(track, discoveryTracks) },
                 onSearch = { query -> searchSeed = query; searchKind = null; navigate(Tab.Search) },
             )

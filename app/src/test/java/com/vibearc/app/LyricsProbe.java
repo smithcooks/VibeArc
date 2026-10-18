@@ -26,7 +26,7 @@ public final class LyricsProbe {
     private static void probe(String name, Track track) {
         long started = System.nanoTime();
         try {
-            LyricsDocument result = LyricsProvider.INSTANCE.fetch(track, track.getTitle(), track.getArtist());
+            LyricsDocument result = LyricsProvider.INSTANCE.fetch(track, track.getTitle(), track.getArtist(), Long.MAX_VALUE);
             boolean hasLyrics = result != null && (result.getInstrumental()
                     || !result.getSyncedLines().isEmpty() || !result.getPlainLines().isEmpty());
             long elapsedMs = (System.nanoTime() - started) / 1_000_000;

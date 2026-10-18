@@ -55,7 +55,7 @@ internal fun HomeScreen(
     val now = LocalDateTime.now()
     val onlineTracks = remember(onlineSections) { onlineSections.flatMap(YouTubeFeedSection::tracks) }
     val pool = remember(libraryTracks, recentTracks, currentTrack, onlineTracks) {
-        blendDiscoveryTracks(onlineTracks, emptyList(), recentTracks + listOfNotNull(currentTrack), libraryTracks)
+        blendDiscoveryTracks(onlineTracks, recentTracks + listOfNotNull(currentTrack), libraryTracks)
     }
     val hero = pool.firstOrNull()
     PrefetchAudio(hero)
@@ -283,62 +283,11 @@ private fun HomeShortcut(title:String,subtitle:String,track:Track?,modifier:Modi
 
 @Composable
 internal fun StatsScreen(
-    padding:PaddingValues, tracks:List<Track>, recent:List<Track>, lastFm:LastFmSnapshot?,
-    lastFmBusy:Boolean, lastFmError:String?, onLastFmRefresh:()->Unit,
-    onPlay:(Track)->Unit, onSearch:(String)->Unit,
+    padding:PaddingValues, tracks:List<Track>, recent:List<Track>,
+    onPlay:(Track)->Unit,
 ) {
     var reverse by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().padding(top=padding.calculateTopPadding()),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=padding.calculateBottomPadding()+16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        if(lastFmBusy) item {
-            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                CircularProgressIndicator(Modifier.size(24.dp),strokeWidth=3.dp); Text("Loading Last.fm…",color=MutedText)
-            }
-        }
-        if(lastFmError != null) item {
-            ReferenceSurface {
-                Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text(lastFmError,Modifier.weight(1f),color=MaterialTheme.colorScheme.error)
-                    TextButton(onClick=onLastFmRefresh) { Text("Retry") }
-                }
-            }
-        }
-        if(lastFm != null) {
-            item { Surface(shape=CircleShape,color=MaterialTheme.colorScheme.surface) { Text("Last.fm · ${lastFm.profile.username}",Modifier.padding(horizontal=14.dp,vertical=8.dp),fontWeight=FontWeight.Bold) } }
-            item {
-                ReferenceSurface {
-                    Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        Surface(color=MaterialTheme.colorScheme.primaryContainer,shape=RoundedCornerShape(24.dp)) {
-                            Column(Modifier.fillMaxWidth().padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                Text(lastFm.profile.playCount.toString(),style=MaterialTheme.typography.displaySmall)
-                                Text("Scrobbles",fontWeight=FontWeight.Bold)
-                            }
-                        }
-                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            listOf(lastFm.profile.trackCount to "Tracks",lastFm.profile.artistCount to "Artists",lastFm.profile.albumCount to "Albums").forEach { (count,label) ->
-                                ReferenceSurface(Modifier.weight(1f),shape=RoundedCornerShape(18.dp)) {
-                                    Column(Modifier.fillMaxWidth().padding(vertical=14.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                        Text(count.toString(),fontWeight=FontWeight.Bold); Text(label,style=MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if(lastFm.topTracks.isNotEmpty()) {
-                item { SectionTitle("Top tracks on Last.fm") }
-                items(lastFm.topTracks) { track ->
-                    ReferenceRow(track.title,"${track.artist} · ${track.playCount} plays","stats",onClick={onSearch("${track.artist} ${track.title}")})
-                }
-            }
-            if(lastFm.recentTracks.isNotEmpty()) {
-                item { SectionTitle("Recent on Last.fm") }
-                items(lastFm.recentTracks) { track ->
-                    ReferenceRow(track.title,if(track.nowPlaying) "${track.artist} · Now playing" else track.artist,"clock",onClick={onSearch("${track.artist} ${track.title}")})
-                }
-            }
-            item { SectionTitle("On this device") }
-        }
         item {
             Surface(shape=CircleShape,color=MaterialTheme.colorScheme.surface) { Text("On this device",Modifier.padding(horizontal=14.dp,vertical=8.dp),fontWeight=FontWeight.Bold) }
         }
@@ -516,17 +465,11 @@ private fun PlaylistTile(title:String,subtitle:String,track:Track?,index:Int,cou
 
 @Composable
 internal fun DiscoverScreen(
-    padding:PaddingValues, tracks:List<Track>, lastFmSeed:LastFmTrack?,
-    lastFmRecommendations:List<Track>, lastFmBusy:Boolean,
+    padding:PaddingValues, tracks:List<Track>,
     onPlay:(Track)->Unit, onSearch:(String)->Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-        if(lastFmSeed != null) {
-            item { SectionTitle("Last.fm radio · ${lastFmSeed.artist}") }
-            if(lastFmBusy) item { CircularProgressIndicator(Modifier.padding(18.dp).size(24.dp),strokeWidth=3.dp) }
-            items(lastFmRecommendations,key=Track::uri) { track -> TrackRow(track,{onPlay(track)}) }
-            item { SectionTitle("Rediscover your library") }
-        } else item { Text("Rediscover your library",color=MutedText,modifier=Modifier.padding(bottom=12.dp)) }
+        item { Text("Rediscover your library",color=MutedText,modifier=Modifier.padding(bottom=12.dp)) }
         if(tracks.isEmpty()) item { ReferenceRow("Explore music","Search genres and moods on YouTube Music","discover",onClick={onSearch("")}) }
         items(tracks,key=Track::uri) { TrackRow(it,{onPlay(it)}) }
         item { TextButton(onClick={onSearch("")}) { Text("Find more music") } }

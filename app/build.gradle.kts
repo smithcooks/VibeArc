@@ -9,32 +9,19 @@ plugins {
 val releaseSigning = Properties().apply {
     rootProject.file("keystore.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
 }
-val localConfig = Properties().apply {
-    rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
-}
-val lastFmApiKey = providers.environmentVariable("LASTFM_API_KEY").orNull
-    ?: providers.gradleProperty("LASTFM_API_KEY").orNull
-    ?: localConfig.getProperty("LASTFM_API_KEY", "")
-val escapedLastFmApiKey = lastFmApiKey.replace("\\", "\\\\").replace("\"", "\\\"")
-fun configValue(name: String): String = (
-    providers.environmentVariable(name).orNull
-        ?: providers.gradleProperty(name).orNull
-        ?: localConfig.getProperty(name, "")
-    ).replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.vibearc.app"
     compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.vibearc.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 28
-        versionName = "1.10.0"
-        buildConfigField("String", "LASTFM_API_KEY", "\"$escapedLastFmApiKey\"")
-        buildConfigField("String", "LASTFM_SIGNER_URL", "\"${configValue("LASTFM_SIGNER_URL")}\"")
-        buildConfigField("String", "LASTFM_SIGNER_TOKEN", "\"${configValue("LASTFM_SIGNER_TOKEN")}\"")
+        versionCode = 32
+        versionName = "1.10.3"
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }
     }
 
     signingConfigs {
@@ -89,6 +76,15 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    externalNativeBuild {
+        cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
+    }
+    testOptions {
+        unitTests.all {
+            // Same JNI source compiled for the host JVM; tests never fall back to Java encoding.
+            it.systemProperty("java.library.path", rootProject.file("build/native-host").absolutePath)
+        }
     }
 }
 

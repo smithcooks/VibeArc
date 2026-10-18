@@ -201,13 +201,18 @@ internal object LyricsProvider {
     private const val MaxResponseBytes = 512 * 1024
     private val cache = LinkedHashMap<String, LyricsDocument>()
 
-    fun fetch(track: Track, title: String = track.title, artist: String = track.artist): LyricsDocument? {
+    fun fetch(track: Track, title: String = track.title, artist: String = track.artist,
+              budgetMs: Long = Long.MAX_VALUE): LyricsDocument? {
         val key = "${track.catalogUri}\n$title\n$artist\n${track.album}\n${track.durationMs}"
         synchronized(cache) { cache[key] }?.let { return it }
         if (title.isBlank()) return null
+        val started = System.nanoTime()
+        fun remaining(): Long = if (budgetMs == Long.MAX_VALUE) Long.MAX_VALUE else
+            budgetMs - (System.nanoTime() - started) / 1_000_000
+        val request: (String) -> Pair<Int, String?> = { url -> request(url, ::remaining) }
         val queryTrack = track.copy(title = lyricsSearchTitle(title), artist = lyricsSearchArtist(artist))
-        val result = fetchLrclibLyrics(queryTrack, ::request) ?: fetchVideoLyrics(queryTrack, ::request)
-            ?: fetchKrc(queryTrack) ?: fetchPlainLyrics(queryTrack)
+        val result = fetchLrclibLyrics(queryTrack, request) ?: fetchVideoLyrics(queryTrack, request)
+            ?: fetchKrc(queryTrack, request) ?: fetchPlainLyrics(queryTrack, request)
         return result?.let { remember(key, it) }
     }
 
@@ -218,7 +223,7 @@ internal object LyricsProvider {
         }
     }
 
-    private fun fetchKrc(track: Track): LyricsDocument? = runCatching {
+    private fun fetchKrc(track: Track, request: (String) -> Pair<Int, String?>): LyricsDocument? = runCatching {
         if(unknownLyricsArtist(track.artist)) return null
         val query = listOf(
             "ver" to "1", "man" to "yes", "client" to "pc",
@@ -249,7 +254,7 @@ internal object LyricsProvider {
         lines.takeIf(List<LyricLine>::isNotEmpty)?.let { LyricsDocument(it, emptyList(), false, "KuGou KRC") }
     }.getOrNull()
 
-    private fun fetchPlainLyrics(track: Track): LyricsDocument? = runCatching {
+    private fun fetchPlainLyrics(track: Track, request: (String) -> Pair<Int, String?>): LyricsDocument? = runCatching {
         if(unknownLyricsArtist(track.artist)) return null
         fun path(value: String) = URLEncoder.encode(value, UTF_8.name()).replace("+", "%20")
         val response = request("https://api.lyrics.ovh/v1/${path(track.artist)}/${path(track.title)}")
@@ -259,18 +264,31 @@ internal object LyricsProvider {
         lines.takeIf(List<String>::isNotEmpty)?.let { LyricsDocument(emptyList(), it, false, "Lyrics.ovh") }
     }.getOrNull()
 
-    private fun request(url: String): Pair<Int, String?> {
+    private fun request(url: String, remaining: () -> Long): Pair<Int, String?> {
+        if (remaining() <= 0) return 408 to null
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "GET"
             connection.instanceFollowRedirects = false
-            connection.connectTimeout = 8_000
-            connection.readTimeout = 12_000
+            connection.connectTimeout = minOf(8_000L, remaining().coerceAtLeast(1)).toInt()
+            connection.readTimeout = minOf(12_000L, remaining().coerceAtLeast(1)).toInt()
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "VibeArc/${BuildConfig.VERSION_NAME} (Android music player)")
             val code = connection.responseCode
             return code to if (code in 200..299) {
-                connection.inputStream.use { it.readUtf8Limited(MaxResponseBytes) }
+                connection.inputStream.use { input ->
+                    val bytes = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        if (remaining() <= 0) return 408 to null
+                        connection.readTimeout = minOf(12_000L, remaining().coerceAtLeast(1)).toInt()
+                        val size = input.read(buffer)
+                        if (size < 0) break
+                        require(bytes.size() + size <= MaxResponseBytes) { "Lyrics response too large" }
+                        bytes.write(buffer, 0, size)
+                    }
+                    bytes.toString(UTF_8.name())
+                }
             } else null
         } finally {
             connection.disconnect()

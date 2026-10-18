@@ -7,16 +7,15 @@ internal enum class GeneratorChoice(val title: String, val subtitle: String, val
     SimilarArtists("Similar Artists", "Artists related to your listening", "account"),
     Genre("By Tag / Genre", "Recommendations across genres and moods", "discover"),
     MyMix("My Mix", "A blend of history, favorites, and discovery", "shuffle"),
-    Recommendations("My Recommendation", "YouTube Music and Last.fm picks", "spark"),
+    Recommendations("My Recommendation", "YouTube Music and your library", "spark"),
     Library("My Library", "Rediscover music you saved", "playlist"),
 }
 
 internal fun blendDiscoveryTracks(
     youtube: List<Track>,
-    lastFm: List<Track>,
     recent: List<Track>,
     library: List<Track>,
-): List<Track> = distinctTracks(youtube + lastFm + recent + library)
+): List<Track> = distinctTracks(youtube + recent + library)
 
 internal fun generatedPlaylist(
     choice: GeneratorChoice,

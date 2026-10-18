@@ -3,6 +3,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DownloadCodecTest {
+    @Test fun `shared MP3 export survives restart and old jobs need no export URI`() {
+        val entry=DownloadEntry(Track("Song","Artist","","https://catalog.example/song"),codec="MP3",exportedUri="content://media/external_primary/audio/media/123")
+        val json=DownloadCodec.encode(listOf(entry))
+        assertEquals(entry,DownloadCodec.decode(json).single())
+        assertEquals("",DownloadCodec.decode(json.replace(",\"exported\":\"${entry.exportedUri}\"", "")).single().exportedUri)
+    }
     @Test fun `legacy saved files remain accessible without deleting external originals`() {
         val track=Track("Song","Artist","Album","https://catalog.example/song",isFavorite=true)
         val entry=legacyOfflineEntry(OfflineFile("content://folder/song","Song.mp3",1234,track.uri),listOf(track))

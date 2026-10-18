@@ -1,0 +1,9 @@
+LAME 3.100 - https://lame.sourceforge.io/
+Copyright the LAME development team and individual contributors (see source).
+GNU Library General Public License version 2 or, at your option, any later version.
+
+Native encoder source and original COPYING: app/src/main/cpp/lame in VibeArc's
+corresponding source. VibeArc's native_mp3.c bridge and CMakeLists.txt build the
+replaceable libvibearcmp3.so. No upstream encoder sources were modified.
+Original archive SHA-256:
+ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e

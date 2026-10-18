@@ -309,6 +309,13 @@ internal object OnlineMusic {
 
     fun invalidate(source: String) = resolvedAudio.invalidate(source)
 
+    fun resolveWebmDownload(track: Track): Track {
+        val info = StreamInfo.getInfo(youtube, playbackSourceUri(track))
+        val candidate = selectWebmDownload(info.audioStreams.map(::audioCandidate))
+            ?: error("WebM audio is not available for this recording. Try another recording or choose MP3 in Settings.")
+        return track.copy(uri=candidate.url, sourceUri=track.catalogUri)
+    }
+
     private fun resolveUncached(track: Track, source: String, format: AudioFormat, quality: AudioQuality): Track {
         val info = StreamInfo.getInfo(youtube, source)
         val streamUrl = selectPlaybackAudioCandidate(info.audioStreams.map(::audioCandidate), format, quality)?.url

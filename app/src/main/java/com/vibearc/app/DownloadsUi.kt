@@ -180,7 +180,7 @@ internal fun OfflineDownloadsScreen(padding: PaddingValues, onPlay: (Track,List<
                     Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Storage: ${downloadSize(storage)}",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
-                            Text("Saved in VibeArc · ${completed.size} songs",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Music/VibeArc · ${completed.size} songs",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         FilledTonalButton(onClick={files=true},colors=tonalButtons,enabled=!busy,modifier=Modifier.padding(start=8.dp).heightIn(min=48.dp)) { Text("Files") }
                     }
@@ -233,6 +233,9 @@ internal fun OfflineDownloadsScreen(padding: PaddingValues, onPlay: (Track,List<
                                 Box {
                                     IconButton(onClick={menu=true},modifier=Modifier.size(48.dp).semantics {contentDescription="Options for ${entry.track.title}"}) {Glyph("more")}
                                     DropdownMenu(menu,{menu=false}) {
+                                        if(entry.canCreateMp3Copy()) DropdownMenuItem(text={Text("Create MP3 copy")},enabled=!busy,onClick={menu=false;action(true){store.enqueueMp3Copy(entry.id)}})
+                                        if(entry.mp3CopyState in setOf(Mp3CopyState.QUEUED,Mp3CopyState.RUNNING)) DropdownMenuItem(text={Text("Cancel MP3 conversion")},enabled=!busy,onClick={menu=false;action {store.update(entry.id){it.copy(mp3CopyState=Mp3CopyState.NONE,mp3CopyMessage="Conversion cancelled. Original audio kept.")}}})
+                                        if(entry.mp3CopyState==Mp3CopyState.COMPLETED && entry.mp3CopyUri.isNotBlank()) DropdownMenuItem(text={Text("Open MP3 copy")},onClick={menu=false;runCatching {context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse(entry.mp3CopyUri),"audio/mpeg").addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))}.onFailure {error="Find the MP3 copy in Music/VibeArc using your file manager."}})
                                         if(entry.status in setOf(DownloadStatus.QUEUED,DownloadStatus.RESOLVING,DownloadStatus.DOWNLOADING)) {
                                             DropdownMenuItem(text={Text("Pause")},enabled=!busy,onClick={menu=false;action {store.update(entry.id){it.copy(status=DownloadStatus.PAUSED,autoResume=false,error="Paused")};DownloadService.interrupt(entry.id)}})
                                             DropdownMenuItem(text={Text("Cancel download")},enabled=!busy,onClick={menu=false;action {store.update(entry.id){it.copy(status=DownloadStatus.CANCELLED,autoResume=false,error="Cancelled")};DownloadService.interrupt(entry.id)}})
@@ -247,6 +250,8 @@ internal fun OfflineDownloadsScreen(padding: PaddingValues, onPlay: (Track,List<
                                 if(entry.id in lyricsIds) DownloadBadge("LRC")
                             }
                             if(entry.status==DownloadStatus.DOWNLOADING) LinearProgressIndicator(progress={entry.progress},modifier=Modifier.fillMaxWidth().padding(top=8.dp))
+                            if(entry.mp3CopyState==Mp3CopyState.RUNNING) LinearProgressIndicator(modifier=Modifier.fillMaxWidth().padding(top=8.dp))
+                            if(saved && entry.mp3CopyMessage.isNotBlank()) Text(entry.mp3CopyMessage,Modifier.padding(top=6.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             if(!saved && entry.error.isNotBlank()) Text(entry.error,Modifier.padding(top=6.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             if(entry.status in setOf(DownloadStatus.FAILED,DownloadStatus.PAUSED,DownloadStatus.CANCELLED)) TextButton(onClick={action(true){store.enqueue(listOf(entry.track))}},enabled=!busy) { Text(if(entry.status==DownloadStatus.PAUSED) "Resume" else "Retry") }
                         }
@@ -257,7 +262,7 @@ internal fun OfflineDownloadsScreen(padding: PaddingValues, onPlay: (Track,List<
     }
     delete?.let { entry -> AlertDialog(onDismissRequest={delete=null},title={Text("Remove ${entry.track.title}?")},text={Text(if(entry.ownsFile) "Remove this saved copy from VibeArc? Your library entry stays." else "Remove from Downloads? Your original phone file stays untouched.")},confirmButton={TextButton(onClick={delete=null;action {store.update(entry.id){it.copy(status=DownloadStatus.CANCELLED,autoResume=false)};DownloadService.interrupt(entry.id);DownloadService.awaitIdle(entry.id);store.remove(entry.id)}}){Text("Remove")}},dismissButton={TextButton(onClick={delete=null}){Text("Cancel")}}) }
     details?.let { entry -> AlertDialog(onDismissRequest={details=null},title={Text(cleanRecordingLabel(entry.track.title))},text={Text(listOf(entry.track.artist,entry.track.album,entry.codec,entry.bitrateKbps.takeIf{it>0}?.let{"$it kbps"}.orEmpty(),if(entry.lossless) "Lossless source" else "",entry.localUri,entry.error).filter(String::isNotBlank).joinToString("\n"))},confirmButton={TextButton(onClick={details=null}){Text("Close")}}) }
-    if(files) AlertDialog(onDismissRequest={files=false},title={Text("Saved files")},text={Text("${completed.size} songs · ${downloadSize(storage)}\n\nAudio is saved in VibeArc's private storage. Export copies to a phone folder to browse them in your Files app. Originals stay in VibeArc.")},confirmButton={TextButton(onClick={files=false;exportFolder.launch(null)},enabled=completed.isNotEmpty()&&!busy){Text("Export files")}},dismissButton={TextButton(onClick={files=false}){Text("Close")}})
+    if(files) AlertDialog(onDismissRequest={files=false},title={Text("Saved files")},text={Text("${completed.size} songs · ${downloadSize(storage)}\n\nDownloads default to original WebM audio in Music/VibeArc, accessible in your phone's file manager. Choose MP3 in Settings for future downloads, or Create MP3 copy from a saved song's options. MP3 copies include cover art. Originals and lyrics stay in VibeArc. Removing a song here leaves its public audio exports untouched.")},confirmButton={TextButton(onClick={files=false;exportFolder.launch(null)},enabled=completed.isNotEmpty()&&!busy){Text("Export copies")}},dismissButton={TextButton(onClick={files=false}){Text("Close")}})
 }
 
 @Composable
