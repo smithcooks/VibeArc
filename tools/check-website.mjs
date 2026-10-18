@@ -20,10 +20,10 @@ for (const image of html.matchAll(/<img\b[^>]+>/g)) {
 }
 const downloadLinks = [...html.matchAll(/href="([^"]+\/releases\/download\/[^\"]+\.apk)"/g)].map(match => match[1]);
 assert.equal(downloadLinks.length, 2);
-for (const link of downloadLinks) assert.equal(link, 'https://github.com/smithcooks/VibeArc/releases/download/v1.10.0/VibeArc-v1.10.0.apk');
+for (const link of downloadLinks) assert.equal(link, 'https://github.com/smithcooks/VibeArc/releases/download/v1.10.3/VibeArc-v1.10.3.apk');
 assert.doesNotMatch(html, /v1\.0\.0/);
-assert.match(html, /v1\.10\.0 · 6\.7 MB/);
-assert.match(html, /releases\/tag\/v1\.10\.0/);
+assert.match(html, /v1\.10\.3 · 7\.5 MB/);
+assert.match(html, /releases\/tag\/v1\.10\.3/);
 assert.doesNotMatch(html, /v1\.8\.2|v1\.9\.0/);
 assert.match(html, /Seven compact home-screen widgets/);
 assert.match(html, /download updates inside Vibe Arc/);
