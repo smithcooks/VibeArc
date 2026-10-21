@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.4] - 2026-10-21
+
+- Add public Spotify playlist importing in Settings > Library & Backup, with recording-match review and explicit save confirmation.
+- Preserve playlist order, repeated songs, existing playlists and favorites; skip unmatched recordings.
+- Support full public playlist links, Spotify playlist URIs and playlist IDs without account credentials. Private playlists and Liked Songs are unsupported, and public previews may be partial.
+- 180 unit tests pass; Android lint reports zero errors. Physical-phone testing remains pending.
+
 ## [1.10.0] - 2026-10-12
 
 - Widget glass panels now wrap their content instead of stretching to fill oversized launcher cells.

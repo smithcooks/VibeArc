@@ -16,13 +16,13 @@ A native Android music player with liquid glass, artwork-driven colors, synchron
 </p>
 
 <p align="center">
-  <a href="https://github.com/smithcooks/VibeArc/releases/tag/v1.10.3"><img src="https://img.shields.io/badge/Release-v1.10.3-A7D8C7?style=for-the-badge&labelColor=242424" alt="Release v1.10.3"></a>
+  <a href="https://github.com/smithcooks/VibeArc/releases/tag/v1.10.4"><img src="https://img.shields.io/badge/Release-v1.10.4-A7D8C7?style=for-the-badge&labelColor=242424" alt="Release v1.10.4"></a>
   <a href="#tech-stack--architecture"><img src="https://img.shields.io/badge/UI-Kotlin%20%2B%20Compose-C4B5FD?style=for-the-badge&logo=kotlin&logoColor=white&labelColor=242424" alt="Kotlin and Jetpack Compose"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-F4BACB?style=for-the-badge&labelColor=242424" alt="GPL v3 license"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/smithcooks/VibeArc/releases/download/v1.10.3/VibeArc-v1.10.3.apk"><img src="https://img.shields.io/badge/Download-Android%20APK-3548D5?style=for-the-badge&logo=android&logoColor=white" alt="Download the Android APK"></a>
+  <a href="https://github.com/smithcooks/VibeArc/releases/download/v1.10.4/VibeArc-v1.10.4.apk"><img src="https://img.shields.io/badge/Download-Android%20APK-3548D5?style=for-the-badge&logo=android&logoColor=white" alt="Download the Android APK"></a>
   <a href="https://smithcooks.github.io/VibeArc/"><img src="https://img.shields.io/badge/Website-Explore%20VibeArc-242424?style=for-the-badge&logo=githubpages&logoColor=A7D8C7" alt="Visit the VibeArc website"></a>
   <a href="https://github.com/smithcooks/VibeArc/issues"><img src="https://img.shields.io/badge/Feedback-Report%20an%20issue-242424?style=for-the-badge&logo=github&logoColor=F4BACB" alt="Report an issue"></a>
 </p>
@@ -58,7 +58,7 @@ A 30-second cinematic look at the real app. [Watch in your browser](https://smit
   <br><br>
   <a href="docs/screenshots/accounts.jpg"><img src="docs/screenshots/accounts.jpg" width="31%" alt="VibeArc connected account and playlist settings"></a>
   <a href="docs/screenshots/about.jpg"><img src="docs/screenshots/about.jpg" width="31%" alt="VibeArc About screen showing version 0.9.0 beta"></a>
-  <p><sub>Screenshots captured from VibeArc v0.9 beta. Unaltered app UI; the current download is v1.10.3. Click a screenshot to view it in full.</sub></p>
+  <p><sub>Screenshots captured from VibeArc v0.9 beta. Unaltered app UI; the current download is v1.10.4. Click a screenshot to view it in full.</sub></p>
 </div>
 
 <br>
@@ -71,7 +71,9 @@ Built with **Kotlin, Jetpack Compose, Material 3, and Media3**, it gives you a p
 
 ---
 
-## What's new in v1.10.3
+## What's new in v1.10.4
+
+- **Import Spotify playlists:** Open **Settings > Library & Backup > Import from Spotify**, paste a public playlist link, review matching YouTube Music recordings and save locally. Order and repeated songs are preserved. Private playlists and Liked Songs are unsupported; public previews may be partial. [Import details](docs/SPOTIFY-IMPORT.md).
 
 - **WebM by default:** New downloads save the highest available WebM/Opus source without MP3 conversion. Choose WebM or MP3 under **Settings → Playback & Downloads → Download format**. The setting applies to new jobs; queued jobs keep their selected format.
 - **Convert later:** In **Downloads → song options → Create MP3 copy**, convert an owned saved download without downloading it again. Native on-device LAME creates a 320 kbps MP3 with embedded cover art in **Music/VibeArc**. The original and in-app lyrics remain intact; conversion can be cancelled or retried.
@@ -79,9 +81,9 @@ Built with **Kotlin, Jetpack Compose, Material 3, and Media3**, it gives you a p
 - **Updates inside VibeArc:** Check and download the latest stable APK from **Settings → About & Support**. Downloads verify the checksum, package, newer version, and signing certificate before Android asks you to approve installation. Optional reminders check when the app opens; they can be turned off.
 - **More resilient lyrics matching:** Cleaner lyric-video metadata and a video-ID-based SimpMusic fallback complement the existing providers. Lyrics still depend on the recording and provider availability.
 
-[Download v1.10.3](https://github.com/smithcooks/VibeArc/releases/download/v1.10.3/VibeArc-v1.10.3.apk) · [Release notes](https://github.com/smithcooks/VibeArc/releases/tag/v1.10.3) · [Widget & lyrics details](docs/WIDGETS-AND-LYRICS.md) · [Update details](docs/IN-APP-UPDATES.md)
+[Download v1.10.4](https://github.com/smithcooks/VibeArc/releases/download/v1.10.4/VibeArc-v1.10.4.apk) · [Release notes](https://github.com/smithcooks/VibeArc/releases/tag/v1.10.4) · [Widget & lyrics details](docs/WIDGETS-AND-LYRICS.md) · [Update details](docs/IN-APP-UPDATES.md)
 
-All **173 unit tests pass**; lint reports zero errors (88 warnings and one hint). A live source smoke test confirmed genuine WebM audio. Native desktop timing is not a phone-speed guarantee. Actual launcher behavior, conversion timing, and update installation still need phone testing. Widgets use translucent surfaces and static highlights, not live wallpaper blur or refraction.
+All **180 unit tests pass**; lint reports zero errors (89 warnings). A live Spotify metadata check read 50 exposed songs and confidently matched the first recording. Native desktop timing is not a phone-speed guarantee. Actual launcher behavior, conversion timing, and update installation still need phone testing. Widgets use translucent surfaces and static highlights, not live wallpaper blur or refraction.
 
 ---
 
@@ -141,12 +143,12 @@ Listening history and library statistics stay on the device. Last.fm sign-in, pr
 
 ## <img src="https://api.iconify.design/lucide:rocket.svg?color=%23A7D8C7" width="20" height="20" alt=""> Getting Started
 
-1. Download [**VibeArc-v1.10.3.apk**](https://github.com/smithcooks/VibeArc/releases/download/v1.10.3/VibeArc-v1.10.3.apk) from the [official release](https://github.com/smithcooks/VibeArc/releases/tag/v1.10.3).
+1. Download [**VibeArc-v1.10.4.apk**](https://github.com/smithcooks/VibeArc/releases/download/v1.10.4/VibeArc-v1.10.4.apk) from the [official release](https://github.com/smithcooks/VibeArc/releases/tag/v1.10.4).
 2. Allow installation for the browser or file manager you used, then install on **Android 8.0+ (API 26)**.
 3. Add local music or explore compatible online sources.
 4. Choose your accent, build your queue, and press play.
 
-Export a JSON backup before updating. Version code **28** and the existing release certificate support updates over earlier main-app releases; do not uninstall or clear data first. Downloads in the separate test app stay in that app’s storage. Check the [APK SHA-256 checksum](https://github.com/smithcooks/VibeArc/releases/download/v1.10.3/VibeArc-v1.10.3.apk.sha256). After installing v1.10.3, future stable updates can be downloaded from Settings → About & Support without visiting the website. Sideloading warnings may appear; VibeArc is not a Google Play listing or Play Protect certification.
+Export a JSON backup before updating. Version code **33** and the existing release certificate support updates over earlier main-app releases; do not uninstall or clear data first. Downloads in the separate test app stay in that app’s storage. Check the [APK SHA-256 checksum](https://github.com/smithcooks/VibeArc/releases/download/v1.10.4/VibeArc-v1.10.4.apk.sha256). After installing v1.10.4, future stable updates can be downloaded from Settings → About & Support without visiting the website. Sideloading warnings may appear; VibeArc is not a Google Play listing or Play Protect certification.
 
 **Android is available now. Windows and Linux are coming soon.**
 

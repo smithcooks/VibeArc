@@ -54,6 +54,7 @@ internal fun SettingsScreen(
     onImportYouTubePlaylist: (YouTubePlaylist) -> Unit,
     onBackup: () -> Unit, onRestore: () -> Unit,
     onImportPlaylist: () -> Unit,
+    onImportSpotifyPlaylist: (String,List<Track>) -> Unit,
     onUpdateAvailable: (AppUpdate) -> Unit,
 ) {
     val context=LocalContext.current
@@ -65,6 +66,7 @@ internal fun SettingsScreen(
     androidx.activity.compose.BackHandler(section != null) { section = null }
     var info by remember { mutableStateOf<Pair<String,String>?>(null) }
     var sheet by remember { mutableStateOf<String?>(null) }
+    var spotifyImport by remember { mutableStateOf(false) }
     var streamFormat by remember { mutableStateOf(context.streamAudioFormat()) }
     var streamQuality by remember { mutableStateOf(context.streamAudioQuality()) }
     val downloads=remember(context) { OfflineDownloads.get(context) }
@@ -192,6 +194,7 @@ internal fun SettingsScreen(
         }
         if(section == "Library") {
         item { SettingsHeading("Library & Playlist Imports") }
+        item { ReferenceRow("Import from Spotify","Paste a public playlist link","playlist",onClick={spotifyImport=true}) }
         item { ReferenceRow("Import Playlist from File","CSV, TSV, M3U/M3U8, or TXT","download",onClick=onImportPlaylist) }
         }
         if(section == "Library") {
@@ -205,7 +208,7 @@ internal fun SettingsScreen(
         }
         if(section == "About") {
         item { SettingsHeading("About") }
-        item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, KuGou, LRCLIB, Lyrics.ovh, SimpMusic, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. MP3 conversion runs on this device using native LAME, with no conversion server. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
+item { ReferenceRow("Privacy & Licenses","On-device data and provider notices","code",onClick={unavailable("Privacy & Licenses","VibeArc stores your library, downloads, and settings on this device. YouTube cookies stay in Android's WebView cookie store. VibeArc includes no analytics or ad SDK. Online features contact YouTube, Googlevideo, Spotify (public playlist metadata), KuGou, LRCLIB, Lyrics.ovh, SimpMusic, and GitHub. Downloads use the app's playback resolver without forwarding account cookies to audio URLs. MP3 conversion runs on this device using native LAME, with no conversion server. The former native extension engine is not included. Third-party licenses and notices are retained with the source.")}) }
         item { ReferenceRow("Check for updates",if(checkingUpdate) "Checking GitHub…" else "Download and install inside VibeArc","download",enabled=!checkingUpdate,onClick={
             checkingUpdate = true
             updateScope.launch {
@@ -240,6 +243,7 @@ internal fun SettingsScreen(
         }
     }
     }
+    if(spotifyImport) SpotifyImportSheet(onDismiss={spotifyImport=false},onImport=onImportSpotifyPlaylist)
     info?.let { (title,message) ->
         AlertDialog(onDismissRequest={info=null},title={Text(title)},text={Text(message)},confirmButton={TextButton(onClick={info=null}){Text("Got it")}})
     }

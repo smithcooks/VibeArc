@@ -414,7 +414,7 @@ internal fun LibraryScreen(
                                 TextButton(onClick=onChooseFile) { Text("Add audio file") }
                             }
                         }
-                        items(visible.size,key={visible[it].uri}) { index ->
+                        items(visible.size,key={if(playlist!=null) playlistRowKey(it,visible[it]) else visible[it].uri}) { index ->
                             val track = visible[index]
                             if(playlist != null) Row(verticalAlignment=Alignment.CenterVertically) {
                                 Text("${index+1}",Modifier.width(24.dp),color=MutedText,style=MaterialTheme.typography.bodySmall)

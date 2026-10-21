@@ -1046,6 +1046,11 @@ private fun VibeArcApp(
                 onImportPlaylist = {
                     playlistReader.launch(arrayOf("text/*", "audio/x-mpegurl", "application/vnd.apple.mpegurl"))
                 },
+                onImportSpotifyPlaylist = { name,tracks ->
+                    val imported=context.saveSpotifyImport(VibeArcBackup(library,playlists),name,tracks,UUID.randomUUID().toString())
+                    library=imported.tracks;playlists=imported.playlists
+                    android.widget.Toast.makeText(context,"Imported $name · ${tracks.size} songs",android.widget.Toast.LENGTH_LONG).show()
+                },
             )
             Tab.Stats -> StatsScreen(
                 padding, library, recentTracks,

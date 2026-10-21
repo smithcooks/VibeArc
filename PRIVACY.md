@@ -3,8 +3,8 @@
 VibeArc stores the local library, playlists, lyrics edits and offsets, playback
 history, appearance/audio settings, selected download folder, and connected-
 account information on the device. A YouTube Music login remains in Android's
-WebView cookie store until the user disconnects. A Last.fm session key is kept
-in private app storage. VibeArc does not store account passwords, disables
+WebView cookie store until the user disconnects. Last.fm integration is not
+included. VibeArc does not store account passwords, disables
 Android cloud backup, and excludes account credentials from JSON backups.
 
 When the user searches or plays online music, the app contacts YouTube Music
@@ -14,9 +14,11 @@ KuGou, LRCLIB, or Lyrics.ovh.
 If metadata lookup finds no match, the song's YouTube video ID and normal
 network information may be sent to the SimpMusic lyrics database. Home-screen
 widgets reuse artwork and playback metadata; they do not read your wallpaper.
-When Last.fm is connected, the username and playback metadata are sent to
-Last.fm through the configured VibeArc signer for profile data, Now Playing,
-radio, and scrobbling. On launch, the app asks GitHub for release metadata; an
+When you choose Import from Spotify, VibeArc reads public playlist metadata
+from Spotify and searches YouTube Music using song titles and artists. It does
+not request Spotify passwords, account tokens or audio. Imports are saved only
+after your confirmation. Public previews may expose only part of a playlist.
+On launch, the app asks GitHub for release metadata; an
 accepted update downloads its APK and checksum from GitHub. These services
 receive normal network information such as the device IP address.
 

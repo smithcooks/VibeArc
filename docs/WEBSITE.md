@@ -8,10 +8,10 @@ not branding, mascot, copy, or distribution links.
 ## Content and scope
 
 Hero → click-to-play promo → Search → Library/playlists → Appearance → Settings → screenshot rail →
-open source → download → footer. Android v1.10.3 has a direct official APK link.
+open source → download → footer. Android v1.10.4 has a direct official APK link.
 Windows and Linux are clearly disabled, labeled Coming soon. No invented
 package distributions, testimonials, plugin support, or playback guarantees.
-The v1.10.3 download links use the signed GitHub release asset. Release-note
+The v1.10.4 download links use the signed GitHub release asset. Release-note
 links point to the same version. The optional
 Buy Me a Chai support button uses the user-provided URL and external image. CSP
 permits that additional image host and the GitHub release media hosts; the text fallback survives image failure.
@@ -49,6 +49,10 @@ All site text uses AA contrast pairs; screenshot pixels remain unaltered.
 Images reserve their native 720:1600 ratio and lazy-load below the hero.
 
 ## Verification
+
+The v1.10.4 feature note introduces public Spotify playlist imports with review
+before saving, and explicitly discloses partial public previews and unsupported
+private playlists. Downloads continue to use the matched YouTube Music source.
 
 ```powershell
 node tools/check-website.mjs

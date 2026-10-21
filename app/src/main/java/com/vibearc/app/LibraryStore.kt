@@ -31,6 +31,8 @@ internal data class Playlist(
     val trackUris: List<String> = emptyList(),
 )
 
+internal fun playlistRowKey(index: Int, track: Track): String = "$index:${track.uri}"
+
 internal data class VibeArcBackup(
     val tracks: List<Track>,
     val playlists: List<Playlist>,
@@ -195,6 +197,28 @@ internal fun Context.savePlaylists(playlists: List<Playlist>) {
         .edit()
         .putString(PlaylistsKey, PlaylistCodec.encode(playlists))
         .apply()
+}
+
+/** One preference edit prevents an imported playlist pointing at unsaved tracks. */
+internal fun Context.saveSpotifyImport(current: VibeArcBackup, name: String, tracks: List<Track>, id: String): VibeArcBackup {
+    val next=mergeSpotifyImport(current,name,tracks,id)
+    getSharedPreferences(PreferencesName,Context.MODE_PRIVATE).edit()
+        .putString(TracksKey,LibraryCodec.encode(next.tracks))
+        .putString(PlaylistsKey,PlaylistCodec.encode(next.playlists)).apply()
+    return next
+}
+
+internal fun mergeSpotifyImport(current: VibeArcBackup, name: String, tracks: List<Track>, id: String): VibeArcBackup {
+    require(name.isNotBlank() && id.isNotBlank() && tracks.isNotEmpty()) { "Choose songs and a playlist name" }
+    require(current.playlists.none { it.id==id }) { "Playlist already exists" }
+    require(tracks.all { isYouTubeWatchUri(it.catalogUri) }) { "Only matched playable tracks can be imported" }
+    val songs=tracks.map { it.copy(uri=it.catalogUri,sourceUri="").withoutPlayCounts() }
+    val previous=current.tracks.associateBy { it.uri }
+    val incoming=songs.associateBy { it.uri }
+    val merged=current.tracks.filterNot { it.uri in incoming }+
+        incoming.values.map { it.copy(isFavorite=previous[it.uri]?.isFavorite ?: it.isFavorite) }
+    return VibeArcBackup(merged,
+        current.playlists+Playlist(id,name.trim(),songs.map { it.uri }))
 }
 
 internal fun List<Track>.upsert(track: Track): List<Track> {
