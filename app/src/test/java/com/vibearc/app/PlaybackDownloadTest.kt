@@ -93,6 +93,19 @@ class PlaybackDownloadTest {
         }
     }
 
+    @Test fun `playlist WebM responses retain original bytes and use a compatible export target`() = withFile { file ->
+        repeat(100) { index ->
+            val bytes=byteArrayOf(0x1a,0x45,0xdf.toByte(),0xa3.toByte(),index.toByte())
+            val response=FakeAudioConnection(bytes,mime="audio/webm; codecs=opus")
+            downloadPlaybackAudio(track,file,{ false },{ _,_ -> },
+                resolve={ it.copy(uri=mediaUrl) },invalidate={ fail("No refresh needed") },open={ response })
+            assertArrayEquals(bytes,file.readBytes())
+            assertTrue(response.disconnected)
+            assertEquals(DownloadExportCollection.DOWNLOADS,
+                downloadExportLocation(DownloadFormat.WEBM,31).collection)
+        }
+    }
+
     private fun withFile(work: (File)->Unit) {
         val directory=Files.createTempDirectory("vibearc-playback-download").toFile()
         val file=File(directory,"track.part")

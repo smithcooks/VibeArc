@@ -5,15 +5,13 @@ import com.grack.nanojson.JsonParser
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import java.net.HttpURLConnection
 import java.net.URI
-import java.net.URL
 import java.text.Normalizer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 internal data class SpotifyImportSong(val id: String, val title: String, val artist: String, val durationMs: Long)
-internal data class SpotifyImportPlaylist(val id: String, val name: String, val songs: List<SpotifyImportSong>)
+internal data class SpotifyImportPlaylist(val id: String, val name: String, val songs: List<SpotifyImportSong>, val sourceTotal: Int?=null, val unreadableEntries: Int=0)
 internal data class SpotifyImportMatch(val song: SpotifyImportSong, val track: Track?)
 internal data class SpotifyImportPreview(val playlist: SpotifyImportPlaylist, val matches: List<SpotifyImportMatch>)
 
@@ -78,17 +76,9 @@ internal fun matchSpotifySong(song: SpotifyImportSong, candidates: List<Track>):
 }
 
 internal object SpotifyPlaylistImporter {
-    fun fetch(input: String): SpotifyImportPlaylist {
-        val id=spotifyPlaylistId(input) ?: error("Paste a Spotify playlist link, URI, or 22-character playlist ID. For short links, open Spotify and copy the full playlist link.")
-        val connection=URL("https://open.spotify.com/embed/playlist/$id").openConnection() as HttpURLConnection
-        try {
-            connection.instanceFollowRedirects=false
-            connection.connectTimeout=10_000;connection.readTimeout=15_000
-            connection.setRequestProperty("Accept","text/html")
-            connection.setRequestProperty("User-Agent","Mozilla/5.0 VibeArc/${BuildConfig.VERSION_NAME}")
-            check(connection.responseCode==200) { "Spotify playlist is unavailable (HTTP ${connection.responseCode}). Make sure it is public." }
-            return connection.inputStream.use { parseSpotifyPlaylist(it.readUtf8Limited(2*1024*1024),id) }
-        } finally { connection.disconnect() }
+    @JvmOverloads
+    fun fetch(input: String, progress: (Int,Int)->Unit = {_,_->}): SpotifyImportPlaylist {
+        return PublicSpotifyPlaylist.fetch(input,progress)
     }
 
     suspend fun match(playlist: SpotifyImportPlaylist, progress: (Int,Int)->Unit): SpotifyImportPreview = coroutineScope {

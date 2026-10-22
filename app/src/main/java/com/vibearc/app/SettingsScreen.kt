@@ -175,7 +175,7 @@ internal fun SettingsScreen(
         if(section == "Playback") {
         item { SettingsHeading("Audio & Streaming") }
         item { ReferenceRow("Streaming Quality","${streamFormat.label} · ${streamQuality.label}","quality",0,7,onClick={sheet="Streaming Quality"}) }
-        item { ReferenceRow("Offline Downloads","Music/VibeArc · saved audio and lyrics","download",1,7,onClick=onDownloads) }
+        item { ReferenceRow("Offline Downloads","Saved audio, lyrics and public files","download",1,7,onClick=onDownloads) }
         item { ReferenceRow("Download format",downloadFormat.label,"download",onClick={sheet="Download format"}) }
         item { ReferenceRow("Download on Wi-Fi only",if(wifiOnly) "Mobile data off for downloads" else "Wi-Fi + mobile data · charges may apply","download",2,7,checked=wifiOnly,onClick={
             wifiOnly=!wifiOnly;downloads.setWifiOnly(wifiOnly)

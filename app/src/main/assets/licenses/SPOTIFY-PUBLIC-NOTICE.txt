@@ -1,0 +1,23 @@
+VibeArc Public Spotify Playlist Import
+
+Kotlin public-metadata adaptation by VibeArc, 2026-10-22.
+Protocol reference: SpotAPI by Aran404 and contributors, GPL-3.0.
+https://github.com/Aran404/SpotAPI
+https://github.com/TzurSoffer/spotipyFree
+
+This app queries public Spotify web-client metadata and matches
+recordings to YouTube Music. It does not fetch Spotify audio, require a Spotify
+developer key, log in, import browser cookies, solve verification challenges,
+or persist guest session tokens.
+
+Besides Spotify endpoints, it reads bounded data-only public client configuration
+from code.thetadev.de/ThetaDev/spotify-secrets. No playlist ID or account token is
+sent to that configuration host. Downloaded JavaScript is inspected as text for
+public query identifiers; it is never executed by the importer.
+
+There is no warranty that this unofficial integration will continue to work.
+Server restrictions, verification and changing web-client formats can block it.
+If any page fails, the importer does not silently fall back to a 100-song preview.
+
+Corresponding source is supplied alongside the APK. See SpotAPI-GPL-3.0.txt.
+

@@ -11,6 +11,12 @@ internal enum class DownloadFormat(val label: String, val extension: String, val
 
 internal enum class Mp3CopyState { NONE, QUEUED, RUNNING, COMPLETED, FAILED }
 
+// Ignore the old setting once on upgrade: MP3 must be an explicit new opt-in.
+// Subsequent user choices use this key and survive restarts/upgrades.
+internal const val DownloadFormatPreferenceKey = "download_format_user_choice_v2"
+internal fun readDownloadFormatPreference(read: (String)->String?): DownloadFormat =
+    DownloadFormat.fromPreference(read(DownloadFormatPreferenceKey))
+
 /** Never silently relabel AAC/MP4 or an Ogg stream as WebM. */
 internal fun selectWebmDownload(candidates: List<AudioCandidate>): AudioCandidate? =
     selectAudioCandidate(candidates.filter {

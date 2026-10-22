@@ -6,6 +6,17 @@ import org.junit.Test
 class DownloadFormatTest {
     private val track=Track("Song","Artist","Album","https://www.youtube.com/watch?v=abcdefghijk")
 
+    @Test fun `old MP3 preference is not automatically opted in after upgrade`() {
+        val preferences=mutableMapOf("download_format" to "MP3")
+        assertEquals(DownloadFormat.WEBM,readDownloadFormatPreference(preferences::get))
+        assertEquals(DownloadFormat.WEBM,DownloadFormat.entries.first())
+        preferences[DownloadFormatPreferenceKey]=DownloadFormat.MP3.name
+        assertEquals(DownloadFormat.MP3,readDownloadFormatPreference(preferences::get))
+        assertEquals(DownloadFormat.MP3,readDownloadFormatPreference(preferences::get)) // Restart keeps explicit choice.
+        preferences[DownloadFormatPreferenceKey]=DownloadFormat.WEBM.name
+        assertEquals(DownloadFormat.WEBM,readDownloadFormatPreference(preferences::get))
+    }
+
     @Test fun `new and upgraded settings default to WebM unless explicitly opted into MP3`() {
         assertEquals(DownloadFormat.WEBM,DownloadFormat.fromPreference(null))
         assertEquals(DownloadFormat.WEBM,DownloadFormat.fromPreference("unknown"))

@@ -32,7 +32,7 @@ internal fun SpotifyImportSheet(onDismiss: ()->Unit, onImport: (String,List<Trac
                 item { OutlinedTextField(input,{input=it.take(2048);error=""},Modifier.fillMaxWidth(),label={Text("Spotify playlist link")},singleLine=true,enabled=!busy,
                     isError=input.isNotBlank() && spotifyPlaylistId(input)==null,
                     supportingText={Text(if(input.isNotBlank() && spotifyPlaylistId(input)==null) "Use an open.spotify.com playlist link or spotify:playlist: URI." else "Public playlists only. Private playlists and Liked Songs are not supported.")}) }
-                item { Text("Spotify embeds may expose only part of a large playlist. Review the songs below before saving.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                item { Text("All playlist pages are checked against Spotify's reported total before matching songs. A failed page does not save a partial playlist.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             if(busy) {
                 item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
@@ -40,9 +40,10 @@ internal fun SpotifyImportSheet(onDismiss: ()->Unit, onImport: (String,List<Trac
             }
             if(error.isNotBlank()) item { Text(error,Modifier.semantics { liveRegion=LiveRegionMode.Assertive },color=MaterialTheme.colorScheme.error) }
             preview?.let { result ->
+                result.playlist.sourceTotal?.let { total -> item { Text("Full list read: $total entries. ${result.playlist.unreadableEntries} unavailable or unreadable entries skipped.",style=MaterialTheme.typography.bodySmall) } }
                 item { OutlinedTextField(name,{name=it.take(200)},Modifier.fillMaxWidth(),label={Text("Playlist name")},singleLine=true) }
                 val matched=result.matches.count { it.track!=null }
-                item { Text("${result.matches.size} exposed songs · $matched matched · ${result.matches.size-matched} unmatched · ${selected.size} selected",Modifier.semantics { liveRegion=LiveRegionMode.Polite },style=MaterialTheme.typography.bodySmall) }
+                item { Text("${result.matches.size} songs · $matched matched · ${result.matches.size-matched} unmatched · ${selected.size} selected",Modifier.semantics { liveRegion=LiveRegionMode.Polite },style=MaterialTheme.typography.bodySmall) }
                     itemsIndexed(result.matches) { index,match ->
                         Row(Modifier.fillMaxWidth().heightIn(min=64.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
                             Checkbox(index in selected,{checked -> selected=if(checked) selected+index else selected-index},enabled=match.track!=null,
@@ -63,8 +64,10 @@ internal fun SpotifyImportSheet(onDismiss: ()->Unit, onImport: (String,List<Trac
                     job=scope.launch {
                         val running=currentCoroutineContext()[Job]!!
                         try {
-                            val playlist=withContext(Dispatchers.IO) { SpotifyPlaylistImporter.fetch(input) }
-                            status="Matching ${playlist.songs.size} exposed songs…"
+                            val playlist=runInterruptible(Dispatchers.IO) { SpotifyPlaylistImporter.fetch(input) { done,total ->
+                                scope.launch { if(running.isActive) status="Step 1 of 2: reading playlist $done / $total" }
+                            } }
+                            status="Matching ${playlist.songs.size} songs…"
                             val result=SpotifyPlaylistImporter.match(playlist) { done,total ->
                                 scope.launch { if(running.isActive) status="Matching songs: $done / $total" }
                             }

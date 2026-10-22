@@ -13,21 +13,30 @@ import java.util.UUID
 
 internal fun publishDownloadAudio(context: Context, source: File, track: Track, format: DownloadFormat): Uri {
     val name=mp3DownloadName(track).removeSuffix(".mp3")+".${format.extension}"
+    val location=downloadExportLocation(format,Build.VERSION.SDK_INT)
     if (Build.VERSION.SDK_INT >= 29) {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
-            put(MediaStore.Audio.Media.DISPLAY_NAME, name)
-            put(MediaStore.Audio.Media.MIME_TYPE, format.mime)
-            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/VibeArc/")
-            put(MediaStore.Audio.Media.TITLE, track.title); put(MediaStore.Audio.Media.ARTIST, track.artist)
-            put(MediaStore.Audio.Media.ALBUM, track.album); put(MediaStore.Audio.Media.IS_PENDING, 1)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, format.mime)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, location.relativePath)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+            if(location.collection==DownloadExportCollection.AUDIO) {
+                put(MediaStore.Audio.Media.TITLE, track.title)
+                put(MediaStore.Audio.Media.ARTIST, track.artist)
+                put(MediaStore.Audio.Media.ALBUM, track.album)
+            }
         }
-        val uri = resolver.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
-            ?: error("Could not create MP3 in Music/VibeArc")
+        val collection=when(location.collection) {
+            DownloadExportCollection.AUDIO -> MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            DownloadExportCollection.DOWNLOADS -> MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        }
+        val uri = resolver.insert(collection, values)
+            ?: error("Could not create ${format.extension.uppercase()} in ${location.relativePath}")
         try {
             resolver.openOutputStream(uri, "w")?.use { output -> source.inputStream().use { it.copyTo(output) } }
-                ?: error("Could not write MP3 in Music/VibeArc")
-            check(resolver.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null) == 1)
+                ?: error("Could not write ${format.extension.uppercase()} in ${location.relativePath}")
+            check(resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null) == 1)
             return uri
         } catch (error: Exception) { runCatching { resolver.delete(uri, null, null) }; throw error }
     }

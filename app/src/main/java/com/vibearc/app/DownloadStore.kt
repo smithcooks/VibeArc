@@ -71,8 +71,8 @@ internal class OfflineDownloads private constructor(private val context: Context
     // New key replaces the old implicit Wi-Fi-only default, including on upgrades.
     val wifiOnly get() = settings.getBoolean("playback_wifi_only",DefaultDownloadWifiOnly)
     fun setWifiOnly(value: Boolean) { settings.edit().putBoolean("playback_wifi_only",value).apply() }
-    val downloadFormat get() = DownloadFormat.fromPreference(settings.getString("download_format",null))
-    fun setDownloadFormat(value: DownloadFormat) { settings.edit().putString("download_format",value.name).apply() }
+    val downloadFormat get() = readDownloadFormatPreference { settings.getString(it,null) }
+    fun setDownloadFormat(value: DownloadFormat) { settings.edit().putString(DownloadFormatPreferenceKey,value.name).apply() }
     @Synchronized fun load() {
         if (loaded) return
         directory.mkdirs()
@@ -148,7 +148,7 @@ internal class OfflineDownloads private constructor(private val context: Context
             val local = track.canCopyOffline()
             val localBytes=if(local) runCatching { context.contentResolver.openAssetFileDescriptor(Uri.parse(track.uri),"r")?.use { it.length.coerceAtLeast(0) } ?: 0 }.getOrDefault(0) else 0
             val entry = if (local) DownloadEntry(track.withoutPlayCounts(),DownloadStatus.COMPLETED,bytes=localBytes,total=localBytes,localUri=track.uri,artworkUri=track.artworkUri,ownsFile=false,completedAt=System.currentTimeMillis())
-            else if(supportsPlaybackDownload(track)) DownloadEntry(track.copy(uri=track.catalogUri,sourceUri="").withoutPlayCounts(),provider="playback",downloadFormat=existing?.downloadFormat ?: downloadFormat)
+            else if(supportsPlaybackDownload(track)) DownloadEntry(track.copy(uri=track.catalogUri,sourceUri="").withoutPlayCounts(),provider="playback",downloadFormat=downloadFormat)
             else DownloadEntry(track,DownloadStatus.FAILED,error="Find this song in Search and download its playable YouTube entry.")
             next = next.filterNot { it.id==entry.id } + entry
         }
