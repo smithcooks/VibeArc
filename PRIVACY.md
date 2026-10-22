@@ -16,8 +16,14 @@ network information may be sent to the SimpMusic lyrics database. Home-screen
 widgets reuse artwork and playback metadata; they do not read your wallpaper.
 When you choose Import from Spotify, VibeArc reads public playlist metadata
 from Spotify and searches YouTube Music using song titles and artists. It does
-not request Spotify passwords, account tokens or audio. Imports are saved only
-after your confirmation. Public previews may expose only part of a playlist.
+not request Spotify passwords, user-account tokens or audio. Anonymous guest
+session tokens and Spotify-issued session cookies stay in memory during the
+import, not in an account-token store. The importer also reads bounded public
+web-client configuration from code.thetadev.de/ThetaDev/spotify-secrets; playlist
+IDs and session tokens are not sent to that configuration host. Spotify CDN
+JavaScript is inspected as text for query identifiers, never executed by the
+importer. Every playlist page is checked against the reported total before
+matching; imports are saved only after your confirmation.
 On launch, the app asks GitHub for release metadata; an
 accepted update downloads its APK and checksum from GitHub. These services
 receive normal network information such as the device IP address.

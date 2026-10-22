@@ -2,10 +2,10 @@
 
 New installations and upgrades default to **WebM**. Settings → Playback & Downloads → Download format offers:
 
-- **WebM · original Opus:** highest available genuine WebM/Opus source, without re-encoding. Files are exported to Music/VibeArc. If the recording has no WebM source, the job reports failure rather than mislabelling AAC or MP4.
+- **WebM · original Opus:** highest available genuine WebM/Opus source, without re-encoding. New files are exported to Download/VibeArc on Android 10+, or Music/VibeArc on Android 8-9. The generic Downloads collection avoids Android's `Unsupported MIME type audio/webm` rejection in the audio-only collection. If the recording has no WebM source, the job reports failure rather than mislabelling AAC or MP4.
 - **MP3 · converted on device:** download the highest available playback source, decode locally and encode with native LAME at 320 kbps, embedding JPEG cover art and title/artist/album metadata. This is lossy conversion, not a quality upgrade. It takes extra time.
 
-The choice is captured when a new job is enqueued. Changing the preference does not alter active or queued jobs or existing files. Retrying an unfinished job retains its original choice.
+WebM is first and conversion is off by default. Version 1.10.5 ignores the old saved MP3 preference once on upgrade; a new explicit MP3 choice remains saved. The current choice is captured when a new job is enqueued or an unfinished job is retried. Changing the preference does not alter active or queued jobs or existing files. Manual Create MP3 copy never starts automatically.
 
 ## Convert a saved download later
 
