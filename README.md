@@ -112,15 +112,15 @@ All release APKs are signed with the official release key and include SHA-256 ch
 ### 📱 Android Phone & Tablet
 | Package | Architecture | Size | Download Link | Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **VibeArc Mobile (arm64)** *(Recommended)* | 64-bit ARM | ~57.6 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-v2.0.1-arm64.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-v2.0.1-arm64.apk.sha256) |
-| **VibeArc Mobile (Universal)** | All devices | ~150 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-v2.0.1.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-v2.0.1.apk.sha256) |
+| **VibeArc Mobile (arm64)** *(Recommended)* | 64-bit ARM | ~57.7 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-v2.0.1-arm64.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-v2.0.1-arm64.apk.sha256) |
+| **VibeArc Mobile (Universal)** | All devices (32 & 64-bit) | ~83.9 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-v2.0.1.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-v2.0.1.apk.sha256) |
 
 ### 📺 Android TV, Google TV & Streaming Devices
 | Package | Architecture | Size | Download Link | Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **VibeArc TV (arm64)** *(Recommended)* | 64-bit Android TV | ~58.1 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1-arm64.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1-arm64.apk.sha256) |
-| **VibeArc TV (armeabi-v7a)** | 32-bit (Fire TV Stick, Mi Box) | ~49.5 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1-armeabi-v7a.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1-armeabi-v7a.apk.sha256) |
-| **VibeArc TV (Universal)** | All TV devices | ~58.1 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1.apk.sha256) |
+| **VibeArc TV (Universal)** *(Recommended)* | **All Android TV 12+ devices** (32 & 64-bit) | ~80.1 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1.apk.sha256) |
+| **VibeArc TV (armeabi-v7a)** | 32-bit (Fire TV Stick, Mi Box, Chromecast HD) | ~49.1 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1-armeabi-v7a.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1-armeabi-v7a.apk.sha256) |
+| **VibeArc TV (arm64)** | 64-bit (Nvidia Shield, Bravia XR, Chromecast 4K) | ~57.7 MB | [**Download APK**](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1-arm64.apk) | [SHA-256](https://github.com/smithcooks/VibeArc/releases/download/v2.0.1/VibeArc-TV-v2.0.1-arm64.apk.sha256) |
 
 > [!TIP]
 > Existing installed versions will automatically detect this update and notify you directly within the app. You can also manually trigger an update check anytime via **Settings → About & Support → Check for Updates**.
